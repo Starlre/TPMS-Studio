@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
     QFormLayout,
     QFrame,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -40,10 +41,10 @@ from PyQt5.QtWidgets import (
     QOpenGLWidget,
     QPushButton,
     QRadioButton,
-    QScrollArea,
+    QSizePolicy,
     QSpinBox,
-    QSplitter,
     QStatusBar,
+    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -67,28 +68,151 @@ from tpms_core import (
 
 
 STYLE = """
-QMainWindow, QWidget { background: #f2f5f4; color: #202622; }
-QToolBar { background: #ffffff; border: none; border-bottom: 1px solid #d9dfdb; spacing: 7px; padding: 8px 14px; }
-QToolBar QLabel#brand { color: #18201c; font-size: 17px; font-weight: 600; padding-right: 18px; }
-QToolButton { background: transparent; border: none; border-radius: 4px; padding: 7px 10px; }
-QToolButton:hover { background: #edf1ee; }
-QToolButton:checked { background: #e5f1ed; color: #0d654f; }
-QScrollArea { border: none; background: #ffffff; }
-QWidget#parameterPanel { background: #ffffff; }
-QLabel#sectionTitle { color: #46514a; font-size: 12px; font-weight: 600; padding-top: 8px; }
-QLabel#metricLabel { color: #667069; font-size: 11px; }
-QLabel#metricValue { color: #18201c; font-size: 14px; font-weight: 600; }
-QComboBox, QDoubleSpinBox, QSpinBox { background: #ffffff; border: 1px solid #cfd6d1; border-radius: 4px; min-height: 30px; padding: 0 8px; }
-QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus { border: 1px solid #187b62; }
-QPushButton, QRadioButton { background: #ffffff; border: 1px solid #cfd6d1; border-radius: 4px; min-height: 30px; padding: 0 12px; }
-QPushButton:hover, QRadioButton:hover { background: #eef2ef; }
-QRadioButton:checked { background: #e5f1ed; color: #0d654f; border-color: #65a996; }
-QPushButton#generateButton { background: #176f59; color: #ffffff; border: 1px solid #176f59; min-height: 38px; font-weight: 600; }
-QPushButton#generateButton:hover { background: #115e4a; }
-QPushButton#generateButton:disabled { background: #97aaa2; border-color: #97aaa2; }
-QFrame#separator { background: #e5e8e6; max-height: 1px; }
-QStatusBar { background: #ffffff; border-top: 1px solid #d9dfdb; color: #5d6761; }
-QSplitter::handle { background: #d9dfdb; width: 1px; }
+QMainWindow { background: #dfe6eb; color: #18232b; }
+QWidget {
+    color: #18232b;
+    font-family: "Microsoft YaHei UI", "Segoe UI";
+    font-size: 16px;
+}
+QWidget#centralRoot, QWidget#workspace { background: #dfe6eb; }
+QToolBar {
+    background: #1d2d38;
+    border: none;
+    border-bottom: 1px solid #0f1c24;
+    spacing: 3px;
+    padding: 7px 14px;
+}
+QToolBar::separator {
+    background: #465b68;
+    width: 1px;
+    margin: 7px 8px;
+}
+QToolBar QLabel#brand {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+    padding-right: 18px;
+}
+QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #eef4f7;
+    font-size: 16px;
+    font-weight: 600;
+    min-height: 34px;
+    padding: 3px 11px;
+}
+QToolButton:hover { background: #2d4351; border-color: #536a77; }
+QToolButton:pressed { background: #13242e; }
+QToolButton:checked { background: #e9f1f5; color: #153e59; border-color: #b6c8d3; }
+QToolButton:disabled { color: #7f919c; }
+QWidget#parameterDeck {
+    background: #f3f6f8;
+    border-bottom: 1px solid #b9c6cf;
+}
+QLabel#panelTitle { color: #132d40; font-size: 20px; font-weight: 700; }
+QLabel#panelSubtitle { color: #536875; font-size: 14px; }
+QLabel#sectionTitle { color: #253d4c; font-size: 16px; font-weight: 700; }
+QTabWidget#parameterTabs::pane {
+    background: #ffffff;
+    border: 1px solid #b9c6cf;
+    top: -1px;
+}
+QTabBar::tab {
+    background: #e3e9ed;
+    color: #3f5360;
+    border: none;
+    border-right: 1px solid #c3cdd4;
+    border-bottom: 3px solid transparent;
+    min-width: 150px;
+    min-height: 38px;
+    padding: 2px 18px;
+    font-size: 16px;
+    font-weight: 600;
+}
+QTabBar::tab:selected {
+    background: #ffffff;
+    color: #123d59;
+    border-bottom: 3px solid #16806a;
+    font-weight: 700;
+}
+QTabBar::tab:hover:!selected { background: #eef2f4; color: #203d50; }
+QGroupBox {
+    background: #f9fbfc;
+    border: 1px solid #c6d1d8;
+    border-radius: 3px;
+    margin-top: 13px;
+    padding: 12px 11px 8px 11px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #253d4c;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    background: #f9fbfc;
+}
+QLabel { background: transparent; }
+QLabel#fieldAxis { color: #4c6472; font-size: 14px; font-weight: 700; }
+QLabel#metricLabel { color: #4c6472; font-size: 13px; }
+QLabel#metricValue { color: #132d40; font-size: 18px; font-weight: 700; }
+QFrame#metricsBar {
+    background: #ffffff;
+    border: 1px solid #bdc9d1;
+    border-radius: 3px;
+}
+QComboBox, QDoubleSpinBox, QSpinBox, QLineEdit {
+    background: #ffffff;
+    color: #17232c;
+    border: 1px solid #acbac4;
+    border-radius: 3px;
+    min-height: 35px;
+    padding: 0 8px;
+    selection-background-color: #176b59;
+}
+QComboBox:hover, QDoubleSpinBox:hover, QSpinBox:hover, QLineEdit:hover {
+    border-color: #607f91;
+}
+QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus, QLineEdit:focus {
+    border: 2px solid #176b59;
+}
+QComboBox:disabled, QDoubleSpinBox:disabled, QSpinBox:disabled, QLineEdit:disabled {
+    background: #e9eef1;
+    color: #788792;
+    border-color: #ced7dc;
+}
+QCheckBox, QRadioButton {
+    background: transparent;
+    border: none;
+    min-height: 35px;
+    spacing: 8px;
+}
+QCheckBox::indicator, QRadioButton::indicator { width: 17px; height: 17px; }
+QCheckBox:disabled, QRadioButton:disabled { color: #788792; }
+QPushButton {
+    background: #ffffff;
+    border: 1px solid #acbac4;
+    border-radius: 3px;
+    min-height: 38px;
+    padding: 0 14px;
+}
+QPushButton:hover { background: #edf3f6; border-color: #607f91; }
+QPushButton:pressed { background: #dce7ed; }
+QPushButton#generateButton {
+    background: #187b63;
+    color: #ffffff;
+    border: 1px solid #11604d;
+    min-width: 168px;
+    min-height: 43px;
+    font-size: 16px;
+    font-weight: 700;
+}
+QPushButton#generateButton:hover { background: #126750; }
+QPushButton#generateButton:pressed { background: #0c503e; }
+QPushButton#generateButton:disabled { background: #aab6b1; color: #f3f5f4; border-color: #9da8a4; }
+QStatusBar { background: #ffffff; border-top: 1px solid #bdc9d1; color: #455b68; font-size: 13px; }
 """
 
 
@@ -255,7 +379,7 @@ class OpenGLMeshView(QOpenGLWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumSize(560, 500)
+        self.setMinimumSize(640, 220)
         self.setFocusPolicy(Qt.StrongFocus)
         self.program: QOpenGLShaderProgram | None = None
         self.vbo = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
@@ -546,8 +670,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("TPMS Studio")
-        self.setMinimumSize(1020, 700)
-        self.resize(1320, 840)
+        self.setMinimumSize(1120, 720)
+        self.resize(1440, 900)
         self.current_result: MeshResult | None = None
         self.current_preview: PreviewMesh | None = None
         self.current_cfd_result: CFDMeshResult | None = None
@@ -602,21 +726,6 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.background_action)
 
     @staticmethod
-    def _section(layout: QVBoxLayout, text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("sectionTitle")
-        layout.addWidget(label)
-        return label
-
-    @staticmethod
-    def _separator(layout: QVBoxLayout) -> QFrame:
-        line = QFrame()
-        line.setObjectName("separator")
-        line.setFrameShape(QFrame.HLine)
-        layout.addWidget(line)
-        return line
-
-    @staticmethod
     def _double(value: float, low: float, high: float, suffix: str, step: float) -> QDoubleSpinBox:
         field = QDoubleSpinBox()
         field.setRange(low, high)
@@ -626,28 +735,88 @@ class MainWindow(QMainWindow):
         field.setSuffix(suffix)
         return field
 
-    def _build_ui(self) -> None:
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setChildrenCollapsible(False)
-        self.setCentralWidget(splitter)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setMinimumWidth(420)
-        scroll.setMaximumWidth(460)
-        panel = QWidget()
-        panel.setObjectName("parameterPanel")
-        controls = QVBoxLayout(panel)
-        controls.setContentsMargins(20, 16, 20, 20)
-        controls.setSpacing(10)
-
-        self._section(controls, "曲面定义")
+    @staticmethod
+    def _form_layout() -> QFormLayout:
         form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(6)
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        return form
+
+    @staticmethod
+    def _axis_grid(fields: list[QWidget]) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setContentsMargins(2, 2, 2, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+        grid.setAlignment(Qt.AlignTop)
+        for column, (axis, field) in enumerate(zip(("X", "Y", "Z"), fields)):
+            label = QLabel(axis)
+            label.setObjectName("fieldAxis")
+            grid.addWidget(label, 0, column)
+            field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            grid.addWidget(field, 1, column)
+        return grid
+
+    def _build_ui(self) -> None:
+        central = QWidget()
+        central.setObjectName("centralRoot")
+        root = QVBoxLayout(central)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        self.setCentralWidget(central)
+
+        parameter_deck = QWidget()
+        parameter_deck.setObjectName("parameterDeck")
+        deck_layout = QVBoxLayout(parameter_deck)
+        deck_layout.setContentsMargins(16, 9, 16, 12)
+        deck_layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        heading = QHBoxLayout()
+        heading.setSpacing(12)
+        title = QLabel("参数工作台")
+        title.setObjectName("panelTitle")
+        subtitle = QLabel("几何、结构与流体网格定义")
+        subtitle.setObjectName("panelSubtitle")
+        heading.addWidget(title, 0, Qt.AlignVCenter)
+        heading.addWidget(subtitle, 0, Qt.AlignVCenter)
+        header.addLayout(heading)
+        header.addStretch(1)
+        self.generate_button = QPushButton("生成模型")
+        self.generate_button.setObjectName("generateButton")
+        self.generate_button.setShortcut("Ctrl+Return")
+        self.generate_button.setToolTip("使用当前参数重新生成 TPMS 模型")
+        self.generate_button.setAccessibleName("生成 TPMS 模型")
+        self.generate_button.clicked.connect(self.generate)
+        header.addWidget(self.generate_button, 0, Qt.AlignVCenter)
+        deck_layout.addLayout(header)
+
+        self.parameter_tabs = QTabWidget()
+        self.parameter_tabs.setObjectName("parameterTabs")
+        self.parameter_tabs.setDocumentMode(True)
+        self.parameter_tabs.tabBar().setExpanding(True)
+        self.parameter_tabs.setMinimumHeight(232)
+        self.parameter_tabs.setMaximumHeight(244)
+        self.parameter_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        geometry_tab = QWidget()
+        geometry_layout = QHBoxLayout(geometry_tab)
+        geometry_layout.setContentsMargins(9, 7, 9, 8)
+        geometry_layout.setSpacing(9)
+
+        surface_group = QGroupBox("曲面与结构模式")
+        surface_group.setMinimumWidth(350)
+        surface_form = self._form_layout()
         self.surface_combo = QComboBox()
         for surface_name in ("Gyroid", "Diamond", "Primitive", "I-WP", "Neovius"):
             self.surface_combo.addItem(surface_name, surface_name)
         self.surface_combo.addItem("自定义公式", CUSTOM_SURFACE)
         self.surface_combo.currentIndexChanged.connect(self._update_formula_fields)
+        self.surface_combo.setAccessibleName("TPMS 曲面类型")
         self.formula_edit = QLineEdit("gyroid")
         self.formula_edit.setPlaceholderText(
             "例如 min(gyroid, sqrt(x*x+y*y+z*z)-12)"
@@ -655,156 +824,204 @@ class MainWindow(QMainWindow):
         self.formula_edit.setToolTip(
             "支持 x、y、z、pi、sin、cos、sqrt、abs、exp、log，以及 min/max 组合"
         )
-        form.addRow("TPMS 类型", self.surface_combo)
-        form.addRow("数学公式", self.formula_edit)
-        controls.addLayout(form)
-        mode_row = QHBoxLayout()
+        self.formula_edit.setAccessibleName("自定义隐式公式")
+        mode_widget = QWidget()
+        mode_row = QHBoxLayout(mode_widget)
+        mode_row.setContentsMargins(0, 0, 0, 0)
+        mode_row.setSpacing(16)
         self.sheet_radio = QRadioButton("片层结构")
         self.solid_radio = QRadioButton("实体结构")
         self.sheet_radio.setChecked(True)
         self.sheet_radio.toggled.connect(self._update_mode_fields)
         mode_row.addWidget(self.sheet_radio)
         mode_row.addWidget(self.solid_radio)
-        controls.addLayout(mode_row)
-        self._separator(controls)
+        mode_row.addStretch(1)
+        surface_form.addRow("曲面类型", self.surface_combo)
+        surface_form.addRow("数学公式", self.formula_edit)
+        surface_form.addRow("结构模式", mode_widget)
+        surface_group.setLayout(surface_form)
 
-        self._section(controls, "外形尺寸 / mm")
-        size_grid = QGridLayout()
+        size_group = QGroupBox("外形尺寸 / mm")
         self.size_fields = [self._double(40.0, 2, 500, " mm", 1.0) for _ in range(3)]
-        for column, name in enumerate(("X", "Y", "Z")):
-            size_grid.addWidget(QLabel(name), 0, column)
-            size_grid.addWidget(self.size_fields[column], 1, column)
-        controls.addLayout(size_grid)
-        self.cell_group = QWidget()
-        cell_group_layout = QVBoxLayout(self.cell_group)
-        cell_group_layout.setContentsMargins(0, 0, 0, 0)
-        cell_group_layout.setSpacing(10)
-        self._section(cell_group_layout, "周期数量")
-        cell_grid = QGridLayout()
-        self.cell_fields = [QSpinBox() for _ in range(3)]
-        for column, name in enumerate(("X", "Y", "Z")):
-            self.cell_fields[column].setRange(1, 8)
-            self.cell_fields[column].setValue(2)
-            cell_grid.addWidget(QLabel(name), 0, column)
-            cell_grid.addWidget(self.cell_fields[column], 1, column)
-        cell_group_layout.addLayout(cell_grid)
-        controls.addWidget(self.cell_group)
-        self.cell_separator = self._separator(controls)
+        for axis, field in zip(("X", "Y", "Z"), self.size_fields):
+            field.setAccessibleName(f"{axis} 方向外形尺寸")
+        size_group.setLayout(self._axis_grid(self.size_fields))
 
-        self._section(controls, "结构参数")
-        structure = QFormLayout()
+        self.cell_group = QGroupBox("周期数量")
+        self.cell_fields = [QSpinBox() for _ in range(3)]
+        for axis, field in zip(("X", "Y", "Z"), self.cell_fields):
+            field.setRange(1, 8)
+            field.setValue(2)
+            field.setAccessibleName(f"{axis} 方向周期数量")
+        self.cell_group.setLayout(self._axis_grid(self.cell_fields))
+
+        geometry_layout.addWidget(surface_group, 4)
+        geometry_layout.addWidget(size_group, 3)
+        geometry_layout.addWidget(self.cell_group, 3)
+        self.parameter_tabs.addTab(geometry_tab, "几何定义")
+
+        structure_tab = QWidget()
+        structure_layout = QHBoxLayout(structure_tab)
+        structure_layout.setContentsMargins(9, 7, 9, 8)
+        structure_layout.setSpacing(9)
+
+        structure_group = QGroupBox("结构参数")
+        structure_form = self._form_layout()
         self.thickness = self._double(1.2, 0.1, 20, " mm", 0.1)
         self.iso_level = self._double(0.0, -20, 20, "", 0.05)
         self.samples = QSpinBox()
         self.samples.setRange(16, 96)
         self.samples.setValue(64)
-        structure.addRow("目标壁厚", self.thickness)
-        structure.addRow("等值面偏移", self.iso_level)
-        structure.addRow("网格精度", self.samples)
-        controls.addLayout(structure)
+        self.thickness.setAccessibleName("目标壁厚")
+        self.iso_level.setAccessibleName("等值面偏移")
+        self.samples.setAccessibleName("模型网格精度")
+        for field in (self.thickness, self.iso_level, self.samples):
+            field.setMaximumWidth(420)
+        structure_form.addRow("目标壁厚", self.thickness)
+        structure_form.addRow("等值面偏移", self.iso_level)
+        structure_form.addRow("网格精度", self.samples)
+        structure_group.setLayout(structure_form)
+
+        porosity_group = QGroupBox("孔隙率控制")
+        porosity_layout = QVBoxLayout(porosity_group)
+        porosity_layout.setContentsMargins(10, 10, 10, 7)
+        porosity_layout.setSpacing(5)
         self.porosity_enabled = QCheckBox("按目标孔隙率自动求解")
         self.porosity_enabled.toggled.connect(self._update_mode_fields)
-        controls.addWidget(self.porosity_enabled)
-        porosity_form = QFormLayout()
+        porosity_layout.addWidget(self.porosity_enabled)
+        porosity_form = self._form_layout()
         self.target_porosity = self._double(80.0, 5.0, 95.0, " %", 1.0)
         self.target_porosity.setEnabled(False)
+        self.target_porosity.setAccessibleName("目标孔隙率")
+        self.target_porosity.setMaximumWidth(420)
         porosity_form.addRow("目标孔隙率", self.target_porosity)
-        controls.addLayout(porosity_form)
-        hint = QLabel("GPU 实时预览，导出保留完整高精度封闭网格。")
-        hint.setStyleSheet("color: #667069;")
-        hint.setWordWrap(True)
-        controls.addWidget(hint)
+        porosity_layout.addLayout(porosity_form)
+        porosity_layout.addStretch(1)
 
-        self._separator(controls)
-        self._section(controls, "COMSOL 流体体网格")
-        cfd_form = QFormLayout()
+        structure_layout.addWidget(structure_group, 2)
+        structure_layout.addWidget(porosity_group, 2)
+        self.parameter_tabs.addTab(structure_tab, "结构与孔隙率")
+
+        cfd_tab = QWidget()
+        cfd_layout = QHBoxLayout(cfd_tab)
+        cfd_layout.setContentsMargins(9, 7, 9, 8)
+        cfd_layout.setSpacing(9)
+
+        cfd_base_group = QGroupBox("基础网格")
+        cfd_form = self._form_layout()
         self.flow_axis = QComboBox()
         self.flow_axis.addItems(["X", "Y", "Z"])
         self.cfd_element_size = self._double(1.5, 0.05, 100.0, " mm", 0.1)
         self.cfd_surface_samples = QSpinBox()
         self.cfd_surface_samples.setRange(16, 96)
         self.cfd_surface_samples.setValue(32)
+        self.flow_axis.setAccessibleName("CFD 流动方向")
+        self.cfd_element_size.setAccessibleName("CFD 四面体尺寸")
+        self.cfd_surface_samples.setAccessibleName("流体表面精度")
         self.flow_axis.currentTextChanged.connect(self._invalidate_region_preview)
         self.cfd_surface_samples.valueChanged.connect(self._invalidate_region_preview)
         cfd_form.addRow("流动方向", self.flow_axis)
         cfd_form.addRow("四面体尺寸", self.cfd_element_size)
         cfd_form.addRow("流体表面精度", self.cfd_surface_samples)
-        controls.addLayout(cfd_form)
+        cfd_base_group.setLayout(cfd_form)
 
+        boundary_group = QGroupBox("棱柱边界层")
+        boundary_layout = QVBoxLayout(boundary_group)
+        boundary_layout.setContentsMargins(10, 10, 10, 7)
+        boundary_layout.setSpacing(4)
         self.boundary_layer_enabled = QCheckBox("生成棱柱边界层")
         self.boundary_layer_enabled.toggled.connect(self._update_cfd_fields)
-        controls.addWidget(self.boundary_layer_enabled)
-        boundary_layer_form = QFormLayout()
+        self.boundary_layer_enabled.setToolTip(
+            "边界层覆盖封闭流体域全部边界；厚度过大会因自交而拒绝导出"
+        )
+        boundary_layout.addWidget(self.boundary_layer_enabled)
+        boundary_layer_form = self._form_layout()
         self.boundary_layer_layers = QSpinBox()
         self.boundary_layer_layers.setRange(1, 12)
         self.boundary_layer_layers.setValue(3)
         self.boundary_layer_first_height = self._double(0.05, 0.001, 10.0, " mm", 0.01)
         self.boundary_layer_first_height.setDecimals(3)
         self.boundary_layer_growth = self._double(1.2, 1.0, 2.0, "", 0.05)
+        self.boundary_layer_layers.setAccessibleName("边界层层数")
+        self.boundary_layer_first_height.setAccessibleName("边界层首层高度")
+        self.boundary_layer_growth.setAccessibleName("边界层增长率")
         boundary_layer_form.addRow("边界层层数", self.boundary_layer_layers)
         boundary_layer_form.addRow("首层高度", self.boundary_layer_first_height)
         boundary_layer_form.addRow("增长率", self.boundary_layer_growth)
-        controls.addLayout(boundary_layer_form)
+        boundary_layout.addLayout(boundary_layer_form)
 
+        refinement_group = QGroupBox("端部加密")
+        refinement_layout = QVBoxLayout(refinement_group)
+        refinement_layout.setContentsMargins(10, 10, 10, 7)
+        refinement_layout.setSpacing(4)
         self.end_refinement_enabled = QCheckBox("入口/出口局部加密")
         self.end_refinement_enabled.setChecked(True)
         self.end_refinement_enabled.toggled.connect(self._update_cfd_fields)
-        controls.addWidget(self.end_refinement_enabled)
-        refinement_form = QFormLayout()
+        refinement_layout.addWidget(self.end_refinement_enabled)
+        refinement_form = self._form_layout()
         self.end_refinement_distance = self._double(2.0, 0.05, 100.0, " mm", 0.25)
         self.end_refinement_factor = self._double(50.0, 10.0, 100.0, " %", 5.0)
+        self.end_refinement_distance.setAccessibleName("入口出口加密距离")
+        self.end_refinement_factor.setAccessibleName("入口出口局部尺寸比例")
         refinement_form.addRow("加密距离", self.end_refinement_distance)
         refinement_form.addRow("局部尺寸", self.end_refinement_factor)
-        controls.addLayout(refinement_form)
+        refinement_layout.addLayout(refinement_form)
+        refinement_layout.addStretch(1)
 
+        quality_group = QGroupBox("曲率与质量")
+        quality_layout = QVBoxLayout(quality_group)
+        quality_layout.setContentsMargins(10, 10, 10, 7)
+        quality_layout.setSpacing(4)
         self.curvature_refinement_enabled = QCheckBox("曲率自适应加密")
         self.curvature_refinement_enabled.setChecked(True)
         self.curvature_refinement_enabled.toggled.connect(self._update_cfd_fields)
-        controls.addWidget(self.curvature_refinement_enabled)
-        quality_form = QFormLayout()
+        quality_layout.addWidget(self.curvature_refinement_enabled)
+        quality_form = self._form_layout()
         self.curvature_points = QSpinBox()
         self.curvature_points.setRange(6, 60)
         self.curvature_points.setValue(18)
         self.low_quality_threshold = self._double(0.2, 0.01, 0.9, "", 0.05)
+        self.curvature_points.setAccessibleName("每圆周曲率采样点")
+        self.low_quality_threshold.setAccessibleName("低质量单元阈值")
         quality_form.addRow("每圆周采样点", self.curvature_points)
         quality_form.addRow("低质量阈值", self.low_quality_threshold)
-        controls.addLayout(quality_form)
+        quality_layout.addLayout(quality_form)
+        quality_layout.addStretch(1)
 
-        cfd_hint = QLabel("棱柱层覆盖封闭流体域全部边界；厚度过大会因自交而拒绝导出。")
-        cfd_hint.setStyleSheet("color: #667069;")
-        cfd_hint.setWordWrap(True)
-        controls.addWidget(cfd_hint)
-        controls.addStretch(1)
-        self.generate_button = QPushButton("生成模型")
-        self.generate_button.setObjectName("generateButton")
-        self.generate_button.setShortcut("Ctrl+Return")
-        self.generate_button.clicked.connect(self.generate)
-        controls.addWidget(self.generate_button)
-        scroll.setWidget(panel)
-        splitter.addWidget(scroll)
+        cfd_layout.addWidget(cfd_base_group, 2)
+        cfd_layout.addWidget(boundary_group, 3)
+        cfd_layout.addWidget(refinement_group, 2)
+        cfd_layout.addWidget(quality_group, 2)
+        self.parameter_tabs.addTab(cfd_tab, "CFD 网格")
+        deck_layout.addWidget(self.parameter_tabs)
+        root.addWidget(parameter_deck, 0)
 
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(14, 10, 14, 12)
-        metrics = QHBoxLayout()
+        workspace = QWidget()
+        workspace.setObjectName("workspace")
+        workspace_layout = QVBoxLayout(workspace)
+        workspace_layout.setContentsMargins(12, 9, 12, 11)
+        workspace_layout.setSpacing(7)
+
+        metrics_bar = QFrame()
+        metrics_bar.setObjectName("metricsBar")
+        metrics = QHBoxLayout(metrics_bar)
+        metrics.setContentsMargins(12, 5, 12, 5)
+        metrics.setSpacing(22)
         self.triangle_value = self._metric(metrics, "三角面", "--")
         self.volume_value = self._metric(metrics, "体积", "--")
         self.density_value = self._metric(metrics, "相对密度", "--")
         self.porosity_value = self._metric(metrics, "孔隙率", "--")
         metrics.addStretch(1)
-        right_layout.addLayout(metrics)
         self.region_legend = QLabel()
         self.region_legend.setTextFormat(Qt.RichText)
-        self.region_legend.setStyleSheet("color: #46514a; padding: 2px 0 5px 0;")
+        self.region_legend.setStyleSheet("color: #46514a;")
         self.region_legend.setVisible(False)
-        right_layout.addWidget(self.region_legend)
+        metrics.addWidget(self.region_legend, 0, Qt.AlignVCenter)
+        workspace_layout.addWidget(metrics_bar)
         self.viewport = OpenGLMeshView()
         self.viewport.error.connect(self._viewport_error)
-        right_layout.addWidget(self.viewport, 1)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([430, 890])
+        workspace_layout.addWidget(self.viewport, 1)
+        root.addWidget(workspace, 1)
         self._update_mode_fields()
         self._update_formula_fields()
         self._update_cfd_fields()
@@ -834,7 +1051,6 @@ class MainWindow(QMainWindow):
             custom = self.surface_combo.currentData() == CUSTOM_SURFACE
             self.formula_edit.setEnabled(custom)
             self.cell_group.setVisible(not custom)
-            self.cell_separator.setVisible(not custom)
 
     def _update_cfd_fields(self) -> None:
         boundary_layer = self.boundary_layer_enabled.isChecked()
