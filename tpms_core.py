@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
@@ -32,6 +34,141 @@ TPMS_FORMULAS: dict[str, Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarr
     ),
 }
 
+CUSTOM_SURFACE = "Custom"
+_FORMULA_ALIASES = {
+    "gyroid": "Gyroid",
+    "diamond": "Diamond",
+    "primitive": "Primitive",
+    "i_wp": "I-WP",
+    "neovius": "Neovius",
+}
+_FORMULA_FUNCTIONS = {
+    "sin": np.sin,
+    "cos": np.cos,
+    "tan": np.tan,
+    "sqrt": np.sqrt,
+    "abs": np.abs,
+    "exp": np.exp,
+    "log": np.log,
+}
+_FORMULA_NAMES = {"x", "y", "z", "pi", *_FORMULA_ALIASES}
+_FORMULA_BINARY_OPERATORS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.BitXor)
+
+
+def _validate_formula_node(node: ast.AST) -> None:
+    if isinstance(node, ast.Expression):
+        _validate_formula_node(node.body)
+    elif isinstance(node, ast.Constant):
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+            raise ValueError("公式只允许数字常量")
+        if not np.isfinite(float(node.value)):
+            raise ValueError("公式包含非有限数字")
+    elif isinstance(node, ast.Name):
+        if node.id not in _FORMULA_NAMES:
+            raise ValueError(f"公式包含不支持的名称: {node.id}")
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        _validate_formula_node(node.operand)
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, _FORMULA_BINARY_OPERATORS):
+        _validate_formula_node(node.left)
+        _validate_formula_node(node.right)
+        if isinstance(node.op, (ast.Pow, ast.BitXor)):
+            if not isinstance(node.right, ast.Constant):
+                raise ValueError("幂运算指数必须是数字常量")
+            if abs(float(node.right.value)) > 16:
+                raise ValueError("幂运算指数绝对值不能超过 16")
+    elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        function_name = node.func.id
+        if function_name not in {*_FORMULA_FUNCTIONS, "min", "max"}:
+            raise ValueError(f"公式包含不支持的函数: {function_name}")
+        if node.keywords or any(isinstance(argument, ast.Starred) for argument in node.args):
+            raise ValueError("公式函数不支持关键字参数或展开参数")
+        if function_name in {"min", "max"}:
+            if len(node.args) < 2:
+                raise ValueError(f"{function_name} 至少需要两个参数")
+        elif len(node.args) != 1:
+            raise ValueError(f"{function_name} 只接受一个参数")
+        for argument in node.args:
+            _validate_formula_node(argument)
+    else:
+        raise ValueError("公式包含不支持的语法")
+
+
+@lru_cache(maxsize=128)
+def _parse_formula(expression: str) -> ast.AST:
+    expression = expression.strip()
+    if not expression:
+        raise ValueError("自定义公式不能为空")
+    if len(expression) > 500:
+        raise ValueError("自定义公式不能超过 500 个字符")
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"公式语法错误: {exc.msg}") from exc
+    _validate_formula_node(tree)
+    return tree.body
+
+
+def _evaluate_formula_node(node: ast.AST, values: dict[str, np.ndarray | float]) -> np.ndarray | float:
+    if isinstance(node, ast.Constant):
+        return float(node.value)
+    if isinstance(node, ast.Name):
+        return values[node.id]
+    if isinstance(node, ast.UnaryOp):
+        value = _evaluate_formula_node(node.operand, values)
+        return value if isinstance(node.op, ast.UAdd) else -value
+    if isinstance(node, ast.BinOp):
+        left = _evaluate_formula_node(node.left, values)
+        right = _evaluate_formula_node(node.right, values)
+        if isinstance(node.op, ast.Add):
+            return left + right
+        if isinstance(node.op, ast.Sub):
+            return left - right
+        if isinstance(node.op, ast.Mult):
+            return left * right
+        if isinstance(node.op, ast.Div):
+            return left / right
+        return left**right
+    if isinstance(node, ast.Call):
+        arguments = [_evaluate_formula_node(argument, values) for argument in node.args]
+        if node.func.id == "min":
+            result = arguments[0]
+            for argument in arguments[1:]:
+                result = np.minimum(result, argument)
+            return result
+        if node.func.id == "max":
+            result = arguments[0]
+            for argument in arguments[1:]:
+                result = np.maximum(result, argument)
+            return result
+        return _FORMULA_FUNCTIONS[node.func.id](arguments[0])
+    raise ValueError("公式包含不支持的语法")
+
+
+def evaluate_implicit_formula(
+    expression: str,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    aliases: dict[str, np.ndarray],
+) -> np.ndarray:
+    """Safely evaluate a vectorized implicit formula on physical coordinates."""
+    node = _parse_formula(expression)
+    values: dict[str, np.ndarray | float] = {
+        "x": x,
+        "y": y,
+        "z": z,
+        "pi": float(np.pi),
+        **aliases,
+    }
+    try:
+        value = _evaluate_formula_node(node, values)
+        result = np.asarray(value, dtype=np.float32)
+    except (FloatingPointError, TypeError, ValueError, ZeroDivisionError) as exc:
+        raise ValueError(f"公式计算失败: {exc}") from exc
+    if not np.all(np.isfinite(result)):
+        raise ValueError("公式计算结果包含非有限值，请检查除零或 log/sqrt 的定义域")
+    return result
+
 
 @dataclass(frozen=True)
 class TPMSParameters:
@@ -47,10 +184,13 @@ class TPMSParameters:
     iso_level: float = 0.0
     samples_per_cell: int = 64
     target_porosity: float | None = None
+    formula: str = ""
 
     def validate(self) -> None:
-        if self.surface not in TPMS_FORMULAS:
+        if self.surface != CUSTOM_SURFACE and self.surface not in TPMS_FORMULAS:
             raise ValueError(f"未知 TPMS 类型: {self.surface}")
+        if self.surface == CUSTOM_SURFACE:
+            _parse_formula(self.formula)
         if self.mode not in {"sheet", "solid"}:
             raise ValueError("生成模式必须是 sheet 或 solid")
         if min(self.size_x, self.size_y, self.size_z) <= 0:
@@ -99,6 +239,7 @@ class MeshResult:
 class PreviewMesh:
     vertices: np.ndarray
     faces: np.ndarray
+    colors: np.ndarray | None = None
 
     @property
     def triangles(self) -> int:
@@ -262,7 +403,14 @@ def _material_scalar_field(
     phase_x = 2.0 * np.pi * p.cells_x * (xx / p.size_x + 0.5)
     phase_y = 2.0 * np.pi * p.cells_y * (yy / p.size_y + 0.5)
     phase_z = 2.0 * np.pi * p.cells_z * (zz / p.size_z + 0.5)
-    field = TPMS_FORMULAS[p.surface](phase_x, phase_y, phase_z).astype(np.float32)
+    if p.surface == CUSTOM_SURFACE:
+        aliases = {
+            alias: TPMS_FORMULAS[surface](phase_x, phase_y, phase_z)
+            for alias, surface in _FORMULA_ALIASES.items()
+        }
+        field = evaluate_implicit_formula(p.formula, xx, yy, zz, aliases)
+    else:
+        field = TPMS_FORMULAS[p.surface](phase_x, phase_y, phase_z).astype(np.float32)
     spacing = tuple(float(v) for v in (x[1] - x[0], y[1] - y[0], z[1] - z[0]))
     gradients = np.gradient(field, *spacing, edge_order=1)
     grad_norm = np.sqrt(sum(component * component for component in gradients))

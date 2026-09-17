@@ -10,10 +10,15 @@ import meshio
 import numpy as np
 import trimesh
 
-from tpms_core import TPMSParameters, generate_fluid_domain
+from tpms_core import PreviewMesh, TPMSParameters, generate_fluid_domain
 
 
 PHYSICAL_IDS = {"inlet": 101, "outlet": 102, "walls": 103, "fluid": 201}
+REGION_COLORS = {
+    PHYSICAL_IDS["inlet"]: np.array([0.16, 0.47, 0.95], dtype=np.float32),
+    PHYSICAL_IDS["outlet"]: np.array([0.94, 0.38, 0.12], dtype=np.float32),
+    PHYSICAL_IDS["walls"]: np.array([0.12, 0.68, 0.40], dtype=np.float32),
+}
 
 
 @dataclass(frozen=True)
@@ -110,6 +115,7 @@ class CFDMeshResult:
     quality: MeshQualityStats
     low_quality_vertices: np.ndarray
     low_quality_faces: np.ndarray
+    region_preview: PreviewMesh
 
 
 @dataclass(frozen=True)
@@ -476,6 +482,87 @@ def _low_quality_preview(
     )
 
 
+def _boundary_region_preview(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    boundary_refs: np.ndarray,
+) -> PreviewMesh:
+    """Build a color-per-face surface preview for inlet, outlet and walls."""
+    selected_faces: list[np.ndarray] = []
+    selected_colors: list[np.ndarray] = []
+    for physical_id, color in REGION_COLORS.items():
+        region_faces = triangles[boundary_refs == physical_id]
+        if len(region_faces) == 0:
+            continue
+        selected_faces.append(region_faces)
+        selected_colors.append(
+            np.repeat(color[None, :], len(region_faces), axis=0)
+        )
+    if not selected_faces:
+        return PreviewMesh(
+            vertices=np.empty((0, 3), dtype=np.float32),
+            faces=np.empty((0, 3), dtype=np.int64),
+            colors=np.empty((0, 3), dtype=np.float32),
+        )
+
+    face_array = np.vstack(selected_faces).astype(np.int64)
+    face_colors = np.vstack(selected_colors).astype(np.float32)
+    vertices = np.asarray(points[face_array.reshape(-1)], dtype=np.float32)
+    faces = np.arange(len(vertices), dtype=np.int64).reshape(-1, 3)
+    colors = np.repeat(face_colors, 3, axis=0)
+    return PreviewMesh(vertices=vertices, faces=faces, colors=colors)
+
+
+def generate_simulation_region_preview(
+    parameters: TPMSParameters,
+    options: CFDMeshOptions,
+) -> PreviewMesh:
+    """Generate color-coded simulation boundaries without creating volume cells."""
+    sizes = (parameters.size_x, parameters.size_y, parameters.size_z)
+    preview_options = replace(options, boundary_layer_enabled=False)
+    preview_options.validate(sizes)
+    fluid_parameters = replace(
+        parameters,
+        samples_per_cell=options.surface_samples_per_cell,
+        target_porosity=None,
+    )
+    fluid = generate_fluid_domain(fluid_parameters)
+    if not fluid.mesh.is_watertight:
+        raise RuntimeError("流体域表面未封闭，无法显示仿真区域")
+    components = fluid.mesh.split(only_watertight=True)
+    if not components:
+        raise RuntimeError("没有找到可显示的封闭流体域")
+
+    point_blocks: list[np.ndarray] = []
+    triangle_blocks: list[np.ndarray] = []
+    point_offset = 0
+    for component in components:
+        component_points = np.asarray(component.vertices, dtype=np.float64)
+        component_triangles = np.asarray(component.faces, dtype=np.int64)
+        point_blocks.append(component_points)
+        triangle_blocks.append(component_triangles + point_offset)
+        point_offset += len(component_points)
+    points = np.vstack(point_blocks)
+    triangles = np.vstack(triangle_blocks)
+    axis = {"X": 0, "Y": 1, "Z": 2}[options.flow_axis]
+    negative_limit = -sizes[axis] / 2.0
+    positive_limit = sizes[axis] / 2.0
+    tolerance = max(max(sizes) * 1e-6, 1e-7)
+    boundary_refs = _boundary_references(
+        points,
+        triangles,
+        axis,
+        negative_limit,
+        positive_limit,
+        tolerance,
+    )
+    if not np.any(boundary_refs == PHYSICAL_IDS["inlet"]):
+        raise RuntimeError("无法在所选流向上识别入口区域")
+    if not np.any(boundary_refs == PHYSICAL_IDS["outlet"]):
+        raise RuntimeError("无法在所选流向上识别出口区域")
+    return _boundary_region_preview(points, triangles, boundary_refs)
+
+
 def export_comsol_fluid_mesh(
     parameters: TPMSParameters,
     destination: str | Path,
@@ -595,6 +682,7 @@ def export_comsol_fluid_mesh(
     }
     if boundary_counts["inlet"] == 0 or boundary_counts["outlet"] == 0:
         raise RuntimeError("无法在所选流向上识别入口或出口三角面")
+    region_preview = _boundary_region_preview(points, triangles, boundary_refs)
 
     mesh_cells: list[tuple[str, np.ndarray]] = [("triangle", triangles)]
     cell_references: list[np.ndarray] = [boundary_refs]
@@ -691,4 +779,5 @@ def export_comsol_fluid_mesh(
         quality=quality,
         low_quality_vertices=low_quality_vertices,
         low_quality_faces=low_quality_faces,
+        region_preview=region_preview,
     )

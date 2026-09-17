@@ -4,7 +4,12 @@ import json
 import meshio
 import numpy as np
 
-from comsol_mesh import CFDMeshOptions, PHYSICAL_IDS, export_comsol_fluid_mesh
+from comsol_mesh import (
+    CFDMeshOptions,
+    PHYSICAL_IDS,
+    export_comsol_fluid_mesh,
+    generate_simulation_region_preview,
+)
 from tpms_core import TPMSParameters
 
 
@@ -59,6 +64,32 @@ def test_comsol_fluid_export_contains_grouped_tetrahedra(tmp_path: Path) -> None
     }
 
 
+def test_simulation_region_preview_is_available_without_volume_export() -> None:
+    preview = generate_simulation_region_preview(
+        TPMSParameters(
+            size_x=10,
+            size_y=10,
+            size_z=10,
+            cells_x=1,
+            cells_y=1,
+            cells_z=1,
+            thickness=1.0,
+            samples_per_cell=16,
+        ),
+        CFDMeshOptions(
+            flow_axis="X",
+            surface_samples_per_cell=16,
+            end_refinement_enabled=False,
+            curvature_refinement_enabled=False,
+        ),
+    )
+
+    assert preview.triangles > 0
+    assert preview.colors is not None
+    assert preview.colors.shape == preview.vertices.shape
+    assert len(np.unique(preview.colors, axis=0)) == 3
+
+
 def test_boundary_layers_export_prisms_and_quality_data(tmp_path: Path) -> None:
     options = CFDMeshOptions(
         flow_axis="X",
@@ -101,6 +132,10 @@ def test_boundary_layers_export_prisms_and_quality_data(tmp_path: Path) -> None:
     assert sum(result.quality.histogram_counts) == result.volume_elements
     assert result.low_quality_vertices.shape[1] == 3
     assert result.low_quality_faces.shape[1] == 3
+    assert result.region_preview.triangles == result.surface_triangles
+    assert result.region_preview.colors is not None
+    assert result.region_preview.colors.shape == result.region_preview.vertices.shape
+    assert len(np.unique(result.region_preview.colors, axis=0)) == 3
 
     bdf = meshio.read(result.bdf_path)
     assert len(bdf.cells_dict["wedge"]) == result.prisms

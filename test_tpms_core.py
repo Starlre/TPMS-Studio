@@ -5,6 +5,7 @@ import pytest
 import trimesh
 
 from tpms_core import (
+    CUSTOM_SURFACE,
     TPMS_FORMULAS,
     TPMSParameters,
     export_mesh,
@@ -54,6 +55,37 @@ def test_solid_mesh_is_closed() -> None:
     )
     assert result.mesh.is_watertight
     assert result.volume > 0
+
+
+def test_custom_formula_composition_generates_closed_entity() -> None:
+    result = generate_tpms(
+        TPMSParameters(
+            surface=CUSTOM_SURFACE,
+            mode="solid",
+            size_x=18,
+            size_y=18,
+            size_z=18,
+            cells_x=1,
+            cells_y=1,
+            cells_z=1,
+            samples_per_cell=16,
+            formula=(
+                "min(sqrt(x*x + y*y + z*z) - 6, "
+                "sqrt((x-2)*(x-2) + y*y + z*z) - 4)"
+            ),
+        )
+    )
+
+    assert result.mesh.is_watertight
+    assert result.volume > 0
+
+
+def test_custom_formula_parser_rejects_python_execution() -> None:
+    with pytest.raises(ValueError, match="不支持的"):
+        TPMSParameters(
+            surface=CUSTOM_SURFACE,
+            formula="__import__('os').system('whoami')",
+        ).validate()
 
 
 @pytest.mark.parametrize("mode", ["sheet", "solid"])

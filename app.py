@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QOpenGLWidget,
@@ -51,8 +53,10 @@ from comsol_mesh import (
     CFDMeshOptions,
     CFDMeshResult,
     export_comsol_fluid_mesh,
+    generate_simulation_region_preview,
 )
 from tpms_core import (
+    CUSTOM_SURFACE,
     MeshResult,
     PreviewMesh,
     TPMSParameters,
@@ -137,6 +141,24 @@ class CFDMeshWorker(QObject):
                 progress=self.progress.emit,
             )
             self.finished.emit(result)
+        except Exception as exc:
+            traceback.print_exc()
+            self.failed.emit(str(exc))
+
+
+class SimulationRegionWorker(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, parameters: TPMSParameters, options: CFDMeshOptions) -> None:
+        super().__init__()
+        self.parameters = parameters
+        self.options = options
+
+    def run(self) -> None:
+        try:
+            preview = generate_simulation_region_preview(self.parameters, self.options)
+            self.finished.emit(preview)
         except Exception as exc:
             traceback.print_exc()
             self.failed.emit(str(exc))
@@ -249,6 +271,7 @@ class OpenGLMeshView(QOpenGLWidget):
         self.model_radius = 35.0
         self.light_background = False
         self.highlight_mode = False
+        self.vertex_color_mode = False
 
     def initializeGL(self) -> None:
         try:
@@ -295,17 +318,20 @@ class OpenGLMeshView(QOpenGLWidget):
         #version 330 core
         layout(location = 0) in vec3 a_position;
         layout(location = 1) in vec3 a_normal;
+        layout(location = 2) in vec3 a_color;
         uniform mat4 u_mvp;
         uniform mat4 u_model;
         uniform float u_outline_mode;
         uniform float u_outline_width;
         out vec3 v_normal;
         out vec3 v_world;
+        out vec3 v_color;
         void main() {
             vec3 position = a_position + a_normal * u_outline_width * u_outline_mode;
             vec4 world = u_model * vec4(position, 1.0);
             v_world = world.xyz;
             v_normal = normalize(mat3(u_model) * a_normal);
+            v_color = a_color;
             gl_Position = u_mvp * vec4(position, 1.0);
         }
         """
@@ -313,9 +339,11 @@ class OpenGLMeshView(QOpenGLWidget):
         #version 330 core
         in vec3 v_normal;
         in vec3 v_world;
+        in vec3 v_color;
         uniform vec3 u_camera;
         uniform float u_light_background;
         uniform float u_highlight_mode;
+        uniform float u_use_vertex_color;
         uniform float u_outline_mode;
         out vec4 frag_color;
         void main() {
@@ -334,6 +362,7 @@ class OpenGLMeshView(QOpenGLWidget):
             vec3 dark_base = vec3(0.09, 0.46, 0.62);
             vec3 light_base = vec3(0.018, 0.22, 0.34);
             vec3 base = mix(dark_base, light_base, u_light_background);
+            base = mix(base, v_color, u_use_vertex_color);
             base = mix(base, vec3(0.78, 0.12, 0.055), u_highlight_mode);
             float ambient = mix(0.30, 0.30, u_light_background);
             float diffuse_scale = mix(0.92, 0.76, u_light_background);
@@ -365,7 +394,14 @@ class OpenGLMeshView(QOpenGLWidget):
         np.add.at(normals, faces[:, 1], face_normals)
         np.add.at(normals, faces[:, 2], face_normals)
         normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-8)
-        return np.column_stack((vertices, normals)).astype(np.float32), faces
+        if mesh.colors is None:
+            colors = np.ones_like(vertices, dtype=np.float32)
+        else:
+            colors = np.asarray(mesh.colors, dtype=np.float32)
+            if colors.shape != vertices.shape:
+                raise ValueError("预览网格颜色必须与顶点数组形状一致")
+            colors = np.clip(colors, 0.0, 1.0)
+        return np.column_stack((vertices, normals, colors)).astype(np.float32), faces
 
     def set_mesh(self, mesh: PreviewMesh) -> None:
         extents = np.ptp(mesh.vertices, axis=0)
@@ -391,16 +427,19 @@ class OpenGLMeshView(QOpenGLWidget):
         self.ibo.allocate(faces.tobytes(), faces.nbytes)
         assert self.program is not None
         self.program.bind()
-        stride = 6 * np.dtype(np.float32).itemsize
+        stride = 9 * np.dtype(np.float32).itemsize
         self.program.enableAttributeArray(0)
         self.program.setAttributeBuffer(0, 0x1406, 0, 3, stride)
         self.program.enableAttributeArray(1)
         self.program.setAttributeBuffer(1, 0x1406, 3 * 4, 3, stride)
+        self.program.enableAttributeArray(2)
+        self.program.setAttributeBuffer(2, 0x1406, 6 * 4, 3, stride)
         self.program.release()
         self.ibo.release()
         self.vbo.release()
         self.vao.release()
         self.index_count = int(faces.size)
+        self.vertex_color_mode = mesh.colors is not None
         self.pending_mesh = None
         self.doneCurrent()
         self.update()
@@ -424,6 +463,7 @@ class OpenGLMeshView(QOpenGLWidget):
         self.program.setUniformValue("u_camera", QVector3D(0.0, 0.0, self.distance))
         self.program.setUniformValue("u_light_background", 1.0 if self.light_background else 0.0)
         self.program.setUniformValue("u_highlight_mode", 1.0 if self.highlight_mode else 0.0)
+        self.program.setUniformValue("u_use_vertex_color", 1.0 if self.vertex_color_mode else 0.0)
         self.vao.bind()
         self.ibo.bind()
         if self.light_background:
@@ -512,6 +552,7 @@ class MainWindow(QMainWindow):
         self.current_preview: PreviewMesh | None = None
         self.current_cfd_result: CFDMeshResult | None = None
         self.low_quality_preview: PreviewMesh | None = None
+        self.region_preview: PreviewMesh | None = None
         self.worker_thread: QThread | None = None
         self.worker: MeshWorker | CFDMeshWorker | None = None
         self._build_toolbar()
@@ -545,6 +586,11 @@ class MainWindow(QMainWindow):
         self.low_quality_action.setEnabled(False)
         self.low_quality_action.toggled.connect(self._toggle_low_quality_view)
         toolbar.addAction(self.low_quality_action)
+        self.region_action = QAction("仿真区域", self)
+        self.region_action.setCheckable(True)
+        self.region_action.setEnabled(False)
+        self.region_action.toggled.connect(self._toggle_region_view)
+        toolbar.addAction(self.region_action)
         reset_action = QAction("重置视角", self)
         reset_action.triggered.connect(self.reset_view)
         toolbar.addAction(reset_action)
@@ -556,17 +602,19 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.background_action)
 
     @staticmethod
-    def _section(layout: QVBoxLayout, text: str) -> None:
+    def _section(layout: QVBoxLayout, text: str) -> QLabel:
         label = QLabel(text)
         label.setObjectName("sectionTitle")
         layout.addWidget(label)
+        return label
 
     @staticmethod
-    def _separator(layout: QVBoxLayout) -> None:
+    def _separator(layout: QVBoxLayout) -> QFrame:
         line = QFrame()
         line.setObjectName("separator")
         line.setFrameShape(QFrame.HLine)
         layout.addWidget(line)
+        return line
 
     @staticmethod
     def _double(value: float, low: float, high: float, suffix: str, step: float) -> QDoubleSpinBox:
@@ -596,8 +644,19 @@ class MainWindow(QMainWindow):
         self._section(controls, "曲面定义")
         form = QFormLayout()
         self.surface_combo = QComboBox()
-        self.surface_combo.addItems(["Gyroid", "Diamond", "Primitive", "I-WP", "Neovius"])
+        for surface_name in ("Gyroid", "Diamond", "Primitive", "I-WP", "Neovius"):
+            self.surface_combo.addItem(surface_name, surface_name)
+        self.surface_combo.addItem("自定义公式", CUSTOM_SURFACE)
+        self.surface_combo.currentIndexChanged.connect(self._update_formula_fields)
+        self.formula_edit = QLineEdit("gyroid")
+        self.formula_edit.setPlaceholderText(
+            "例如 min(gyroid, sqrt(x*x+y*y+z*z)-12)"
+        )
+        self.formula_edit.setToolTip(
+            "支持 x、y、z、pi、sin、cos、sqrt、abs、exp、log，以及 min/max 组合"
+        )
         form.addRow("TPMS 类型", self.surface_combo)
+        form.addRow("数学公式", self.formula_edit)
         controls.addLayout(form)
         mode_row = QHBoxLayout()
         self.sheet_radio = QRadioButton("片层结构")
@@ -616,7 +675,11 @@ class MainWindow(QMainWindow):
             size_grid.addWidget(QLabel(name), 0, column)
             size_grid.addWidget(self.size_fields[column], 1, column)
         controls.addLayout(size_grid)
-        self._section(controls, "周期数量")
+        self.cell_group = QWidget()
+        cell_group_layout = QVBoxLayout(self.cell_group)
+        cell_group_layout.setContentsMargins(0, 0, 0, 0)
+        cell_group_layout.setSpacing(10)
+        self._section(cell_group_layout, "周期数量")
         cell_grid = QGridLayout()
         self.cell_fields = [QSpinBox() for _ in range(3)]
         for column, name in enumerate(("X", "Y", "Z")):
@@ -624,8 +687,9 @@ class MainWindow(QMainWindow):
             self.cell_fields[column].setValue(2)
             cell_grid.addWidget(QLabel(name), 0, column)
             cell_grid.addWidget(self.cell_fields[column], 1, column)
-        controls.addLayout(cell_grid)
-        self._separator(controls)
+        cell_group_layout.addLayout(cell_grid)
+        controls.addWidget(self.cell_group)
+        self.cell_separator = self._separator(controls)
 
         self._section(controls, "结构参数")
         structure = QFormLayout()
@@ -660,6 +724,8 @@ class MainWindow(QMainWindow):
         self.cfd_surface_samples = QSpinBox()
         self.cfd_surface_samples.setRange(16, 96)
         self.cfd_surface_samples.setValue(32)
+        self.flow_axis.currentTextChanged.connect(self._invalidate_region_preview)
+        self.cfd_surface_samples.valueChanged.connect(self._invalidate_region_preview)
         cfd_form.addRow("流动方向", self.flow_axis)
         cfd_form.addRow("四面体尺寸", self.cfd_element_size)
         cfd_form.addRow("流体表面精度", self.cfd_surface_samples)
@@ -727,6 +793,11 @@ class MainWindow(QMainWindow):
         self.porosity_value = self._metric(metrics, "孔隙率", "--")
         metrics.addStretch(1)
         right_layout.addLayout(metrics)
+        self.region_legend = QLabel()
+        self.region_legend.setTextFormat(Qt.RichText)
+        self.region_legend.setStyleSheet("color: #46514a; padding: 2px 0 5px 0;")
+        self.region_legend.setVisible(False)
+        right_layout.addWidget(self.region_legend)
         self.viewport = OpenGLMeshView()
         self.viewport.error.connect(self._viewport_error)
         right_layout.addWidget(self.viewport, 1)
@@ -735,6 +806,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([430, 890])
         self._update_mode_fields()
+        self._update_formula_fields()
         self._update_cfd_fields()
 
     @staticmethod
@@ -757,6 +829,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "target_porosity"):
             self.target_porosity.setEnabled(automatic)
 
+    def _update_formula_fields(self) -> None:
+        if hasattr(self, "formula_edit"):
+            custom = self.surface_combo.currentData() == CUSTOM_SURFACE
+            self.formula_edit.setEnabled(custom)
+            self.cell_group.setVisible(not custom)
+            self.cell_separator.setVisible(not custom)
+
     def _update_cfd_fields(self) -> None:
         boundary_layer = self.boundary_layer_enabled.isChecked()
         self.boundary_layer_layers.setEnabled(boundary_layer)
@@ -767,9 +846,22 @@ class MainWindow(QMainWindow):
         self.end_refinement_factor.setEnabled(end_refinement)
         self.curvature_points.setEnabled(self.curvature_refinement_enabled.isChecked())
 
+    def _invalidate_region_preview(self) -> None:
+        if not hasattr(self, "region_action"):
+            return
+        self.region_preview = None
+        self.region_legend.setVisible(False)
+        self.region_action.blockSignals(True)
+        self.region_action.setChecked(False)
+        self.region_action.blockSignals(False)
+        can_enable = self.current_result is not None and not (
+            self.worker_thread is not None and self.worker_thread.isRunning()
+        )
+        self.region_action.setEnabled(can_enable)
+
     def _parameters(self) -> TPMSParameters:
         return TPMSParameters(
-            surface=self.surface_combo.currentText(),
+            surface=self.surface_combo.currentData() or self.surface_combo.currentText(),
             mode="sheet" if self.sheet_radio.isChecked() else "solid",
             size_x=self.size_fields[0].value(),
             size_y=self.size_fields[1].value(),
@@ -785,6 +877,24 @@ class MainWindow(QMainWindow):
                 if self.porosity_enabled.isChecked()
                 else None
             ),
+            formula=self.formula_edit.text(),
+        )
+
+    def _cfd_options(self) -> CFDMeshOptions:
+        return CFDMeshOptions(
+            flow_axis=self.flow_axis.currentText(),
+            element_size=self.cfd_element_size.value(),
+            surface_samples_per_cell=self.cfd_surface_samples.value(),
+            boundary_layer_enabled=self.boundary_layer_enabled.isChecked(),
+            boundary_layer_layers=self.boundary_layer_layers.value(),
+            boundary_layer_first_height=self.boundary_layer_first_height.value(),
+            boundary_layer_growth=self.boundary_layer_growth.value(),
+            end_refinement_enabled=self.end_refinement_enabled.isChecked(),
+            end_refinement_distance=self.end_refinement_distance.value(),
+            end_refinement_size_factor=self.end_refinement_factor.value() / 100.0,
+            curvature_refinement_enabled=self.curvature_refinement_enabled.isChecked(),
+            curvature_points=self.curvature_points.value(),
+            low_quality_threshold=self.low_quality_threshold.value(),
         )
 
     def generate(self) -> None:
@@ -803,8 +913,12 @@ class MainWindow(QMainWindow):
         self.quality_report_action.setEnabled(False)
         self.low_quality_action.setChecked(False)
         self.low_quality_action.setEnabled(False)
+        self.region_action.setChecked(False)
+        self.region_action.setEnabled(False)
         self.current_cfd_result = None
         self.low_quality_preview = None
+        self.region_preview = None
+        self.region_legend.setVisible(False)
         self.statusBar().showMessage("正在生成完整网格和 GPU 预览网格...")
         self.worker_thread = QThread(self)
         self.worker = MeshWorker(parameters)
@@ -834,6 +948,9 @@ class MainWindow(QMainWindow):
         self.generate_button.setText("生成模型")
         self.export_action.setEnabled(True)
         self.cfd_export_action.setEnabled(True)
+        # 网格质量分析可以按需生成临时 CFD 体网格，不必先正式导出。
+        self.quality_report_action.setEnabled(True)
+        self.region_action.setEnabled(True)
         cleanup = (
             f" · 已清理 {result.removed_components} 个孤立碎片"
             if result.removed_components
@@ -909,21 +1026,7 @@ class MainWindow(QMainWindow):
         )
         if not destination:
             return
-        options = CFDMeshOptions(
-            flow_axis=self.flow_axis.currentText(),
-            element_size=self.cfd_element_size.value(),
-            surface_samples_per_cell=self.cfd_surface_samples.value(),
-            boundary_layer_enabled=self.boundary_layer_enabled.isChecked(),
-            boundary_layer_layers=self.boundary_layer_layers.value(),
-            boundary_layer_first_height=self.boundary_layer_first_height.value(),
-            boundary_layer_growth=self.boundary_layer_growth.value(),
-            end_refinement_enabled=self.end_refinement_enabled.isChecked(),
-            end_refinement_distance=self.end_refinement_distance.value(),
-            end_refinement_size_factor=self.end_refinement_factor.value() / 100.0,
-            curvature_refinement_enabled=self.curvature_refinement_enabled.isChecked(),
-            curvature_points=self.curvature_points.value(),
-            low_quality_threshold=self.low_quality_threshold.value(),
-        )
+        options = self._cfd_options()
         try:
             parameters = self.current_result.parameters
             options.validate((parameters.size_x, parameters.size_y, parameters.size_z))
@@ -937,6 +1040,9 @@ class MainWindow(QMainWindow):
         self.quality_report_action.setEnabled(False)
         self.low_quality_action.setChecked(False)
         self.low_quality_action.setEnabled(False)
+        self.region_action.setChecked(False)
+        self.region_action.setEnabled(False)
+        self.region_legend.setVisible(False)
         self.statusBar().showMessage("正在准备 COMSOL 流体体网格...")
         self.worker_thread = QThread(self)
         self.worker = CFDMeshWorker(
@@ -957,16 +1063,10 @@ class MainWindow(QMainWindow):
         self.worker_thread.start()
 
     def _cfd_export_finished(self, result: CFDMeshResult) -> None:
-        self.current_cfd_result = result
-        self.low_quality_preview = PreviewMesh(
-            vertices=result.low_quality_vertices,
-            faces=result.low_quality_faces,
-        )
+        self._set_cfd_result(result)
         self.generate_button.setEnabled(True)
         self.export_action.setEnabled(True)
         self.cfd_export_action.setEnabled(True)
-        self.quality_report_action.setEnabled(True)
-        self.low_quality_action.setEnabled(result.quality.low_quality_elements > 0)
         self.statusBar().showMessage(
             f"COMSOL 体网格已导出 · {result.nodes:,} 节点 · "
             f"{result.volume_elements:,} 体单元 · 最小缩放雅可比 "
@@ -999,6 +1099,8 @@ class MainWindow(QMainWindow):
             self.current_cfd_result is not None
             and self.current_cfd_result.quality.low_quality_elements > 0
         )
+        self.region_action.setEnabled(False)
+        self.region_legend.setVisible(False)
         self.statusBar().showMessage("COMSOL 体网格导出失败")
         QMessageBox.critical(self, "COMSOL 体网格导出失败", message)
         self.worker_thread = None
@@ -1007,8 +1109,93 @@ class MainWindow(QMainWindow):
     def show_quality_report(self) -> None:
         if self.current_cfd_result is not None:
             MeshQualityDialog(self.current_cfd_result, self).exec_()
+            return
+        self._start_quality_preview()
+
+    def _set_cfd_result(self, result: CFDMeshResult) -> None:
+        self.current_cfd_result = result
+        self.low_quality_preview = PreviewMesh(
+            vertices=result.low_quality_vertices,
+            faces=result.low_quality_faces,
+        )
+        self.region_preview = result.region_preview
+        self.quality_report_action.setEnabled(True)
+        self.low_quality_action.setEnabled(result.quality.low_quality_elements > 0)
+        self.region_action.setEnabled(result.region_preview.triangles > 0)
+
+    def _start_quality_preview(self) -> None:
+        if self.current_result is None:
+            self.quality_report_action.setEnabled(False)
+            return
+        if self.worker_thread is not None and self.worker_thread.isRunning():
+            return
+        options = self._cfd_options()
+        try:
+            parameters = self.current_result.parameters
+            options.validate((parameters.size_x, parameters.size_y, parameters.size_z))
+        except ValueError as exc:
+            QMessageBox.critical(self, "参数无效", str(exc))
+            return
+
+        # 质量报告只需要计算结果，使用临时目录避免覆盖用户尚未导出的文件。
+        preview_dir = Path(tempfile.mkdtemp(prefix="tpms-quality-"))
+        destination = preview_dir / "quality_preview.bdf"
+        self.generate_button.setEnabled(False)
+        self.export_action.setEnabled(False)
+        self.cfd_export_action.setEnabled(False)
+        self.quality_report_action.setEnabled(False)
+        self.low_quality_action.setChecked(False)
+        self.low_quality_action.setEnabled(False)
+        self.region_action.setChecked(False)
+        self.region_action.setEnabled(False)
+        self.region_legend.setVisible(False)
+        self.statusBar().showMessage("正在生成网格质量分析数据...")
+        self.worker_thread = QThread(self)
+        self.worker = CFDMeshWorker(parameters, destination, options)
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.progress.connect(self.statusBar().showMessage)
+        self.worker.finished.connect(self._quality_preview_finished)
+        self.worker.failed.connect(self._quality_preview_failed)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.failed.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.start()
+
+    def _quality_preview_finished(self, result: CFDMeshResult) -> None:
+        self._set_cfd_result(result)
+        self.generate_button.setEnabled(True)
+        self.export_action.setEnabled(self.current_result is not None)
+        self.cfd_export_action.setEnabled(self.current_result is not None)
+        self.statusBar().showMessage(
+            f"网格质量分析完成 · {result.nodes:,} 节点 · "
+            f"{result.volume_elements:,} 体单元 · 最小缩放雅可比 "
+            f"{result.quality.minimum:.3f}"
+        )
+        self.worker_thread = None
+        self.worker = None
+        MeshQualityDialog(result, self).exec_()
+
+    def _quality_preview_failed(self, message: str) -> None:
+        self.generate_button.setEnabled(True)
+        self.export_action.setEnabled(self.current_result is not None)
+        self.cfd_export_action.setEnabled(self.current_result is not None)
+        self.quality_report_action.setEnabled(False)
+        self.low_quality_action.setChecked(False)
+        self.low_quality_action.setEnabled(False)
+        self.region_action.setChecked(False)
+        self.region_action.setEnabled(self.current_result is not None)
+        self.region_legend.setVisible(False)
+        self.statusBar().showMessage("网格质量分析失败")
+        QMessageBox.critical(self, "网格质量分析失败", message)
+        self.worker_thread = None
+        self.worker = None
 
     def _toggle_low_quality_view(self, enabled: bool) -> None:
+        if enabled:
+            self.region_action.setChecked(False)
         preview = self.low_quality_preview if enabled else self.current_preview
         if preview is None or preview.triangles == 0:
             if enabled:
@@ -1024,6 +1211,71 @@ class MainWindow(QMainWindow):
             )
         elif self.current_result is not None:
             self.statusBar().showMessage("已返回 TPMS 模型预览")
+
+    def _toggle_region_view(self, enabled: bool) -> None:
+        if enabled:
+            if self.current_result is None:
+                self.region_action.setChecked(False)
+                return
+            if self.region_preview is None:
+                if self.worker_thread is not None and self.worker_thread.isRunning():
+                    self.region_action.setChecked(False)
+                    return
+                options = self._cfd_options()
+                self.region_action.setEnabled(False)
+                self.region_legend.setVisible(False)
+                self.statusBar().showMessage("正在生成仿真区域预览...")
+                self.worker_thread = QThread(self)
+                self.worker = SimulationRegionWorker(
+                    self.current_result.parameters,
+                    options,
+                )
+                self.worker.moveToThread(self.worker_thread)
+                self.worker_thread.started.connect(self.worker.run)
+                self.worker.finished.connect(self._region_preview_finished)
+                self.worker.failed.connect(self._region_preview_failed)
+                self.worker.finished.connect(self.worker_thread.quit)
+                self.worker.failed.connect(self.worker_thread.quit)
+                self.worker.finished.connect(self.worker.deleteLater)
+                self.worker.failed.connect(self.worker.deleteLater)
+                self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+                self.worker_thread.start()
+                return
+            self.low_quality_action.setChecked(False)
+        preview = self.region_preview if enabled else self.current_preview
+        if preview is None or preview.triangles == 0:
+            if enabled:
+                self.region_action.setChecked(False)
+            return
+        self.viewport.set_mesh(preview)
+        self.viewport.set_highlight_mode(False)
+        self.region_legend.setVisible(enabled)
+        if enabled:
+            self.region_legend.setText(
+                "仿真区域："
+                "<span style='color:#296ff2'>● 入口</span>&nbsp;&nbsp;"
+                "<span style='color:#f0601f'>● 出口</span>&nbsp;&nbsp;"
+                "<span style='color:#20ad66'>● 壁面</span>"
+            )
+            self.statusBar().showMessage("已显示仿真区域：入口、出口和壁面")
+        elif self.current_result is not None:
+            self.statusBar().showMessage("已返回 TPMS 模型预览")
+
+    def _region_preview_finished(self, preview: PreviewMesh) -> None:
+        self.region_preview = preview
+        self.region_action.setEnabled(True)
+        self.worker_thread = None
+        self.worker = None
+        self._toggle_region_view(True)
+
+    def _region_preview_failed(self, message: str) -> None:
+        self.region_action.setChecked(False)
+        self.region_action.setEnabled(self.current_result is not None)
+        self.region_legend.setVisible(False)
+        self.statusBar().showMessage("仿真区域预览失败")
+        QMessageBox.critical(self, "仿真区域预览失败", message)
+        self.worker_thread = None
+        self.worker = None
 
 
 def main() -> int:
