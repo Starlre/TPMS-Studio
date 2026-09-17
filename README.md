@@ -1,8 +1,8 @@
 # TPMS Studio
 
-一个本地运行的 TPMS 参数化建模桌面工具。支持 Gyroid、Diamond、Primitive、I-WP 和 Neovius 曲面，可生成封闭三角网格并导出 STL、OBJ 或 PLY。还可生成 TPMS 孔隙的四面体流体网格，导出为 COMSOL 可导入的 NASTRAN BDF 和 Gmsh MSH。三维视口使用 OpenGL GPU 渲染，鼠标拖动只更新相机矩阵。
+一个本地运行的 TPMS 参数化建模桌面工具。支持 Gyroid、Diamond、Primitive、I-WP 和 Neovius 曲面，可生成封闭三角网格并导出 STL、OBJ 或 PLY。还可生成 TPMS 孔隙的混合棱柱/四面体流体网格，导出为 COMSOL 可导入的 NASTRAN BDF 和 Gmsh MSH。三维视口使用 OpenGL GPU 渲染，鼠标拖动只更新相机矩阵。
 
-需求历史、技术决策、验证记录和已知限制见 [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)。
+版本更新见 [CHANGELOG.md](CHANGELOG.md)；需求历史、技术决策、验证记录和已知限制见 [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)。
 
 ## 运行
 
@@ -30,10 +30,10 @@ pip install -r requirements.txt
 
 ## COMSOL 流体体网格
 
-1. 先生成 TPMS 模型，然后设置流动方向、四面体尺寸和流体表面精度。
-2. 点击工具栏的“导出 COMSOL 流体网格”。软件会同时生成 `.bdf`、`.msh` 和 `_boundaries.json`。
+1. 先生成 TPMS 模型，然后设置流动方向、体单元尺寸、流体表面精度以及可选的棱柱边界层、入出口局部加密和曲率自适应参数。
+2. 点击工具栏的“导出 COMSOL 流体网格”。软件会同时生成 `.bdf`、`.msh`、`_boundaries.json` 和 `_quality.vtu`。
 3. 在 COMSOL 的“网格”节点中添加“导入”，导入 `.bdf` 文件；长度单位按 **mm** 解释。
-4. 单元属性号为：`101` 入口、`102` 出口、`103` 壁面、`201` 流体域。`_boundaries.json` 中同时记录了边界面数、网格数量和最小缩放雅可比。
+4. 单元属性号为：`101` 入口、`102` 出口、`103` 壁面、`201` 流体域。`_boundaries.json` 记录边界面数、单元数量和质量统计；`_quality.vtu` 可用于检查完整缩放雅可比场。
 5. 为流体域添加层流或湍流物理场，再指定流体材料、入口速度/流量、出口压力和壁面条件。
 
-片层 TPMS 可能形成两个互不连通的流体网络，软件会对每个封闭流体域分别划分，再合并到同一份网格。导出的体网格不会自动创建 COMSOL 物理场、边界条件或求解器；正式仿真前应进行网格无关性检查。
+片层 TPMS 可能形成两个互不连通的流体网络，软件会对每个封闭流体域分别划分，再合并到同一份网格。当前棱柱层覆盖流体域的全部封闭边界，包括入口和出口。导出的体网格不会自动创建 COMSOL 物理场、边界条件或求解器；正式仿真前应检查低质量单元并进行网格无关性检查。
