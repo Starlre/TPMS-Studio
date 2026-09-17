@@ -702,6 +702,8 @@ class MainWindow(QMainWindow):
         self.region_preview: PreviewMesh | None = None
         self.worker_thread: QThread | None = None
         self.worker: MeshWorker | CFDMeshWorker | None = None
+        self._gmsh_module = None
+        self._gmsh_initialized_by_app = False
         self._build_toolbar()
         self._build_ui()
         self.setStatusBar(QStatusBar())
@@ -1151,6 +1153,29 @@ class MainWindow(QMainWindow):
             low_quality_threshold=self.low_quality_threshold.value(),
         )
 
+    def _prepare_gmsh_for_worker(self) -> None:
+        """Initialize Gmsh on the Python main thread before starting a QThread."""
+        try:
+            import gmsh
+        except ImportError as exc:
+            raise RuntimeError("缺少 Gmsh，请先运行 pip install gmsh") from exc
+
+        if not gmsh.isInitialized():
+            gmsh.initialize()
+            self._gmsh_initialized_by_app = True
+        gmsh.option.setNumber("General.Terminal", 0)
+        self._gmsh_module = gmsh
+
+    def _release_gmsh_after_worker(self) -> None:
+        """Finalize a Gmsh runtime that this window initialized on the main thread."""
+        gmsh = self._gmsh_module
+        try:
+            if gmsh is not None and self._gmsh_initialized_by_app and gmsh.isInitialized():
+                gmsh.finalize()
+        finally:
+            self._gmsh_module = None
+            self._gmsh_initialized_by_app = False
+
     def generate(self) -> None:
         if self.worker_thread is not None and self.worker_thread.isRunning():
             return
@@ -1287,6 +1312,11 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.critical(self, "参数无效", str(exc))
             return
+        try:
+            self._prepare_gmsh_for_worker()
+        except RuntimeError as exc:
+            QMessageBox.critical(self, "COMSOL 网格不可用", str(exc))
+            return
 
         self.generate_button.setEnabled(False)
         self.export_action.setEnabled(False)
@@ -1318,6 +1348,7 @@ class MainWindow(QMainWindow):
 
     def _cfd_export_finished(self, result: CFDMeshResult) -> None:
         self._set_cfd_result(result)
+        self._release_gmsh_after_worker()
         self.generate_button.setEnabled(True)
         self.export_action.setEnabled(True)
         self.cfd_export_action.setEnabled(True)
@@ -1345,6 +1376,7 @@ class MainWindow(QMainWindow):
         self.worker = None
 
     def _cfd_export_failed(self, message: str) -> None:
+        self._release_gmsh_after_worker()
         self.generate_button.setEnabled(True)
         self.export_action.setEnabled(self.current_result is not None)
         self.cfd_export_action.setEnabled(self.current_result is not None)
@@ -1390,6 +1422,11 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.critical(self, "参数无效", str(exc))
             return
+        try:
+            self._prepare_gmsh_for_worker()
+        except RuntimeError as exc:
+            QMessageBox.critical(self, "网格质量分析不可用", str(exc))
+            return
 
         # 质量报告只需要计算结果，使用临时目录避免覆盖用户尚未导出的文件。
         preview_dir = Path(tempfile.mkdtemp(prefix="tpms-quality-"))
@@ -1420,6 +1457,7 @@ class MainWindow(QMainWindow):
 
     def _quality_preview_finished(self, result: CFDMeshResult) -> None:
         self._set_cfd_result(result)
+        self._release_gmsh_after_worker()
         self.generate_button.setEnabled(True)
         self.export_action.setEnabled(self.current_result is not None)
         self.cfd_export_action.setEnabled(self.current_result is not None)
@@ -1433,6 +1471,7 @@ class MainWindow(QMainWindow):
         MeshQualityDialog(result, self).exec_()
 
     def _quality_preview_failed(self, message: str) -> None:
+        self._release_gmsh_after_worker()
         self.generate_button.setEnabled(True)
         self.export_action.setEnabled(self.current_result is not None)
         self.cfd_export_action.setEnabled(self.current_result is not None)
