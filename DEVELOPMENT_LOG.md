@@ -67,6 +67,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-018 | COMSOL 流体仿真 | GUI 增加流向、四面体尺寸、流体表面精度；后台导出 BDF/MSH/JSON 及 101/102/103/201 分组 | 导出完成，待 COMSOL 实机验证 |
 | R-019 | 写开发文档，记录每次需求和更新 | 新增 `DEVELOPMENT_LOG.md`，包含需求台账、决策、验证、限制和记录模板 | 已完成 |
 | R-020 | 为项目配置 Git | 确认 `main` 分支，新增 `.gitignore` 和 `.gitattributes`，排除 Python 缓存、测试临时目录和生成网格；配置仓库本地提交者身份并创建首次提交 | 已完成 |
+| R-021 | 配置 GitHub 远程仓库 | 绑定公开仓库 `https://github.com/Starlre/TPMS-Studio.git`，将本地 `main` 设为跟踪分支并推送项目 | 已完成 |
 
 ## 4. 关键更新详情
 
