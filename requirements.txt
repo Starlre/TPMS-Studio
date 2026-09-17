@@ -1,0 +1,6 @@
+PyQt5>=5.15
+gmsh>=4.15
+meshio>=5.3
+numpy>=1.26
+scikit-image>=0.23
+trimesh>=4.4
