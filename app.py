@@ -41,8 +41,10 @@ from PyQt5.QtWidgets import (
     QOpenGLWidget,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QSplitter,
     QStatusBar,
     QTabWidget,
     QToolBar,
@@ -109,35 +111,55 @@ QToolButton:checked { background: #e9f1f5; color: #153e59; border-color: #b6c8d3
 QToolButton:disabled { color: #7f919c; }
 QWidget#parameterDeck {
     background: #f3f6f8;
-    border-bottom: 1px solid #b9c6cf;
+    border-right: 1px solid #b9c6cf;
 }
 QLabel#panelTitle { color: #132d40; font-size: 20px; font-weight: 700; }
 QLabel#panelSubtitle { color: #536875; font-size: 14px; }
 QLabel#sectionTitle { color: #253d4c; font-size: 16px; font-weight: 700; }
+QScrollArea#parameterScroll {
+    background: #ffffff;
+    border: none;
+}
+QWidget#parameterPage { background: #ffffff; }
 QTabWidget#parameterTabs::pane {
     background: #ffffff;
     border: 1px solid #b9c6cf;
     top: -1px;
 }
-QTabBar::tab {
+QTabWidget#parameterTabs QTabBar::tab {
     background: #e3e9ed;
     color: #3f5360;
     border: none;
     border-right: 1px solid #c3cdd4;
     border-bottom: 3px solid transparent;
-    min-width: 150px;
+    min-width: 92px;
     min-height: 38px;
-    padding: 2px 18px;
+    padding: 2px 10px;
     font-size: 16px;
     font-weight: 600;
 }
-QTabBar::tab:selected {
+QTabWidget#parameterTabs QTabBar::tab:selected {
     background: #ffffff;
     color: #123d59;
     border-bottom: 3px solid #16806a;
     font-weight: 700;
 }
-QTabBar::tab:hover:!selected { background: #eef2f4; color: #203d50; }
+QTabWidget#parameterTabs QTabBar::tab:hover:!selected { background: #eef2f4; color: #203d50; }
+QScrollBar:vertical {
+    background: #edf1f3;
+    width: 12px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #a9b7c0;
+    min-height: 36px;
+    border-radius: 3px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical:hover { background: #8295a1; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QSplitter::handle { background: #b9c6cf; width: 1px; }
 QGroupBox {
     background: #f9fbfc;
     border: 1px solid #c6d1d8;
@@ -212,6 +234,7 @@ QPushButton#generateButton {
 QPushButton#generateButton:hover { background: #126750; }
 QPushButton#generateButton:pressed { background: #0c503e; }
 QPushButton#generateButton:disabled { background: #aab6b1; color: #f3f5f4; border-color: #9da8a4; }
+QWidget#parameterDeck QPushButton#generateButton { min-width: 0; }
 QStatusBar { background: #ffffff; border-top: 1px solid #bdc9d1; color: #455b68; font-size: 13px; }
 """
 
@@ -760,6 +783,18 @@ class MainWindow(QMainWindow):
             grid.addWidget(field, 1, column)
         return grid
 
+    @staticmethod
+    def _scroll_page(content: QWidget) -> QScrollArea:
+        content.setObjectName("parameterPage")
+        scroll = QScrollArea()
+        scroll.setObjectName("parameterScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(content)
+        return scroll
+
     def _build_ui(self) -> None:
         central = QWidget()
         central.setObjectName("centralRoot")
@@ -768,48 +803,37 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         self.setCentralWidget(central)
 
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        root.addWidget(splitter, 1)
+
         parameter_deck = QWidget()
         parameter_deck.setObjectName("parameterDeck")
+        parameter_deck.setMinimumWidth(400)
+        parameter_deck.setMaximumWidth(540)
         deck_layout = QVBoxLayout(parameter_deck)
-        deck_layout.setContentsMargins(16, 9, 16, 12)
-        deck_layout.setSpacing(8)
+        deck_layout.setContentsMargins(14, 12, 14, 12)
+        deck_layout.setSpacing(10)
 
-        header = QHBoxLayout()
-        header.setSpacing(12)
-        heading = QHBoxLayout()
-        heading.setSpacing(12)
-        title = QLabel("参数工作台")
+        title = QLabel("参数设置")
         title.setObjectName("panelTitle")
-        subtitle = QLabel("几何、结构与流体网格定义")
+        subtitle = QLabel("几何、结构与流体网格")
         subtitle.setObjectName("panelSubtitle")
-        heading.addWidget(title, 0, Qt.AlignVCenter)
-        heading.addWidget(subtitle, 0, Qt.AlignVCenter)
-        header.addLayout(heading)
-        header.addStretch(1)
-        self.generate_button = QPushButton("生成模型")
-        self.generate_button.setObjectName("generateButton")
-        self.generate_button.setShortcut("Ctrl+Return")
-        self.generate_button.setToolTip("使用当前参数重新生成 TPMS 模型")
-        self.generate_button.setAccessibleName("生成 TPMS 模型")
-        self.generate_button.clicked.connect(self.generate)
-        header.addWidget(self.generate_button, 0, Qt.AlignVCenter)
-        deck_layout.addLayout(header)
+        deck_layout.addWidget(title)
+        deck_layout.addWidget(subtitle)
 
         self.parameter_tabs = QTabWidget()
         self.parameter_tabs.setObjectName("parameterTabs")
         self.parameter_tabs.setDocumentMode(True)
         self.parameter_tabs.tabBar().setExpanding(True)
-        self.parameter_tabs.setMinimumHeight(232)
-        self.parameter_tabs.setMaximumHeight(244)
-        self.parameter_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.parameter_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         geometry_tab = QWidget()
-        geometry_layout = QHBoxLayout(geometry_tab)
-        geometry_layout.setContentsMargins(9, 7, 9, 8)
-        geometry_layout.setSpacing(9)
+        geometry_layout = QVBoxLayout(geometry_tab)
+        geometry_layout.setContentsMargins(9, 8, 9, 10)
+        geometry_layout.setSpacing(8)
 
         surface_group = QGroupBox("曲面与结构模式")
-        surface_group.setMinimumWidth(350)
         surface_form = self._form_layout()
         self.surface_combo = QComboBox()
         for surface_name in ("Gyroid", "Diamond", "Primitive", "I-WP", "Neovius"):
@@ -855,15 +879,16 @@ class MainWindow(QMainWindow):
             field.setAccessibleName(f"{axis} 方向周期数量")
         self.cell_group.setLayout(self._axis_grid(self.cell_fields))
 
-        geometry_layout.addWidget(surface_group, 4)
-        geometry_layout.addWidget(size_group, 3)
-        geometry_layout.addWidget(self.cell_group, 3)
-        self.parameter_tabs.addTab(geometry_tab, "几何定义")
+        geometry_layout.addWidget(surface_group)
+        geometry_layout.addWidget(size_group)
+        geometry_layout.addWidget(self.cell_group)
+        geometry_layout.addStretch(1)
+        self.parameter_tabs.addTab(self._scroll_page(geometry_tab), "几何定义")
 
         structure_tab = QWidget()
-        structure_layout = QHBoxLayout(structure_tab)
-        structure_layout.setContentsMargins(9, 7, 9, 8)
-        structure_layout.setSpacing(9)
+        structure_layout = QVBoxLayout(structure_tab)
+        structure_layout.setContentsMargins(9, 8, 9, 10)
+        structure_layout.setSpacing(8)
 
         structure_group = QGroupBox("结构参数")
         structure_form = self._form_layout()
@@ -898,14 +923,15 @@ class MainWindow(QMainWindow):
         porosity_layout.addLayout(porosity_form)
         porosity_layout.addStretch(1)
 
-        structure_layout.addWidget(structure_group, 2)
-        structure_layout.addWidget(porosity_group, 2)
-        self.parameter_tabs.addTab(structure_tab, "结构与孔隙率")
+        structure_layout.addWidget(structure_group)
+        structure_layout.addWidget(porosity_group)
+        structure_layout.addStretch(1)
+        self.parameter_tabs.addTab(self._scroll_page(structure_tab), "结构控制")
 
         cfd_tab = QWidget()
-        cfd_layout = QHBoxLayout(cfd_tab)
-        cfd_layout.setContentsMargins(9, 7, 9, 8)
-        cfd_layout.setSpacing(9)
+        cfd_layout = QVBoxLayout(cfd_tab)
+        cfd_layout.setContentsMargins(9, 8, 9, 10)
+        cfd_layout.setSpacing(8)
 
         cfd_base_group = QGroupBox("基础网格")
         cfd_form = self._form_layout()
@@ -988,13 +1014,22 @@ class MainWindow(QMainWindow):
         quality_layout.addLayout(quality_form)
         quality_layout.addStretch(1)
 
-        cfd_layout.addWidget(cfd_base_group, 2)
-        cfd_layout.addWidget(boundary_group, 3)
-        cfd_layout.addWidget(refinement_group, 2)
-        cfd_layout.addWidget(quality_group, 2)
-        self.parameter_tabs.addTab(cfd_tab, "CFD 网格")
-        deck_layout.addWidget(self.parameter_tabs)
-        root.addWidget(parameter_deck, 0)
+        cfd_layout.addWidget(cfd_base_group)
+        cfd_layout.addWidget(boundary_group)
+        cfd_layout.addWidget(refinement_group)
+        cfd_layout.addWidget(quality_group)
+        cfd_layout.addStretch(1)
+        self.parameter_tabs.addTab(self._scroll_page(cfd_tab), "CFD 网格")
+        deck_layout.addWidget(self.parameter_tabs, 1)
+
+        self.generate_button = QPushButton("生成模型")
+        self.generate_button.setObjectName("generateButton")
+        self.generate_button.setShortcut("Ctrl+Return")
+        self.generate_button.setToolTip("使用当前参数重新生成 TPMS 模型")
+        self.generate_button.setAccessibleName("生成 TPMS 模型")
+        self.generate_button.clicked.connect(self.generate)
+        deck_layout.addWidget(self.generate_button)
+        splitter.addWidget(parameter_deck)
 
         workspace = QWidget()
         workspace.setObjectName("workspace")
@@ -1021,7 +1056,10 @@ class MainWindow(QMainWindow):
         self.viewport = OpenGLMeshView()
         self.viewport.error.connect(self._viewport_error)
         workspace_layout.addWidget(self.viewport, 1)
-        root.addWidget(workspace, 1)
+        splitter.addWidget(workspace)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([430, 1010])
         self._update_mode_fields()
         self._update_formula_fields()
         self._update_cfd_fields()
