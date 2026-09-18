@@ -24,6 +24,7 @@ pytest-of-*/
 test-output/
 exports/
 *.stl
+!docs/gyroid_tpms.stl
 *.obj
 *.ply
 *.msh

@@ -88,6 +88,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-039 | 运行提示 Code is already running | 排查仓库无该字符串，定位为 IDE/终端防重入，说明 `QApplication` 单例与 `QThread isRunning` 静默返回机制 | 已完成 |
 | R-040 | 在模型预览区增加 XYZ 三轴显示 | 视口左下角增加固定尺寸方向标；红 X、绿 Y、蓝 Z 与字母标签同时传达方向，随模型旋转但不随缩放变化，适配暗色/亮色背景 | 已完成 |
 | R-041 | 更新 Markdown 文档图片并推送 GitHub | 使用当前版本重新生成 `1520×960` 建模和 CFD 仿真区域截图，两张图均展示 XYZ 方向标；README 补充方向标功能说明 | 已完成 |
+| R-042 | 在 GitHub 主页放置可交互的 `gyroid_tpms.stl` 三维模型 | 新增 `docs/` GitHub Pages 查看器、页面实拍封面和 Pages Actions 部署工作流；README 图片链接到在线预览 | 已完成 |
 
 ## 4. 关键更新详情
 

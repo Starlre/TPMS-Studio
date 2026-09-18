@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TPMS Studio Gyroid 模型在线三维预览">
+  <title>Gyroid TPMS | 3D Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071016;
+      --panel: rgba(11, 24, 32, 0.92);
+      --panel-solid: #0b1820;
+      --border: #29414d;
+      --text: #edf6f7;
+      --muted: #9bb0b8;
+      --accent: #2fb7aa;
+      --accent-strong: #58d4c8;
+      --button: #152832;
+      --button-hover: #203943;
+      --focus: #70e4d7;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    body.light {
+      color-scheme: light;
+      --bg: #eef4f5;
+      --panel: rgba(255, 255, 255, 0.94);
+      --panel-solid: #ffffff;
+      --border: #bdcdd2;
+      --text: #13272e;
+      --muted: #526a73;
+      --accent: #087f78;
+      --accent-strong: #05665f;
+      --button: #e5eef0;
+      --button-hover: #d7e5e8;
+      --focus: #087f78;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      isolation: isolate;
+    }
+
+    #viewport {
+      position: absolute;
+      inset: 0;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    canvas:focus-visible,
+    button:focus-visible,
+    a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .topbar {
+      position: absolute;
+      z-index: 4;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 12px 10px 18px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    .brand p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    button,
+    .download-link {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--button);
+      color: var(--text);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color 160ms ease, border-color 160ms ease;
+    }
+
+    button:hover,
+    .download-link:hover {
+      background: var(--button-hover);
+      border-color: var(--accent);
+    }
+
+    button[aria-pressed="true"] {
+      background: var(--accent);
+      border-color: var(--accent-strong);
+      color: #051413;
+    }
+
+    .data-panel {
+      position: absolute;
+      z-index: 3;
+      top: 96px;
+      right: 16px;
+      width: min(280px, calc(100vw - 32px));
+      padding: 16px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
+      backdrop-filter: blur(12px);
+    }
+
+    .data-panel h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+      margin: 0;
+    }
+
+    .metric dt {
+      margin: 0 0 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric dd {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hint {
+      position: absolute;
+      z-index: 3;
+      left: 16px;
+      bottom: 16px;
+      margin: 0;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 13px;
+      backdrop-filter: blur(12px);
+    }
+
+    .loading {
+      position: absolute;
+      z-index: 6;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      transition: opacity 220ms ease, visibility 220ms ease;
+    }
+
+    .loading[hidden] {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-card {
+      width: min(420px, calc(100vw - 40px));
+      padding: 22px;
+      border: 1px solid var(--border);
+      background: var(--panel-solid);
+    }
+
+    .loading-card strong {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 17px;
+    }
+
+    .loading-card p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    progress {
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      background: var(--button);
+      accent-color: var(--accent);
+    }
+
+    progress::-webkit-progress-bar { background: var(--button); }
+    progress::-webkit-progress-value { background: var(--accent); }
+    progress::-moz-progress-bar { background: var(--accent); }
+
+    .error {
+      color: #ff9a91;
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        align-items: flex-start;
+        padding: 12px;
+      }
+
+      .brand p { display: none; }
+      .toolbar { gap: 6px; }
+      button,
+      .download-link {
+        min-height: 44px;
+        padding: 0 11px;
+      }
+
+      .data-panel {
+        top: auto;
+        right: 8px;
+        bottom: 8px;
+        width: 210px;
+        padding: 12px;
+      }
+
+      .metrics { gap: 9px 12px; }
+      .hint { display: none; }
+    }
+
+    @media (max-width: 520px) {
+      .topbar { display: block; }
+      .brand { margin-bottom: 10px; }
+      .toolbar { justify-content: flex-start; }
+      .download-link { display: none; }
+      .data-panel { width: calc(100vw - 16px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <div id="viewport" aria-label="Gyroid TPMS 三维模型交互预览"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <h1>Gyroid TPMS</h1>
+        <p>TPMS Studio · 交互式三维模型</p>
+      </div>
+      <nav class="toolbar" aria-label="模型查看工具">
+        <button id="reset-view" type="button">重置视角</button>
+        <button id="auto-rotate" type="button" aria-pressed="false">自动旋转</button>
+        <button id="theme-toggle" type="button" aria-pressed="false">亮色背景</button>
+        <a class="download-link" href="gyroid_tpms.stl" download>下载 STL</a>
+      </nav>
+    </header>
+
+    <aside class="data-panel" aria-label="模型信息">
+      <h2>模型信息</h2>
+      <dl class="metrics">
+        <div class="metric"><dt>格式</dt><dd>STL</dd></div>
+        <div class="metric"><dt>文件大小</dt><dd id="file-size">30.6 MB</dd></div>
+        <div class="metric"><dt>三角面</dt><dd id="triangle-count">加载中</dd></div>
+        <div class="metric"><dt>结构</dt><dd>Gyroid</dd></div>
+      </dl>
+    </aside>
+
+    <p class="hint">拖动旋转 · 滚轮缩放 · 右键平移</p>
+
+    <section id="loading" class="loading" aria-live="polite">
+      <div class="loading-card">
+        <strong id="loading-title">正在加载 Gyroid 模型</strong>
+        <p id="loading-detail">准备下载 30.6 MB STL 文件…</p>
+        <progress id="loading-progress" max="100" value="0">0%</progress>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { STLLoader } from "three/addons/loaders/STLLoader.js";
+
+    const viewport = document.querySelector("#viewport");
+    const loading = document.querySelector("#loading");
+    const loadingTitle = document.querySelector("#loading-title");
+    const loadingDetail = document.querySelector("#loading-detail");
+    const loadingProgress = document.querySelector("#loading-progress");
+    const triangleCount = document.querySelector("#triangle-count");
+    const resetButton = document.querySelector("#reset-view");
+    const rotateButton = document.querySelector("#auto-rotate");
+    const themeButton = document.querySelector("#theme-toggle");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x071016);
+
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 10000);
+    camera.up.set(0, 0, 1);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.setAttribute("role", "img");
+    renderer.domElement.setAttribute("aria-label", "Gyroid TPMS 交互式三维模型。拖动旋转，滚轮缩放，右键平移。");
+    viewport.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.screenSpacePanning = true;
+    controls.autoRotateSpeed = 1.2;
+
+    scene.add(new THREE.HemisphereLight(0xd9f5f2, 0x102832, 2.1));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 3.0);
+    keyLight.position.set(4, -3, 6);
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(0x40c9d0, 1.8);
+    rimLight.position.set(-5, 4, 2);
+    scene.add(rimLight);
+
+    const axes = new THREE.AxesHelper(1);
+    scene.add(axes);
+
+    const grid = new THREE.GridHelper(10, 20, 0x42616d, 0x20343d);
+    grid.rotation.x = Math.PI / 2;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.34;
+    scene.add(grid);
+
+    let model = null;
+    let homePosition = new THREE.Vector3(3, -4, 2.8);
+    let homeTarget = new THREE.Vector3();
+
+    function fitModel() {
+      if (!model) return;
+      const box = new THREE.Box3().setFromObject(model);
+      const sphere = box.getBoundingSphere(new THREE.Sphere());
+      const radius = Math.max(sphere.radius, 0.001);
+      const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
+      const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * camera.aspect);
+      const limitingHalfFov = Math.min(verticalHalfFov, horizontalHalfFov);
+      const distance = radius / Math.sin(limitingHalfFov) * 1.08;
+      homeTarget.copy(sphere.center);
+      homePosition.copy(sphere.center).add(new THREE.Vector3(distance * 0.72, -distance * 0.92, distance * 0.64));
+      camera.near = Math.max(distance / 1000, 0.001);
+      camera.far = distance * 20;
+      camera.updateProjectionMatrix();
+      controls.minDistance = radius * 0.55;
+      controls.maxDistance = distance * 4;
+      resetView();
+
+      axes.scale.setScalar(radius * 0.32);
+      axes.position.copy(box.min).addScalar(-radius * 0.12);
+      grid.scale.setScalar(radius * 0.32);
+      grid.position.z = box.min.z - radius * 0.08;
+    }
+
+    function resetView() {
+      camera.position.copy(homePosition);
+      controls.target.copy(homeTarget);
+      controls.update();
+    }
+
+    const loader = new STLLoader();
+    loader.load(
+      "gyroid_tpms.stl",
+      (geometry) => {
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x168fa0,
+          roughness: 0.48,
+          metalness: 0.08,
+          side: THREE.DoubleSide,
+        });
+        model = new THREE.Mesh(geometry, material);
+        scene.add(model);
+        triangleCount.textContent = Math.floor(geometry.attributes.position.count / 3).toLocaleString("zh-CN");
+        fitModel();
+        loading.hidden = true;
+      },
+      (event) => {
+        if (!event.lengthComputable) {
+          loadingProgress.removeAttribute("value");
+          loadingDetail.textContent = "正在接收模型数据…";
+          return;
+        }
+        const percent = Math.min(100, (event.loaded / event.total) * 100);
+        loadingProgress.value = percent;
+        loadingProgress.textContent = `${Math.round(percent)}%`;
+        loadingDetail.textContent = `已加载 ${(event.loaded / 1024 / 1024).toFixed(1)} / ${(event.total / 1024 / 1024).toFixed(1)} MB`;
+      },
+      (error) => {
+        console.error(error);
+        loadingTitle.textContent = "模型加载失败";
+        loadingTitle.classList.add("error");
+        loadingDetail.textContent = "请刷新页面，或检查 gyroid_tpms.stl 是否已发布。";
+        loadingProgress.hidden = true;
+      },
+    );
+
+    resetButton.addEventListener("click", resetView);
+    rotateButton.addEventListener("click", () => {
+      controls.autoRotate = !controls.autoRotate;
+      rotateButton.setAttribute("aria-pressed", String(controls.autoRotate));
+      rotateButton.textContent = controls.autoRotate ? "停止旋转" : "自动旋转";
+    });
+    themeButton.addEventListener("click", () => {
+      const light = document.body.classList.toggle("light");
+      themeButton.setAttribute("aria-pressed", String(light));
+      themeButton.textContent = light ? "暗色背景" : "亮色背景";
+      scene.background.set(light ? 0xeef4f5 : 0x071016);
+      grid.material.opacity = light ? 0.22 : 0.34;
+    });
+
+    function resize() {
+      const width = viewport.clientWidth;
+      const height = viewport.clientHeight;
+      camera.aspect = width / Math.max(height, 1);
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+
+    function render() {
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(render);
+    }
+    render();
+  </script>
+</body>
+</html>
