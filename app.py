@@ -7,7 +7,7 @@ import traceback
 from pathlib import Path
 
 import numpy as np
-from PyQt5.QtCore import QObject, QPoint, QThread, QTimer, Qt, pyqtSignal
+from PyQt5.QtCore import QObject, QPoint, QPointF, QRectF, QThread, QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import (
     QColor,
     QMatrix4x4,
@@ -17,6 +17,7 @@ from PyQt5.QtGui import (
     QOpenGLVertexArrayObject,
     QPainter,
     QPen,
+    QPolygonF,
     QSurfaceFormat,
     QVector3D,
 )
@@ -441,6 +442,22 @@ class MeshQualityDialog(QDialog):
         layout.addWidget(buttons)
 
 
+class AxisTriadOverlay(QWidget):
+    def __init__(self, viewport: "OpenGLMeshView") -> None:
+        super().__init__(viewport)
+        self.viewport = viewport
+        self.setFixedSize(112, 112)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAutoFillBackground(False)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        panel = QRectF(0.5, 0.5, self.width() - 1.0, self.height() - 1.0)
+        self.viewport._paint_axis_triad(painter, panel)
+        painter.end()
+
+
 class OpenGLMeshView(QOpenGLWidget):
     """Retained GPU mesh viewport with shader-based lighting."""
 
@@ -465,6 +482,7 @@ class OpenGLMeshView(QOpenGLWidget):
         self.light_background = False
         self.highlight_mode = False
         self.vertex_color_mode = False
+        self.axis_overlay = AxisTriadOverlay(self)
 
     def initializeGL(self) -> None:
         try:
@@ -639,51 +657,158 @@ class OpenGLMeshView(QOpenGLWidget):
 
     def paintGL(self) -> None:
         self.gl.glClear(0x00004000 | 0x00000100)
-        if self.program is None or self.index_count == 0:
-            return
-        aspect = max(float(self.width()) / max(self.height(), 1), 0.1)
-        projection = QMatrix4x4()
-        projection.perspective(40.0, aspect, 0.05, max(self.distance * 10.0, 500.0))
-        view = QMatrix4x4()
-        view.translate(0.0, 0.0, -self.distance)
-        view.rotate(self.pitch, 1.0, 0.0, 0.0)
-        view.rotate(self.yaw, 0.0, 1.0, 0.0)
-        model = QMatrix4x4()
+        if self.program is not None and self.index_count > 0:
+            aspect = max(float(self.width()) / max(self.height(), 1), 0.1)
+            projection = QMatrix4x4()
+            projection.perspective(40.0, aspect, 0.05, max(self.distance * 10.0, 500.0))
+            view = QMatrix4x4()
+            view.translate(0.0, 0.0, -self.distance)
+            view.rotate(self.pitch, 1.0, 0.0, 0.0)
+            view.rotate(self.yaw, 0.0, 1.0, 0.0)
+            model = QMatrix4x4()
 
-        self.program.bind()
-        self.program.setUniformValue("u_mvp", projection * view * model)
-        self.program.setUniformValue("u_model", model)
-        self.program.setUniformValue("u_camera", QVector3D(0.0, 0.0, self.distance))
-        self.program.setUniformValue("u_light_background", 1.0 if self.light_background else 0.0)
-        self.program.setUniformValue("u_highlight_mode", 1.0 if self.highlight_mode else 0.0)
-        self.program.setUniformValue("u_use_vertex_color", 1.0 if self.vertex_color_mode else 0.0)
-        self.vao.bind()
-        self.ibo.bind()
-        if self.light_background:
-            self.program.setUniformValue("u_outline_mode", 1.0)
-            self.program.setUniformValue("u_outline_width", self.model_radius * 0.006)
-            self.gl.glCullFace(0x0404)  # GL_FRONT
+            self.program.bind()
+            self.program.setUniformValue("u_mvp", projection * view * model)
+            self.program.setUniformValue("u_model", model)
+            self.program.setUniformValue("u_camera", QVector3D(0.0, 0.0, self.distance))
+            self.program.setUniformValue("u_light_background", 1.0 if self.light_background else 0.0)
+            self.program.setUniformValue("u_highlight_mode", 1.0 if self.highlight_mode else 0.0)
+            self.program.setUniformValue("u_use_vertex_color", 1.0 if self.vertex_color_mode else 0.0)
+            self.vao.bind()
+            self.ibo.bind()
+            if self.light_background:
+                self.program.setUniformValue("u_outline_mode", 1.0)
+                self.program.setUniformValue("u_outline_width", self.model_radius * 0.006)
+                self.gl.glCullFace(0x0404)  # GL_FRONT
+                self.gl.glDrawElements(
+                    0x0004,
+                    self.index_count,
+                    0x1405,
+                    ctypes.c_void_p(0),
+                )
+            self.program.setUniformValue("u_outline_mode", 0.0)
+            self.program.setUniformValue("u_outline_width", 0.0)
+            self.gl.glCullFace(0x0405)  # GL_BACK
             self.gl.glDrawElements(
                 0x0004,
                 self.index_count,
                 0x1405,
                 ctypes.c_void_p(0),
             )
-        self.program.setUniformValue("u_outline_mode", 0.0)
-        self.program.setUniformValue("u_outline_width", 0.0)
-        self.gl.glCullFace(0x0405)  # GL_BACK
-        self.gl.glDrawElements(
-            0x0004,
-            self.index_count,
-            0x1405,
-            ctypes.c_void_p(0),
-        )
-        self.ibo.release()
-        self.vao.release()
-        self.program.release()
+            self.ibo.release()
+            self.vao.release()
+            self.program.release()
+
+    def _paint_axis_triad(self, painter: QPainter, panel: QRectF) -> None:
+        origin = QPointF(panel.center().x(), panel.center().y() + 4.0)
+        axis_length = 34.0
+
+        rotation = QMatrix4x4()
+        rotation.rotate(self.pitch, 1.0, 0.0, 0.0)
+        rotation.rotate(self.yaw, 0.0, 1.0, 0.0)
+
+        if self.light_background:
+            surface = QColor(255, 255, 255, 224)
+            border = QColor(31, 52, 61, 58)
+            center_color = QColor(35, 52, 60)
+            axis_colors = {
+                "X": QColor("#B42318"),
+                "Y": QColor("#167447"),
+                "Z": QColor("#175CD3"),
+            }
+        else:
+            surface = QColor(8, 20, 28, 205)
+            border = QColor(221, 238, 245, 56)
+            center_color = QColor(230, 241, 246)
+            axis_colors = {
+                "X": QColor("#FF6B6B"),
+                "Y": QColor("#63D495"),
+                "Z": QColor("#5CA8FF"),
+            }
+
+        axes = []
+        for label, direction in (
+            ("X", QVector3D(1.0, 0.0, 0.0)),
+            ("Y", QVector3D(0.0, 1.0, 0.0)),
+            ("Z", QVector3D(0.0, 0.0, 1.0)),
+        ):
+            vector = rotation.mapVector(direction)
+            screen_vector = QPointF(vector.x() * axis_length, -vector.y() * axis_length)
+            axes.append((vector.z(), label, screen_vector, axis_colors[label]))
+
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(border, 1.0))
+        painter.setBrush(surface)
+        painter.drawRoundedRect(panel, 6.0, 6.0)
+
+        label_data = []
+        for _, label, screen_vector, color in sorted(axes, key=lambda item: item[0]):
+            endpoint = origin + screen_vector
+            length = (screen_vector.x() ** 2 + screen_vector.y() ** 2) ** 0.5
+            painter.setPen(QPen(color, 2.4, Qt.SolidLine, Qt.RoundCap))
+            painter.setBrush(color)
+            painter.drawLine(origin, endpoint)
+
+            if length >= 7.0:
+                unit = QPointF(screen_vector.x() / length, screen_vector.y() / length)
+                perpendicular = QPointF(-unit.y(), unit.x())
+                arrow_base = endpoint - unit * 7.0
+                painter.setPen(Qt.NoPen)
+                painter.drawPolygon(
+                    QPolygonF(
+                        [
+                            endpoint,
+                            arrow_base + perpendicular * 3.2,
+                            arrow_base - perpendicular * 3.2,
+                        ]
+                    )
+                )
+            else:
+                fallback = {
+                    "X": QPointF(1.0, 0.0),
+                    "Y": QPointF(-0.5, -0.866),
+                    "Z": QPointF(-0.5, 0.866),
+                }[label]
+                unit = fallback
+                painter.setPen(QPen(color, 1.8))
+                painter.drawEllipse(endpoint, 3.2, 3.2)
+            label_data.append((label, endpoint, unit, color))
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(center_color)
+        painter.drawEllipse(origin, 3.0, 3.0)
+
+        font = painter.font()
+        font.setPointSize(9)
+        font.setBold(True)
+        painter.setFont(font)
+        occupied = []
+        for label, endpoint, unit, color in label_data:
+            perpendicular = QPointF(-unit.y(), unit.x())
+            candidates = (
+                endpoint + unit * 11.0,
+                endpoint + perpendicular * 12.0,
+                endpoint - perpendicular * 12.0,
+                endpoint + unit * 17.0,
+            )
+            label_rect = None
+            for center in candidates:
+                candidate = QRectF(center.x() - 8.0, center.y() - 8.0, 16.0, 16.0)
+                candidate.moveLeft(max(panel.left() + 4.0, min(candidate.left(), panel.right() - 20.0)))
+                candidate.moveTop(max(panel.top() + 4.0, min(candidate.top(), panel.bottom() - 20.0)))
+                if not any(candidate.adjusted(-2.0, -2.0, 2.0, 2.0).intersects(rect) for rect in occupied):
+                    label_rect = candidate
+                    break
+            if label_rect is None:
+                label_rect = candidate
+            occupied.append(label_rect)
+            painter.setPen(color)
+            painter.drawText(label_rect, Qt.AlignCenter, label)
 
     def resizeGL(self, width: int, height: int) -> None:
         self.gl.glViewport(0, 0, width, height)
+        self.axis_overlay.move(16, max(16, height - self.axis_overlay.height() - 16))
+        self.axis_overlay.raise_()
 
     def mousePressEvent(self, event) -> None:
         if event.button() in (Qt.LeftButton, Qt.RightButton):
@@ -697,6 +822,7 @@ class OpenGLMeshView(QOpenGLWidget):
             self.last_pos = event.pos()
             self.yaw += delta.x() * 0.45
             self.pitch = max(-89.0, min(89.0, self.pitch + delta.y() * 0.45))
+            self.axis_overlay.update()
             self.update()
         event.accept()
 
@@ -714,6 +840,7 @@ class OpenGLMeshView(QOpenGLWidget):
         self.yaw = -42.0
         self.pitch = 23.0
         self.distance = self.model_radius * 3.20
+        self.axis_overlay.update()
         self.update()
 
     def _apply_background_color(self) -> None:
@@ -728,6 +855,7 @@ class OpenGLMeshView(QOpenGLWidget):
             self.makeCurrent()
             self._apply_background_color()
             self.doneCurrent()
+        self.axis_overlay.update()
         self.update()
 
     def set_highlight_mode(self, enabled: bool) -> None:
