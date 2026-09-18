@@ -188,7 +188,7 @@ class TPMSParameters:
     gradient_enabled: bool = False
     gradient_axis: str = "Z"
     gradient_thickness_start: float = 1.0
-    gradient_thickness_end: float = 3.0
+    gradient_thickness_end: float = 5.0
 
     def validate(self) -> None:
         if self.surface != CUSTOM_SURFACE and self.surface not in TPMS_FORMULAS:
