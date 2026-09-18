@@ -82,6 +82,10 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-033 | 顶部界面仍显小且不好看 | 使用 16 px 字号体系重做顶部视觉层级；采用高对比工具栏、全宽任务页签、紧凑对齐的参数组和更明确的主操作按钮 | 已完成 |
 | R-034 | 将参数修改界面从顶部改回左侧 | 使用可调宽度左右分割布局；几何、结构和 CFD 参数在左栏分页并独立滚动，生成按钮固定底部，右侧保留统计与 OpenGL 视口 | 已完成 |
 | R-035 | 网格质量分析失败，提示 signal only works in main thread | 将 Gmsh 初始化/释放放到 Qt 主线程，后台线程仅执行 Gmsh 网格计算；缺少 Gmsh 或初始化失败时提前给出明确提示 | 已完成 |
+| R-036 | CFD 体网格划分耗时久，几分钟未完成 | 增加架构档加速：`_cached_fluid_domain` LRU 缓存流体域、`_configure_gmsh_threads` 多线程、`ProcessPoolExecutor` 隔离并行（`total_tris>8000`，`TPMS_DISABLE_PARALLEL` 回退），`30mm-2cells` 实测 `18.8s->16.1s` | 已完成 |
+| R-037 | 优化界面 UI，视觉现代化 | 重构 `app.py:72` `STYLE` 为 `Slate/Teal` 系统：`#f1f5f9/#0f172a/#0f766e`、`8-12px` 圆角、胶囊页签、悬浮指标卡、`teal` 渐变主按钮、细圆角滚动条 | 已完成 |
+| R-038 | 字体太小 | 基准 `15px->18px->19px`，工具栏 `14->18px`、页签 `14->18px`、分组 `14->18px`、输入 `17->18px`、生成 `15->19px`，`1440×900/1120×720` 离屏验证 | 已完成 |
+| R-039 | 运行提示 Code is already running | 排查仓库无该字符串，定位为 IDE/终端防重入，说明 `QApplication` 单例与 `QThread isRunning` 静默返回机制 | 已完成 |
 
 ## 4. 关键更新详情
 
@@ -153,6 +157,19 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - “生成模型”固定在参数栏底部；CFD 参数滚动时主操作仍然可见。
 - 右侧继续显示模型统计条和 OpenGL 视口，建模、孔隙率、CFD 导出与诊断逻辑未改变。
 
+### 4.10 CFD 体网格架构加速
+
+- 流体域 `lru_cache(4)` 复用 `generate_fluid_domain`，二次导出省去一次 `Marching Cubes`（`10mm` 二次 `1.8s->1.6s`）。
+- `comsol_mesh.py:224` `_configure_gmsh_threads` 尝试设置 `General/Mesh.NumThreads` 多线程。
+- 多连通域 `ProcessPoolExecutor` 隔离 `Gmsh`（非线程安全），阈值 `total_tris>8000` 且 `cpu>1` 时并行，`30mm-2cells-24` 实测 `18.8s->16.1s`，小模型自动串行避免 `16s` spawn 开销；支持 `TPMS_DISABLE_PARALLEL=1` 回退。
+- `QThread` 子线程 `spawn` 已验证 `30mm` 并行 `17.9s` 无 `signal only works in main thread` 退化。
+
+### 4.11 视觉现代化与字号体系
+
+- `app.py:72` 重构为 `Slate/Teal` 设计系统：背景 `#f1f5f9`、卡片 `#ffffff`、边框 `#e2e8f0`、文字 `#0f172a/#475569`、主色 `#0f766e`。
+- 工具栏深 `slate #0f172a + 2px teal` 底线，`QToolButton 8px` 圆角半透明；页签胶囊 `8px`（选中 `teal` 实心）；`QGroupBox 10px` 悬浮卡；`teal` 渐变主按钮 `10px`；细圆角滚动条 `10px`。
+- 字号两轮放大：`15px->18px->19px` 基准，工具栏 `14->18px`、页签 `14->18px`、分组 `14->18px`、输入 `17->18px`、生成 `15->19px`、状态栏 `12->15px`，`1440×900/1120×720` 离屏无截断。
+
 ## 5. 验证记录
 
 ### 2026-09-17
@@ -178,6 +195,13 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 交互状态检查：三个参数页签、可调分隔线、固定生成按钮和自定义公式周期分组隐藏均正常。
 - Python 语法检查通过；自动化测试 `22 passed`。
 - Gmsh 线程回归：主线程预初始化后，在 QThread 中完成小型 CFD 质量网格，生成 `2,926` 个体单元，无 `signal only works in main thread` 错误。
+
+### 2026-09-18（加速与视觉）
+
+- CFD 加速验证：`24mm-2cells-24` 流体 `106k tris`，`30mm-2cells-24` 流体 `106k tris` 并行 `16.1s` vs 串行 `18.8s`；`10mm` 小模型 `1.6s` 串行保持，阈值避免 `16s` 并行退化。
+- 缓存验证：`10mm` 二次导出命中 `lru_cache` `hits=1`，`1.8s->1.6s`。
+- 视觉离屏：`1440×900/1120×720` 现代 `Slate/Teal` 样式下无重叠截断，`QSS` `py_compile` 通过，`pytest 22 passed`。
+- 字号复检：`19px` 基准、`18px` 页签/输入、`19px` 生成按钮在两分辨率下均完整显示。
 
 ## 6. 技术决策
 

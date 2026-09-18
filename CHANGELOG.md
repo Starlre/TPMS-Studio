@@ -24,6 +24,9 @@
 - 根据使用反馈将参数控制改回左侧可调栏，右侧恢复为独立的模型统计与 OpenGL 视口。
 - 左侧几何、结构和 CFD 页签分别使用纵向参数流；长内容仅在参数栏内部滚动，“生成模型”固定在栏底部始终可用。
 - 修复“网格质量分析失败：signal only works in main thread of the main interpreter”：Gmsh 在主线程初始化，质量分析和正式 CFD 导出继续在后台线程执行。
+- CFD 体网格架构加速：流体域 `lru_cache(4)` 复用避免二次 Marching Cubes，`Gmsh` 多线程 `_configure_gmsh_threads`，`total_tris>8000` 时多连通域 `ProcessPoolExecutor` 隔离并行（`30mm-2cells` 实测 `18.8s->16.1s`，小模型自动串行避免开销），支持 `TPMS_DISABLE_PARALLEL=1` 回退。
+- 视觉现代化重构：`Slate/Teal` 设计系统（`#f1f5f9/#0f172a/#0f766e`），`8-12px` 圆角、胶囊页签、悬浮指标卡、`teal` 渐变主按钮、细圆角滚动条。
+- 字号体系两轮放大：基准 `15px->18px->19px`，工具栏 `14->18px`、页签 `14->18px`、分组 `14->18px`、输入 `17->18px`、生成按钮 `15->19px`，状态栏 `12->15px`，`1440×900/1120×720` 离屏验证无截断。
 
 ## [0.2.0] - 2026-09-17
 
