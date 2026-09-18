@@ -121,8 +121,8 @@ QWidget#parameterDeck {
     border-right: 1px solid #e2e8f0;
     border-radius: 0px;
 }
-QLabel#panelTitle { color: #0f172a; font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
-QLabel#panelSubtitle { color: #64748b; font-size: 16px; font-weight: 500; }
+QLabel#panelTitle { color: #0f172a; font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+QLabel#panelSubtitle { color: #64748b; font-size: 13px; font-weight: 500; }
 
 /* Scroll area - soft inner shadow */
 QScrollArea#parameterScroll {
@@ -183,19 +183,19 @@ QGroupBox {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
-    margin-top: 16px;
-    padding: 16px 14px 12px 14px;
-    font-size: 18px;
+    margin-top: 14px;
+    padding: 10px 10px 8px 10px;
+    font-size: 15px;
     font-weight: 700;
     color: #0f172a;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 12px;
-    padding: 0 8px;
+    left: 10px;
+    padding: 0 6px;
     background: #ffffff;
     color: #0f766e;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 700;
     border-radius: 4px;
 }
@@ -740,7 +740,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("TPMS Studio")
         self.setMinimumSize(1120, 720)
-        self.resize(1440, 900)
+        self.resize(1366, 768)
         self.current_result: MeshResult | None = None
         self.current_preview: PreviewMesh | None = None
         self.current_cfd_result: CFDMeshResult | None = None
@@ -817,19 +817,23 @@ class MainWindow(QMainWindow):
         return form
 
     @staticmethod
-    def _axis_grid(fields: list[QWidget]) -> QGridLayout:
-        grid = QGridLayout()
-        grid.setContentsMargins(2, 2, 2, 0)
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(6)
-        grid.setAlignment(Qt.AlignTop)
-        for column, (axis, field) in enumerate(zip(("X", "Y", "Z"), fields)):
+    def _axis_grid(fields: list[QWidget]) -> QVBoxLayout:
+        layout = QVBoxLayout()
+        layout.setContentsMargins(2, 2, 2, 0)
+        layout.setSpacing(6)
+        for axis, field in zip(("X", "Y", "Z"), fields):
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(8)
             label = QLabel(axis)
             label.setObjectName("fieldAxis")
-            grid.addWidget(label, 0, column)
+            label.setFixedWidth(18)
+            label.setAlignment(Qt.AlignCenter)
             field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            grid.addWidget(field, 1, column)
-        return grid
+            row.addWidget(label)
+            row.addWidget(field, 1)
+            layout.addLayout(row)
+        return layout
 
     @staticmethod
     def _scroll_page(content: QWidget) -> QScrollArea:
@@ -837,7 +841,7 @@ class MainWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setObjectName("parameterScroll")
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(content)
@@ -857,11 +861,11 @@ class MainWindow(QMainWindow):
 
         parameter_deck = QWidget()
         parameter_deck.setObjectName("parameterDeck")
-        parameter_deck.setMinimumWidth(400)
-        parameter_deck.setMaximumWidth(540)
+        parameter_deck.setMinimumWidth(480)
+        parameter_deck.setMaximumWidth(600)
         deck_layout = QVBoxLayout(parameter_deck)
-        deck_layout.setContentsMargins(14, 12, 14, 12)
-        deck_layout.setSpacing(10)
+        deck_layout.setContentsMargins(12, 10, 12, 10)
+        deck_layout.setSpacing(8)
 
         title = QLabel("参数设置")
         title.setObjectName("panelTitle")
@@ -971,7 +975,33 @@ class MainWindow(QMainWindow):
         porosity_layout.addLayout(porosity_form)
         porosity_layout.addStretch(1)
 
+        gradient_group = QGroupBox("梯度壁厚")
+        gradient_layout = QVBoxLayout(gradient_group)
+        gradient_layout.setContentsMargins(10, 10, 10, 7)
+        gradient_layout.setSpacing(5)
+        self.gradient_enabled = QCheckBox("启用梯度壁厚（仅片层）")
+        self.gradient_enabled.setToolTip("沿选定轴从起始厚度线性渐变至结束厚度，例如 Z 向 1→5 mm")
+        self.gradient_enabled.toggled.connect(self._update_mode_fields)
+        gradient_layout.addWidget(self.gradient_enabled)
+        gradient_form = self._form_layout()
+        self.gradient_axis = QComboBox()
+        self.gradient_axis.addItems(["X", "Y", "Z"])
+        self.gradient_axis.setCurrentText("Z")
+        self.gradient_axis.setAccessibleName("梯度方向")
+        self.gradient_thickness_start = self._double(1.0, 0.1, 20, " mm", 0.1)
+        self.gradient_thickness_end = self._double(3.0, 0.1, 20, " mm", 0.1)
+        self.gradient_thickness_start.setAccessibleName("梯度起始壁厚")
+        self.gradient_thickness_end.setAccessibleName("梯度结束壁厚")
+        self.gradient_thickness_start.setMaximumWidth(420)
+        self.gradient_thickness_end.setMaximumWidth(420)
+        gradient_form.addRow("梯度方向", self.gradient_axis)
+        gradient_form.addRow("起始壁厚", self.gradient_thickness_start)
+        gradient_form.addRow("结束壁厚", self.gradient_thickness_end)
+        gradient_layout.addLayout(gradient_form)
+        gradient_layout.addStretch(1)
+
         structure_layout.addWidget(structure_group)
+        structure_layout.addWidget(gradient_group)
         structure_layout.addWidget(porosity_group)
         structure_layout.addStretch(1)
         self.parameter_tabs.addTab(self._scroll_page(structure_tab), "结构控制")
@@ -1125,12 +1155,49 @@ class MainWindow(QMainWindow):
         return data
 
     def _update_mode_fields(self) -> None:
+        # Ensure structure mode radios always selectable
+        if hasattr(self, "sheet_radio"):
+            self.sheet_radio.setEnabled(True)
+            self.solid_radio.setEnabled(True)
         sheet = self.sheet_radio.isChecked()
-        automatic = self.porosity_enabled.isChecked() if hasattr(self, "porosity_enabled") else False
-        self.thickness.setEnabled(sheet and not automatic)
+        has_gradient = hasattr(self, "gradient_enabled")
+        has_porosity = hasattr(self, "porosity_enabled")
+        is_gradient = self.gradient_enabled.isChecked() if has_gradient else False
+        automatic = self.porosity_enabled.isChecked() if has_porosity else False
+
+        # mutual exclusion: gradient vs porosity
+        if has_gradient and has_porosity:
+            # gradient only for sheet; also disable porosity when gradient, and vice versa
+            if is_gradient and automatic:
+                # prefer gradient, clear porosity
+                self.porosity_enabled.blockSignals(True)
+                self.porosity_enabled.setChecked(False)
+                self.porosity_enabled.blockSignals(False)
+                automatic = False
+
+        if has_gradient:
+            self.gradient_enabled.setEnabled(sheet and not automatic)
+            if (not sheet or automatic) and is_gradient:
+                self.gradient_enabled.blockSignals(True)
+                self.gradient_enabled.setChecked(False)
+                self.gradient_enabled.blockSignals(False)
+                is_gradient = False
+            self.gradient_axis.setEnabled(is_gradient and sheet)
+            self.gradient_thickness_start.setEnabled(is_gradient and sheet)
+            self.gradient_thickness_end.setEnabled(is_gradient and sheet)
+
+        if has_porosity:
+            self.porosity_enabled.setEnabled(not is_gradient)
+            if is_gradient and automatic:
+                self.porosity_enabled.blockSignals(True)
+                self.porosity_enabled.setChecked(False)
+                self.porosity_enabled.blockSignals(False)
+                automatic = False
+
+        self.thickness.setEnabled(sheet and not automatic and not is_gradient)
         self.iso_level.setEnabled(not sheet and not automatic)
-        if hasattr(self, "target_porosity"):
-            self.target_porosity.setEnabled(automatic)
+        if has_porosity and hasattr(self, "target_porosity"):
+            self.target_porosity.setEnabled(automatic and not is_gradient)
 
     def _update_formula_fields(self) -> None:
         if hasattr(self, "formula_edit"):
@@ -1180,6 +1247,10 @@ class MainWindow(QMainWindow):
                 else None
             ),
             formula=self.formula_edit.text(),
+            gradient_enabled=self.gradient_enabled.isChecked() if hasattr(self, "gradient_enabled") else False,
+            gradient_axis=self.gradient_axis.currentText() if hasattr(self, "gradient_axis") else "Z",
+            gradient_thickness_start=self.gradient_thickness_start.value() if hasattr(self, "gradient_thickness_start") else 1.0,
+            gradient_thickness_end=self.gradient_thickness_end.value() if hasattr(self, "gradient_thickness_end") else 3.0,
         )
 
     def _cfd_options(self) -> CFDMeshOptions:
@@ -1290,9 +1361,16 @@ class MainWindow(QMainWindow):
                 else f"等值面 {result.parameters.iso_level:.4f}"
             )
             target_status = f" · {solved} · 孔隙率误差 {error:+.2f}%"
+        gradient_status = ""
+        if result.parameters.gradient_enabled:
+            gradient_status = (
+                f" · 梯度 {result.parameters.gradient_thickness_start:.2f}"
+                f"->{result.parameters.gradient_thickness_end:.2f} mm"
+                f" {result.parameters.gradient_axis}向"
+            )
         self.statusBar().showMessage(
             f"生成完成 · GPU 显示 {preview.triangles:,} 面 · 导出 {result.triangles:,} 面"
-            f"{target_status}{cleanup}"
+            f"{target_status}{gradient_status}{cleanup}"
         )
         self.worker_thread = None
         self.worker = None

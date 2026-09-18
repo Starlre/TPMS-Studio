@@ -185,6 +185,10 @@ class TPMSParameters:
     samples_per_cell: int = 64
     target_porosity: float | None = None
     formula: str = ""
+    gradient_enabled: bool = False
+    gradient_axis: str = "Z"
+    gradient_thickness_start: float = 1.0
+    gradient_thickness_end: float = 3.0
 
     def validate(self) -> None:
         if self.surface != CUSTOM_SURFACE and self.surface not in TPMS_FORMULAS:
@@ -203,6 +207,17 @@ class TPMSParameters:
             raise ValueError("每周期采样数不能小于 8")
         if self.target_porosity is not None and not 0.01 <= self.target_porosity <= 0.99:
             raise ValueError("目标孔隙率必须在 1% 到 99% 之间")
+        if self.gradient_enabled:
+            if self.gradient_axis not in {"X", "Y", "Z"}:
+                raise ValueError("梯度方向必须是 X、Y 或 Z")
+            if min(self.gradient_thickness_start, self.gradient_thickness_end) <= 0:
+                raise ValueError("梯度壁厚起止值必须大于 0")
+            if max(self.gradient_thickness_start, self.gradient_thickness_end) > 20:
+                raise ValueError("梯度壁厚不能超过 20 mm")
+            if self.mode != "sheet":
+                raise ValueError("梯度壁厚仅支持片层结构")
+            if self.target_porosity is not None:
+                raise ValueError("梯度壁厚与目标孔隙率不能同时启用")
 
 
 @dataclass(frozen=True)
@@ -429,7 +444,22 @@ def _material_scalar_field(
             p = replace(p, iso_level=solved_iso_level)
 
     if p.mode == "sheet":
-        scalar = np.abs(field) / distance_scale - p.thickness / 2.0
+        if p.gradient_enabled:
+            if p.gradient_axis == "X":
+                coord = xx
+                size = p.size_x
+            elif p.gradient_axis == "Y":
+                coord = yy
+                size = p.size_y
+            else:
+                coord = zz
+                size = p.size_z
+            u = (coord + size / 2.0) / size
+            u = np.clip(u, 0.0, 1.0)
+            thickness_field = p.gradient_thickness_start + (p.gradient_thickness_end - p.gradient_thickness_start) * u
+            scalar = np.abs(field) / distance_scale - thickness_field / 2.0
+        else:
+            scalar = np.abs(field) / distance_scale - p.thickness / 2.0
     else:
         scalar = (p.iso_level - field) / distance_scale
     return p, x, y, z, spacing, scalar.astype(np.float32), xx, yy, zz
