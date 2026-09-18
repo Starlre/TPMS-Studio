@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 import json
 import math
+import os
 from pathlib import Path
 
 import meshio
@@ -11,9 +13,15 @@ import numpy as np
 import trimesh
 
 from tpms_core import PreviewMesh, TPMSParameters, generate_fluid_domain
+from functools import lru_cache
 
 
 PHYSICAL_IDS = {"inlet": 101, "outlet": 102, "walls": 103, "fluid": 201}
+
+# Cache fluid surface (MC) which dominates ~20-30% of CFD time when re-exporting.
+@lru_cache(maxsize=4)
+def _cached_fluid_domain(parameters: TPMSParameters):  # type: ignore[no-untyped-def]
+    return generate_fluid_domain(parameters)
 REGION_COLORS = {
     PHYSICAL_IDS["inlet"]: np.array([0.16, 0.47, 0.95], dtype=np.float32),
     PHYSICAL_IDS["outlet"]: np.array([0.94, 0.38, 0.12], dtype=np.float32),
@@ -214,11 +222,21 @@ def _extract_volume_cells(
     return cells, qualities, volumes
 
 
+def _configure_gmsh_threads(gmsh) -> None:
+    threads = max(1, os.cpu_count() or 1)
+    for name in ("General.NumThreads", "Mesh.NumThreads", "Mesh.MaxNumThreads"):
+        try:
+            gmsh.option.setNumber(name, threads)
+        except Exception:
+            pass
+
+
 def _configure_mesh_sizes(
     gmsh,
     options: CFDMeshOptions,
     sizes: tuple[float, float, float],
 ) -> None:
+    _configure_gmsh_threads(gmsh)
     gmsh.option.setNumber("Mesh.MeshSizeMin", options.element_size * 0.15)
     gmsh.option.setNumber("Mesh.MeshSizeMax", options.element_size)
     gmsh.option.setNumber("Mesh.ElementOrder", 1)
@@ -345,6 +363,28 @@ def _mesh_component(
         return _ComponentMesh(points, triangles, cells, qualities, volumes)
     finally:
         gmsh.model.remove()
+
+
+def _mesh_single_component_isolated(args: tuple[np.ndarray, np.ndarray, dict, tuple[float, float, float], int]) -> _ComponentMesh:
+    """Pickle-friendly worker: each process owns its Gmsh lifecycle."""
+    vertices, faces, options_dict, sizes, component_index = args
+    # Heavy imports inside worker for Windows spawn isolation.
+    import gmsh as gmsh_mod
+    import trimesh as trimesh_mod
+
+    options = CFDMeshOptions(**options_dict)
+    component = trimesh_mod.Trimesh(vertices=np.asarray(vertices), faces=np.asarray(faces), process=False)
+    gmsh_mod.initialize()
+    try:
+        gmsh_mod.option.setNumber("General.Terminal", 0)
+        _configure_gmsh_threads(gmsh_mod)
+        return _mesh_component(gmsh_mod, component, options, sizes, component_index)
+    finally:
+        try:
+            if gmsh_mod.isInitialized():
+                gmsh_mod.finalize()
+        except Exception:
+            pass
 
 
 def _boundary_references(
@@ -526,7 +566,7 @@ def generate_simulation_region_preview(
         samples_per_cell=options.surface_samples_per_cell,
         target_porosity=None,
     )
-    fluid = generate_fluid_domain(fluid_parameters)
+    fluid = _cached_fluid_domain(fluid_parameters)
     if not fluid.mesh.is_watertight:
         raise RuntimeError("流体域表面未封闭，无法显示仿真区域")
     components = fluid.mesh.split(only_watertight=True)
@@ -592,7 +632,7 @@ def export_comsol_fluid_mesh(
         target_porosity=None,
     )
     _emit(progress, "正在生成封闭流体域...")
-    fluid = generate_fluid_domain(fluid_parameters)
+    fluid = _cached_fluid_domain(fluid_parameters)
     if not fluid.mesh.is_watertight:
         raise RuntimeError("流体域表面未封闭，无法生成可靠的体网格")
     components = sorted(
@@ -603,21 +643,55 @@ def export_comsol_fluid_mesh(
     if not components:
         raise RuntimeError("没有找到可划分的封闭流体域")
 
-    initialized_here = not gmsh.isInitialized()
-    if initialized_here:
-        gmsh.initialize()
     point_blocks: list[np.ndarray] = []
     triangle_blocks: list[np.ndarray] = []
     cell_blocks: dict[str, list[np.ndarray]] = {"tetra": [], "wedge": []}
     quality_blocks: dict[str, list[np.ndarray]] = {"tetra": [], "wedge": []}
     volume_blocks: dict[str, list[np.ndarray]] = {"tetra": [], "wedge": []}
     point_offset = 0
-    try:
-        gmsh.option.setNumber("General.Terminal", 0)
-        for index, component in enumerate(components, start=1):
-            layer_text = "（含棱柱边界层）" if options.boundary_layer_enabled else ""
-            _emit(progress, f"正在划分流体域 {index}/{len(components)}{layer_text}...")
-            component_mesh = _mesh_component(gmsh, component, options, sizes, index)
+
+    total_triangles = sum(len(c.faces) for c in components)
+    # Only parallelize when per-domain work outweighs Windows spawn overhead (~0.8s).
+    use_parallel = (
+        len(components) > 1
+        and (os.cpu_count() or 1) > 1
+        and total_triangles > 8000
+    )
+    # Disable parallel when boundary layers may need shared state debugging; still safe but keep opt-out
+    if os.environ.get("TPMS_DISABLE_PARALLEL") == "1":
+        use_parallel = False
+
+    if use_parallel:
+        _emit(progress, f"正在并行划分 {len(components)} 个流体域（{os.cpu_count()} 核）...")
+        options_dict = asdict(options)
+        args_list = [
+            (
+                np.asarray(comp.vertices, dtype=np.float64),
+                np.asarray(comp.faces, dtype=np.int64),
+                options_dict,
+                sizes,
+                idx,
+            )
+            for idx, comp in enumerate(components, start=1)
+        ]
+        max_workers = min(len(components), os.cpu_count() or 1)
+        # ProcessPoolExecutor isolates Gmsh (not thread-safe) per domain
+        component_results: list[tuple[int, _ComponentMesh]] = []
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {executor.submit(_mesh_single_component_isolated, args): args[4] for args in args_list}
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    mesh = future.result()
+                except Exception as exc:
+                    # Cancel remaining
+                    for f in future_to_idx:
+                        f.cancel()
+                    raise RuntimeError(f"流体域 {idx} 划分失败: {exc}") from exc
+                component_results.append((idx, mesh))
+        # Keep volume-descending order for deterministic offset merging
+        component_results.sort(key=lambda x: x[0])
+        for idx, component_mesh in component_results:
             point_blocks.append(component_mesh.points)
             triangle_blocks.append(component_mesh.triangles + point_offset)
             for cell_type, connectivity in component_mesh.cells.items():
@@ -625,9 +699,27 @@ def export_comsol_fluid_mesh(
                 quality_blocks[cell_type].append(component_mesh.qualities[cell_type])
                 volume_blocks[cell_type].append(component_mesh.volumes[cell_type])
             point_offset += len(component_mesh.points)
-    finally:
+    else:
+        initialized_here = not gmsh.isInitialized()
         if initialized_here:
-            gmsh.finalize()
+            gmsh.initialize()
+        try:
+            gmsh.option.setNumber("General.Terminal", 0)
+            _configure_gmsh_threads(gmsh)
+            for index, component in enumerate(components, start=1):
+                layer_text = "（含棱柱边界层）" if options.boundary_layer_enabled else ""
+                _emit(progress, f"正在划分流体域 {index}/{len(components)}{layer_text}...")
+                component_mesh = _mesh_component(gmsh, component, options, sizes, index)
+                point_blocks.append(component_mesh.points)
+                triangle_blocks.append(component_mesh.triangles + point_offset)
+                for cell_type, connectivity in component_mesh.cells.items():
+                    cell_blocks[cell_type].append(connectivity + point_offset)
+                    quality_blocks[cell_type].append(component_mesh.qualities[cell_type])
+                    volume_blocks[cell_type].append(component_mesh.volumes[cell_type])
+                point_offset += len(component_mesh.points)
+        finally:
+            if initialized_here:
+                gmsh.finalize()
 
     points = np.vstack(point_blocks)
     triangles = np.vstack(triangle_blocks)
