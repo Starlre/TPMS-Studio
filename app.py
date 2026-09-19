@@ -61,10 +61,19 @@ from comsol_mesh import (
 )
 from tpms_core import (
     CUSTOM_SURFACE,
+    EXPORT_QUALITY_HIGH,
+    EXPORT_QUALITY_LOW,
+    EXPORT_QUALITY_MEDIUM,
+    EXPORT_QUALITY_ORIGINAL,
+    EXPORT_QUALITY_PRESETS,
     MeshResult,
     PreviewMesh,
     TPMSParameters,
     export_mesh,
+    export_mesh_with_quality,
+    get_default_target_faces,
+    prepare_export_mesh,
+    validate_export_target_faces,
     generate_tpms,
     simplify_mesh_for_preview,
 )
@@ -122,6 +131,67 @@ QToolButton:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,2
 QToolButton:pressed { background: rgba(15,118,110,0.9); border-color: #0f766e; }
 QToolButton:checked { background: #f8fafc; color: #0f766e; border-color: #e2e8f0; font-weight: 700; }
 QToolButton:disabled { color: #64748b; background: transparent; border-color: transparent; }
+
+/* Export dropdown - MenuButtonPopup specific, overrides global QToolButton to avoid white menu-button */
+QToolButton#exportToolButton {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 18px;
+    font-weight: 600;
+    min-height: 40px;
+    padding: 6px 14px 6px 18px;
+    min-width: 132px;
+}
+QToolButton#exportToolButton:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.16);
+    color: #ffffff;
+}
+QToolButton#exportToolButton:pressed,
+QToolButton#exportToolButton:open {
+    background: rgba(15,118,110,0.9);
+    border-color: #0f766e;
+    color: #ffffff;
+}
+QToolButton#exportToolButton:disabled {
+    background: transparent;
+    border-color: transparent;
+    color: #64748b;
+}
+QToolButton#exportToolButton::menu-button {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-left: 1px solid rgba(255,255,255,0.12);
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    width: 32px;
+    margin: -1px -1px -1px 6px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
+QToolButton#exportToolButton::menu-button:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.16);
+    border-left: 1px solid rgba(255,255,255,0.16);
+}
+QToolButton#exportToolButton::menu-button:pressed,
+QToolButton#exportToolButton::menu-button:open {
+    background: rgba(15,118,110,0.9);
+    border-color: #0f766e;
+    border-left: 1px solid rgba(15,118,110,0.9);
+}
+QToolButton#exportToolButton::menu-arrow {
+    width: 12px;
+    height: 12px;
+}
+QToolButton#exportToolButton::menu-arrow:open {
+    width: 12px;
+    height: 12px;
+}
 
 /* Left parameter deck - elevated card */
 QWidget#parameterDeck {
@@ -1252,7 +1322,22 @@ class MainWindow(QMainWindow):
         self.export_action.setShortcut("Ctrl+S")
         self.export_action.setEnabled(False)
         self.export_action.triggered.connect(self.export_current)
-        toolbar.addAction(self.export_action)
+        # 带下拉的导出控件：主按钮直接导出，下拉修改质量/目标面数
+        from PyQt5.QtWidgets import QMenu, QToolButton, QWidgetAction
+        self.export_menu = QMenu(self)
+        self.export_menu.setToolTipsVisible(True)
+        self.export_quality_action_group = self._create_export_quality_menu()
+        self.export_tool_button = QToolButton()
+        self.export_tool_button.setObjectName("exportToolButton")
+        self.export_tool_button.setText("导出模型")
+        self.export_tool_button.setToolTip("按当前质量导出模型，点击主按钮直接导出")
+        self.export_tool_button.setAccessibleName("导出模型")
+        self.export_tool_button.setPopupMode(QToolButton.MenuButtonPopup)
+        self.export_tool_button.setMenu(self.export_menu)
+        self.export_tool_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.export_action.changed.connect(lambda: self.export_tool_button.setEnabled(self.export_action.isEnabled()))
+        self.export_tool_button.setEnabled(False)
+        toolbar.addWidget(self.export_tool_button)
         self.cfd_export_action = QAction("导出 COMSOL 流体网格", self)
         self.cfd_export_action.setEnabled(False)
         self.cfd_export_action.triggered.connect(self.export_comsol_mesh)
@@ -1742,6 +1827,130 @@ class MainWindow(QMainWindow):
         self.end_refinement_factor.setEnabled(end_refinement)
         self.curvature_points.setEnabled(self.curvature_refinement_enabled.isChecked())
 
+    def _create_export_quality_menu(self):
+        from PyQt5.QtWidgets import QActionGroup, QWidgetAction, QLabel, QSpinBox, QHBoxLayout, QVBoxLayout, QWidget
+        self._export_quality_actions = {}
+        self.export_quality_action_group = QActionGroup(self)
+        self.export_quality_action_group.setExclusive(True)
+        quality_items = [
+            (EXPORT_QUALITY_ORIGINAL, "原始精度 (完整)"),
+            (EXPORT_QUALITY_HIGH, "高精度 (~70%)"),
+            (EXPORT_QUALITY_MEDIUM, "中精度 (~40%)"),
+            (EXPORT_QUALITY_LOW, "低精度 (~20%)"),
+        ]
+        for q, label in quality_items:
+            act = self.export_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(q == EXPORT_QUALITY_ORIGINAL)
+            act.setData(q)
+            act.setToolTip(f"导出质量：{label}")
+            # QAction 无 setAccessibleName，保留 ToolTip
+            act.triggered.connect(lambda checked, qq=q: self._on_export_quality_selected(qq))
+            self.export_quality_action_group.addAction(act)
+            self._export_quality_actions[q] = act
+        self.export_menu.addSeparator()
+        target_widget = QWidget()
+        target_layout = QHBoxLayout(target_widget)
+        target_layout.setContentsMargins(8, 4, 8, 4)
+        target_layout.setSpacing(8)
+        target_label = QLabel("目标面数")
+        target_label.setObjectName("fieldAxis")
+        self.export_target_spin = QSpinBox(target_widget)
+        self.export_target_spin.setRange(100, 5000000)
+        self.export_target_spin.setValue(10000)
+        self.export_target_spin.setEnabled(False)
+        self.export_target_spin.setSingleStep(500)
+        self.export_target_spin.setAccessibleName("导出目标面数")
+        self.export_target_spin.setToolTip("目标面数必须为正整数且不超过原始面数")
+        target_layout.addWidget(target_label)
+        target_layout.addWidget(self.export_target_spin, 1)
+        target_action = QWidgetAction(self)
+        target_action.setDefaultWidget(target_widget)
+        self.export_menu.addAction(target_action)
+        status_widget = QWidget()
+        status_layout = QVBoxLayout(status_widget)
+        status_layout.setContentsMargins(8, 4, 8, 4)
+        self.export_quality_info = QLabel("原始：导出完整网格，不简化")
+        self.export_quality_info.setStyleSheet("color: #64748b; font-size: 12px;")
+        self.export_quality_info.setWordWrap(True)
+        self.export_quality_info.setAccessibleName("导出质量状态")
+        status_layout.addWidget(self.export_quality_info)
+        status_action = QWidgetAction(self)
+        status_action.setDefaultWidget(status_widget)
+        self.export_menu.addAction(status_action)
+        return self.export_quality_action_group
+
+    def _on_export_quality_selected(self, quality: str) -> None:
+        for q, act in getattr(self, '_export_quality_actions', {}).items():
+            act.setChecked(q == quality)
+        self._on_export_quality_changed(quality)
+
+    def _on_export_quality_changed(self, quality_or_index) -> None:
+        if isinstance(quality_or_index, str):
+            quality = quality_or_index
+        elif hasattr(self, '_export_quality_actions'):
+            checked = None
+            for q, act in self._export_quality_actions.items():
+                if act.isChecked():
+                    checked = q
+                    break
+            quality = checked or EXPORT_QUALITY_ORIGINAL
+        else:
+            quality = EXPORT_QUALITY_ORIGINAL
+        is_original = quality == EXPORT_QUALITY_ORIGINAL
+        if hasattr(self, "export_target_spin"):
+            self.export_target_spin.setEnabled(not is_original)
+        if hasattr(self, "export_quality_info"):
+            if is_original:
+                self.export_quality_info.setText("原始：导出完整网格，不简化")
+            else:
+                if self.current_result is not None:
+                    original = int(len(self.current_result.mesh.faces))
+                    default = get_default_target_faces(original, quality)
+                    self.export_target_spin.blockSignals(True)
+                    self.export_target_spin.setRange(100, max(100, original))
+                    self.export_target_spin.setValue(default)
+                    self.export_target_spin.blockSignals(False)
+                    self.export_quality_info.setText(f"目标 {self.export_target_spin.value():,} 面 / 原始 {original:,} 面")
+                else:
+                    self.export_quality_info.setText("生成模型后可设置目标面数")
+
+    def _update_export_quality_defaults(self) -> None:
+        if self.current_result is None:
+            return
+        if not hasattr(self, "export_target_spin") or not hasattr(self, "export_quality_info"):
+            return
+        original = int(len(self.current_result.mesh.faces))
+        quality = EXPORT_QUALITY_ORIGINAL
+        if hasattr(self, '_export_quality_actions'):
+            for q, act in self._export_quality_actions.items():
+                if act.isChecked():
+                    quality = q
+                    break
+        self.export_target_spin.blockSignals(True)
+        self.export_target_spin.setRange(100, max(100, original))
+        if quality != EXPORT_QUALITY_ORIGINAL:
+            default = get_default_target_faces(original, quality)
+            self.export_target_spin.setValue(default)
+            self.export_target_spin.setEnabled(True)
+            self.export_quality_info.setText(f"目标 {default:,} 面 / 原始 {original:,} 面")
+        else:
+            self.export_target_spin.setEnabled(False)
+            self.export_quality_info.setText("原始：导出完整网格，不简化")
+        self.export_target_spin.blockSignals(False)
+
+    def _get_export_quality_and_target(self) -> tuple[str, int | None]:
+        quality = EXPORT_QUALITY_ORIGINAL
+        if hasattr(self, '_export_quality_actions'):
+            for q, act in self._export_quality_actions.items():
+                if act.isChecked():
+                    quality = q
+                    break
+        if quality == EXPORT_QUALITY_ORIGINAL:
+            return quality, None
+        target = int(self.export_target_spin.value()) if hasattr(self, "export_target_spin") else 0
+        return quality, target
+
     def _invalidate_region_preview(self) -> None:
         if not hasattr(self, "region_action"):
             return
@@ -1889,6 +2098,10 @@ class MainWindow(QMainWindow):
         self.porosity_value.setText(f"{result.porosity * 100:.2f}%")
         self.thickness.setValue(result.parameters.thickness)
         self.iso_level.setValue(result.parameters.iso_level)
+        try:
+            self._update_export_quality_defaults()
+        except Exception:
+            pass
         self.generate_button.setEnabled(True)
         self.generate_button.setText("生成模型")
         self.export_action.setEnabled(True)
@@ -1944,7 +2157,6 @@ class MainWindow(QMainWindow):
         self.viewport.set_light_background(enabled)
         mode = "亮色" if enabled else "暗色"
         self.statusBar().showMessage(f"已切换为{mode}背景")
-
     def export_current(self) -> None:
         if self.current_result is None:
             return
@@ -1960,8 +2172,28 @@ class MainWindow(QMainWindow):
         if not Path(destination).suffix:
             destination += ".obj" if "OBJ" in selected_filter else ".ply" if "PLY" in selected_filter else ".stl"
         try:
-            path = export_mesh(self.current_result, destination)
-            self.statusBar().showMessage(f"已导出 {path}")
+            quality, target = self._get_export_quality_and_target()
+            if quality != EXPORT_QUALITY_ORIGINAL:
+                original_faces = int(len(self.current_result.mesh.faces))
+                validate_export_target_faces(int(target) if target is not None else 0, original_faces)
+            path, actual_faces, fallback, msg = export_mesh_with_quality(
+                self.current_result, destination, quality, target
+            )
+            try:
+                size = path.stat().st_size
+                if size < 1024 * 1024:
+                    size_str = f"{size/1024:.1f} KB"
+                else:
+                    size_str = f"{size/(1024*1024):.2f} MB"
+            except Exception:
+                size_str = "未知大小"
+            fmt = path.suffix.lower().lstrip(".").upper() or "STL"
+            fallback_note = " (已回退到原始)" if fallback else ""
+            self.statusBar().showMessage(f"已导出 {fmt} {actual_faces:,} 面 {size_str}{fallback_note} -> {path}")
+            if fallback:
+                QMessageBox.information(self, "导出回退", f"{msg} 已导出原始网格。")
+        except ValueError as exc:
+            QMessageBox.critical(self, "导出参数无效", str(exc))
         except Exception as exc:
             QMessageBox.critical(self, "导出失败", str(exc))
 

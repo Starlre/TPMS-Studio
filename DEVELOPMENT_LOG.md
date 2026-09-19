@@ -93,6 +93,8 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-042 | 在 GitHub 主页放置可交互的 `gyroid_tpms.stl` 三维模型 | 新增 `docs/` GitHub Pages 查看器、页面实拍封面和 Pages Actions 部署工作流；README 图片链接到在线预览 | 已完成 |
 | R-043 | 网页模型右下角显示 XYZ 方向标 | 用固定 Canvas 方向标替换随模型缩放的 `AxesHelper`，显示带字母的 X/Y/Z 彩色箭头，随相机旋转更新，移动端避让模型信息面板 | 已完成 |
 | R-044 | GPU 隐式曲面预览（Ray Marching） | `gpu_preview.py:12` 新增 `can_use_gpu_preview()`/`surface_index()` 与 330 core GLSL（射线-包围盒求交 + 解析梯度 + 中心差分法线 + 梯度壁厚）；`app.py:468` 重构 `OpenGLMeshView` 为双管线：网格管线保留，新增隐式管线（全屏 quad、uniform 传参、拖动 48 步/静止 112 步、尺寸归一化、Shift+拖动平移）；`MainWindow.generate/_generation_finished` 先刷 GPU 再后台 CPU 网格，诊断视图强制网格回退；自定义公式/编译失败自动回退 | 已完成 |
+| R-045 | 导出精度/面数分级 | 新增导出质量下拉（原始/高~70%/中~40%/低~20%）+ 目标面数 SpinBox，原始默认不改变行为；`tpms_core:prepare_export_mesh` 按面数校验、优先 quadric、回退聚类/原始；`app:export_current` 显示格式/面数/大小，回退提示；`test_export_quality` 覆盖校验与回读 | 已完成 |
+| R-046 | 导出质量 UI 移至顶部工具栏 | 将左侧 `QGroupBox:Export Quality` 移除，改为顶部 `QToolButton.MenuButtonPopup + QMenu`：四档质量单选（`QActionGroup`）、目标面数 `QSpinBox`（`QWidgetAction`）、状态标签；主按钮点击仍按当前选择直接导出，下拉仅改参数；默认原始禁用目标输入；保留 `tpms_core` 算法不变 | 已完成 |
 
 ## 4. 关键更新详情
 
@@ -185,6 +187,13 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - **性能与质量**：拖动/平移时 `u_maxSteps=48`，静止 80ms 定时器恢复 `112` 步；`u_minStep` 与 `u_eps` 按 `max(size)*0.0006~0.0008` 归一化，避免尺寸变化导致步进异常；`u_maxDist=distance*4` 与 `rayBox` 超时保护防止卡死。片层/实体、等值面/壁厚、X/Y/Z 梯度均在 shader 分支中处理。
 - **与导出一致性**：GPU 仅用于预览，STL/OBJ/PLY 导出仍走 `tpms_core.generate_tpms` 的高精度 Marching Cubes；`MainWindow` 在 `generate()` 先刷 GPU（未求解厚度亦可预览），`_generation_finished` 再用 CPU 已求解的 `result.parameters` 刷新 GPU，保证孔隙率/梯度求解后两者轮廓基本一致。诊断视图（低质量/仿真区域）强制 `gpu_force_mesh=True` 以保留顶点着色。
 
+
+### 4.13 导出质量/面数分级
+
+- `tpms_core.py` 新增 `EXPORT_QUALITY_*`（original/high/medium/low，对应 1.0/0.7/0.4/0.2）、`validate_export_target_faces`（正整数且 ≤原始）、`get_default_target_faces`、`_cluster_simplify_trimesh`（复用 `simplify_mesh_for_preview` 聚类转 Trimesh）、`simplify_mesh_for_export`（优先 `mesh.simplify_quadratic_decimation`，失败回退聚类，最终回退原始并提示，不伪造）、`prepare_export_mesh`（不改变 `result.mesh` 拷贝导出）、`export_mesh_with_quality`（统一 STL/OBJ/PLY，`fix_normals` 后导出）。
+- `app.py` 在顶部工具栏 `export_tool_button:QToolButton.MenuButtonPopup` 追加下拉 `QMenu`：四档质量 `QActionGroup`（原始/高/中/低）、目标面数 `QSpinBox`（`QWidgetAction`）、状态 `QLabel`；主按钮点击直接导出，下拉仅改参数；`_create_export_quality_menu/_on_export_quality_selected/_update_export_quality_defaults/_get_export_quality_and_target` 管理状态，左侧不再占用建模区：`QComboBox` 四档 + `QSpinBox 100-5_000_000` + 信息标签；`_on_export_quality_changed`/`_update_export_quality_defaults` 按原始面数动态设范围与默认值，原始时 Spin 禁用；`_get_export_quality_and_target` + `export_current` 校验并调用 `export_mesh_with_quality`，状态栏显示 `格式 面数 大小 回退?`，回退弹 `QMessageBox`。
+- 默认原始精度，完全不改变现有导出行为与 `current_result.mesh`。
+
 ## 5. 验证记录
 
 ### 2026-09-17
@@ -231,11 +240,18 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 
 ### 2026-09-19（GPU 隐式预览）
 
-- 语法检查：`python -m py_compile app.py tpms_core.py comsol_mesh.py gpu_preview.py` 通过。
+- 语法检查：`python -m py_compile app.py tpms_core.py comsol_mesh.py gpu_preview.py test_gpu_preview.py test_export_quality.py` 通过。
 - 自动化测试：`32 passed`（原 22 + 新 10 GPU fallback/状态测试），包含 `Gyroid/Diamond/Primitive/I-WP/Neovius` 支持、`Custom` 回退、梯度 X/Y/Z、离屏 widget 回退、拖动/平移低步数切换与背景切换。
 - 离屏 GUI 验证：`offscreen` 平台下 `OpenGLMeshView` 与 `MainWindow` 创建成功；`Custom` 预览返回 `custom_formula` 回退并保持网格路径；`Gyroid` 在模拟可用 GPU 时 `is_gpu_active()==True`；`Shift+拖动` 平移产生非零 `pan`；暗/亮背景切换与 `reset_view` 清空平移均正常；`rayBoxIntersect` 与 `calcNormal` 存在性检查通过。
 - 导出一致性：`generate_tpms(Gyroid)` 生成水密网格后 `export_mesh` 可回读，GPU 预览刷新不改变 `result.triangles`。
 - 已知：全屏 quad 依赖 OpenGL 3.3 Core，`ctypes.windll` 仅 Windows，直接 headless CI 不实际执行 GLSL 绘制，仅通过 fallback 逻辑保证不崩溃。
+
+
+### 2026-09-19（导出精度/面数）
+
+- 语法：`python -m py_compile app.py tpms_core.py gpu_preview.py test_gpu_preview.py test_export_quality.py` 通过。
+- 测试：`python -m pytest -q` 42 passed 1 skipped（原 22 + gpu 13 + export 7），`test_export_quality` 覆盖 原始不改变/目标校验/默认70/40/20%/简化或回退有效网格/多格式回读/UI 原始默认（headless skip 明确）。
+- 手动：Gyroid 4288 面模型导出 原始 4288/高 3002/中 1715/低 857 面，OBJ/PLY 均可回读；目标 >原始 抛 ValueError；`fast_simplification` 缺失时回退到原始并提示，不伪造。
 
 ## 6. 技术决策
 
@@ -265,6 +281,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 
 ## 7. 已知限制
 
+- 导出简化依赖 `trimesh` 的 `quadric` 或聚类；若 `fast_simplification/open3d` 缺失，会回退到原始精度并提示，实际面数可能与目标存在偏差（聚类近似）。
 - 当前输出是表面/体网格，不是 STEP/Parasolid 类 B-Rep 几何。
 - 导出体网格不等于 COMSOL 仿真已配置；材料、物理场、入口、出口、壁面和求解器仍需设置。
 - 当前棱柱层作用于封闭流体域全部边界；仅对 TPMS 壁面生成棱柱层需要新增共形入出口分割。
@@ -305,7 +322,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 ## 10. 常用验证命令
 
 ```powershell
-python -m py_compile app.py tpms_core.py comsol_mesh.py gpu_preview.py
+python -m py_compile app.py tpms_core.py comsol_mesh.py gpu_preview.py test_gpu_preview.py test_export_quality.py
 python -m pytest -q
 python app.py
 ```

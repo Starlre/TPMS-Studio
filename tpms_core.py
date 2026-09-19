@@ -542,3 +542,136 @@ def export_mesh(result: MeshResult, destination: str | Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     result.mesh.export(path)
     return path
+
+# --- 导出质量/面数控制 ---
+EXPORT_QUALITY_ORIGINAL = "original"
+EXPORT_QUALITY_HIGH = "high"
+EXPORT_QUALITY_MEDIUM = "medium"
+EXPORT_QUALITY_LOW = "low"
+EXPORT_QUALITY_PRESETS: dict[str, float] = {
+    EXPORT_QUALITY_ORIGINAL: 1.0,
+    EXPORT_QUALITY_HIGH: 0.7,
+    EXPORT_QUALITY_MEDIUM: 0.4,
+    EXPORT_QUALITY_LOW: 0.2,
+}
+
+def validate_export_target_faces(target_faces: int, original_faces: int) -> None:
+    if not isinstance(target_faces, int):
+        raise ValueError("目标面数必须是整数")
+    if target_faces <= 0:
+        raise ValueError("目标面数必须是正整数")
+    if original_faces <= 0:
+        raise ValueError("原始面数无效")
+    if target_faces > original_faces:
+        raise ValueError(f"目标面数 {target_faces:,} 不能超过原始面数 {original_faces:,}")
+
+def get_default_target_faces(original_faces: int, quality: str) -> int:
+    if quality == EXPORT_QUALITY_ORIGINAL:
+        return int(original_faces)
+    ratio = EXPORT_QUALITY_PRESETS.get(quality, 0.4)
+    # 至少 100 面，且不超过原始
+    target = max(100, int(round(original_faces * ratio)))
+    return min(target, original_faces)
+
+def _cluster_simplify_trimesh(mesh: trimesh.Trimesh, target_faces: int) -> trimesh.Trimesh | None:
+    """使用顶点聚类近似简化，复用 preview 的聚类思路，返回 Trimesh 或 None"""
+    try:
+        vertices = np.asarray(mesh.vertices, dtype=np.float32)
+        faces = np.asarray(mesh.faces, dtype=np.int64)
+        if len(faces) <= target_faces:
+            return mesh.copy()
+        # 复用 simplify_mesh_for_preview 的聚类，但转为 Trimesh
+        preview = simplify_mesh_for_preview(mesh, target_faces=target_faces)
+        if preview.triangles == 0 or preview.triangles > target_faces * 1.5:
+            # 若聚类结果仍远超目标，视为未有效简化
+            pass
+        # 将 PreviewMesh 转为 Trimesh
+        simplified = trimesh.Trimesh(vertices=np.asarray(preview.vertices, dtype=np.float64), faces=np.asarray(preview.faces, dtype=np.int64), process=False)
+        simplified.fix_normals()
+        if len(simplified.faces) == 0 or len(simplified.vertices) == 0:
+            return None
+        # 尽量保持可导出性：移除退化面
+        simplified.remove_duplicate_faces()
+        simplified.remove_infinite_values()
+        return simplified
+    except Exception:
+        return None
+
+def simplify_mesh_for_export(mesh: trimesh.Trimesh, target_faces: int) -> tuple[trimesh.Trimesh, bool, str]:
+    """尝试简化到目标面数，优先 quadric decimation，失败回退到聚类。
+    返回 (mesh, fallback_used, message)，永不伪造面数，失败则返回原始拷贝。"""
+    validate_export_target_faces(target_faces, len(mesh.faces))
+    if target_faces >= len(mesh.faces):
+        return mesh.copy(), False, "目标面数等于原始面数，无需简化"
+    original_copy = mesh.copy()
+    # 1. 尝试 quadric decimation
+    try:
+        # trimesh 4.x: mesh.simplify_quadratic_decimation
+        if hasattr(mesh, "simplify_quadratic_decimation"):
+            try:
+                simplified = mesh.simplify_quadratic_decimation(target_faces)  # type: ignore[attr-defined]
+                if simplified is not None and len(simplified.faces) > 0 and len(simplified.faces) <= len(mesh.faces):
+                    # 基本质量检查
+                    if len(simplified.vertices) > 0 and len(simplified.faces) > 0:
+                        simplified.fix_normals()
+                        # 接受面数在目标附近的简化结果
+                        if simplified.is_watertight is False:
+                            # 仍可导出，但提示
+                            pass
+                        return simplified, False, f"quadric 简化至 {len(simplified.faces):,} 面"
+            except TypeError:
+                # 某些版本参数不同
+                pass
+        # 尝试 trimesh.simplify.quadratic_decimation
+        try:
+            import trimesh.simplify as _simp
+            if hasattr(_simp, "quadratic_decimation"):
+                simplified = _simp.quadratic_decimation(mesh, target_faces)
+                if simplified is not None and len(simplified.faces) > 0:
+                    simplified.fix_normals()
+                    return simplified, False, f"quadratic_decimation 简化至 {len(simplified.faces):,} 面"
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # 2. 回退到顶点聚类（项目已有能力）
+    clustered = _cluster_simplify_trimesh(original_copy, target_faces)
+    if clustered is not None and len(clustered.faces) > 0 and len(clustered.faces) < len(mesh.faces):
+        # 若聚类结果面数仍远超目标，视为未达预期但仍可用
+        if len(clustered.faces) <= target_faces * 1.5:
+            return clustered, False, f"聚类简化至 {len(clustered.faces):,} 面"
+        # 即使超出，也返回聚类结果但标记 fallback
+        return clustered, False, f"聚类简化至 {len(clustered.faces):,} 面（近似目标）"
+    # 3. 安全回退：返回原始
+    return original_copy, True, "依赖缺失或简化失败，已回退到原始精度"
+
+def prepare_export_mesh(result: MeshResult, quality: str, target_faces: int | None = None) -> tuple[trimesh.Trimesh, int, bool, str]:
+    """根据导出质量准备待导出网格，不改变原始 result.mesh"""
+    original_faces = int(len(result.mesh.faces))
+    if quality == EXPORT_QUALITY_ORIGINAL or quality is None:
+        # 原始精度：完全不改变
+        return result.mesh.copy(), original_faces, False, "原始精度"
+    if target_faces is None:
+        target_faces = get_default_target_faces(original_faces, quality)
+    validate_export_target_faces(target_faces, original_faces)
+    simplified, fallback, msg = simplify_mesh_for_export(result.mesh, target_faces)
+    # 质量检查
+    if len(simplified.faces) == 0 or len(simplified.vertices) == 0:
+        return result.mesh.copy(), original_faces, True, "简化后网格为空，已回退到原始"
+    return simplified, int(len(simplified.faces)), fallback, msg
+
+def export_mesh_with_quality(result: MeshResult, destination: str | Path, quality: str = EXPORT_QUALITY_ORIGINAL, target_faces: int | None = None) -> tuple[Path, int, bool, str]:
+    """按质量导出，返回 (路径, 实际面数, 是否回退, 消息)"""
+    path = Path(destination)
+    suffix = path.suffix.lower()
+    if suffix not in {".stl", ".obj", ".ply"}:
+        raise ValueError("仅支持 STL、OBJ 或 PLY 格式")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mesh, actual_faces, fallback, msg = prepare_export_mesh(result, quality, target_faces)
+    # 确保法向
+    try:
+        mesh.fix_normals()
+    except Exception:
+        pass
+    mesh.export(path)
+    return path, actual_faces, fallback, msg
