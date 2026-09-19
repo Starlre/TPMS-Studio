@@ -27,7 +27,7 @@ TPMS Studio 是一个本地运行的 TPMS 参数化建模桌面工具，可生�
 
 [![在线查看 TPMS 三维模型](docs/model-preview.png)](https://starlre.github.io/TPMS-Studio/)
 
-点击上图可在 GitHub Pages 中加载 `gyroid_tpms.stl`，支持拖动旋转、滚轮缩放、右键平移、自动旋转、重置视角、深浅背景切换和 STL 下载。模型约 `30.6 MB`，首次打开会显示加载进度。
+点击上图可在 GitHub Pages 中加载 `gyroid_tpms.stl`，支持拖动旋转、滚轮缩放、右键平移、自动旋转、重置视角、深浅背景切换和 STL 下载。模型约 `30.6 MB`，首次打开会显示加载进度；模型右下角的 XYZ 方向标使用红 X、绿 Y、蓝 Z 标注并随视角同步更新。
 
 ### TPMS 参数化建模与实时预览
 

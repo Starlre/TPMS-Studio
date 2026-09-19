@@ -207,6 +207,20 @@
       backdrop-filter: blur(12px);
     }
 
+    #orientation-gizmo {
+      position: fixed;
+      z-index: 10 !important;
+      right: 18px;
+      bottom: 18px;
+      width: 116px;
+      height: 116px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
+      backdrop-filter: blur(12px);
+      pointer-events: none;
+    }
+
     .loading {
       position: absolute;
       z-index: 6;
@@ -285,6 +299,11 @@
         padding: 12px;
       }
 
+      #orientation-gizmo {
+        right: max(8px, calc(100vw - 390px + 8px));
+        bottom: 150px;
+      }
+
       .metrics { gap: 9px 12px; }
       .hint { display: none; }
     }
@@ -340,6 +359,7 @@
       </dl>
     </aside>
 
+    <canvas id="orientation-gizmo" width="232" height="232" role="img" aria-label="XYZ 模型方向标：红色 X 轴、绿色 Y 轴、蓝色 Z 轴"></canvas>
     <p class="hint">拖动旋转 · 滚轮缩放 · 右键平移</p>
 
     <section id="loading" class="loading" aria-live="polite">
@@ -365,6 +385,8 @@
     const resetButton = document.querySelector("#reset-view");
     const rotateButton = document.querySelector("#auto-rotate");
     const themeButton = document.querySelector("#theme-toggle");
+    const gizmoCanvas = document.querySelector("#orientation-gizmo");
+    const gizmoContext = gizmoCanvas.getContext("2d");
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x071016);
@@ -397,9 +419,6 @@
     rimLight.position.set(-5, 4, 2);
     scene.add(rimLight);
 
-    const axes = new THREE.AxesHelper(1);
-    scene.add(axes);
-
     const grid = new THREE.GridHelper(10, 20, 0x42616d, 0x20343d);
     grid.rotation.x = Math.PI / 2;
     grid.material.transparent = true;
@@ -428,8 +447,6 @@
       controls.maxDistance = distance * 4;
       resetView();
 
-      axes.scale.setScalar(radius * 0.32);
-      axes.position.copy(box.min).addScalar(-radius * 0.12);
       grid.scale.setScalar(radius * 0.32);
       grid.position.z = box.min.z - radius * 0.08;
     }
@@ -490,6 +507,7 @@
       themeButton.textContent = light ? "暗色背景" : "亮色背景";
       scene.background.set(light ? 0xeef4f5 : 0x071016);
       grid.material.opacity = light ? 0.22 : 0.34;
+      drawOrientationGizmo();
     });
 
     function resize() {
@@ -500,12 +518,78 @@
       renderer.setSize(width, height, false);
     }
 
+    function drawOrientationGizmo() {
+      const width = gizmoCanvas.clientWidth;
+      const height = gizmoCanvas.clientHeight;
+      const scale = gizmoCanvas.width / Math.max(width, 1);
+      const ctx = gizmoContext;
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const center = { x: width * 0.5, y: height * 0.56 };
+      const length = Math.min(width, height) * 0.29;
+      const light = document.body.classList.contains("light");
+      const axes = [
+        { label: "X", vector: new THREE.Vector3(1, 0, 0), color: light ? "#b42318" : "#ff6b6b" },
+        { label: "Y", vector: new THREE.Vector3(0, 1, 0), color: light ? "#167447" : "#63d495" },
+        { label: "Z", vector: new THREE.Vector3(0, 0, 1), color: light ? "#175cd3" : "#5ca8ff" },
+      ];
+      const inverseCamera = camera.quaternion.clone().invert();
+      const projected = axes.map((axis) => {
+        const vector = axis.vector.clone().applyQuaternion(inverseCamera);
+        return {
+          ...axis,
+          vector,
+          end: { x: center.x + vector.x * length, y: center.y - vector.y * length },
+        };
+      }).sort((a, b) => a.vector.z - b.vector.z);
+
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const axis of projected) {
+        const dx = axis.end.x - center.x;
+        const dy = axis.end.y - center.y;
+        const lineLength = Math.hypot(dx, dy) || 1;
+        const ux = dx / lineLength;
+        const uy = dy / lineLength;
+        const px = -uy;
+        const py = ux;
+        const arrowBase = { x: axis.end.x - ux * 9, y: axis.end.y - uy * 9 };
+
+        ctx.strokeStyle = axis.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(axis.end.x, axis.end.y);
+        ctx.stroke();
+
+        ctx.fillStyle = axis.color;
+        ctx.beginPath();
+        ctx.moveTo(axis.end.x, axis.end.y);
+        ctx.lineTo(arrowBase.x + px * 4, arrowBase.y + py * 4);
+        ctx.lineTo(arrowBase.x - px * 4, arrowBase.y - py * 4);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.font = "700 15px Segoe UI, Microsoft YaHei UI, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(axis.label, axis.end.x + ux * 11, axis.end.y + uy * 11);
+      }
+
+      ctx.fillStyle = light ? "#23363d" : "#e6f1f6";
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     window.addEventListener("resize", resize);
     resize();
 
     function render() {
       controls.update();
       renderer.render(scene, camera);
+      drawOrientationGizmo();
       requestAnimationFrame(render);
     }
     render();
