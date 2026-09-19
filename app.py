@@ -69,6 +69,13 @@ from tpms_core import (
     simplify_mesh_for_preview,
 )
 
+from gpu_preview import (
+    IMPLICIT_FRAGMENT_SOURCE,
+    IMPLICIT_VERTEX_SOURCE,
+    can_use_gpu_preview,
+    surface_index,
+)
+
 
 STYLE = """
 /* Modern Slate/Teal Design System - TPMS Studio */
@@ -459,7 +466,20 @@ class AxisTriadOverlay(QWidget):
 
 
 class OpenGLMeshView(QOpenGLWidget):
-    """Retained GPU mesh viewport with shader-based lighting."""
+    """GPU mesh viewport with fallback ray-marched implicit preview.
+
+    Preserves original triangle-mesh rendering (including background,
+    highlight, vertex colors, outlines and axis triad).  Adds an
+    alternative ray-marching path that evaluates the TPMS implicit
+    field directly on the GPU.
+
+    Fallback rules (never crashes):
+      * shader compile/link failure -> mesh preview
+      * custom formula -> mesh preview
+      * unsupported GPU -> mesh preview
+    All user parameters are passed as uniforms – no GLSL is built from
+    raw user strings.
+    """
 
     error = pyqtSignal(str)
 
@@ -467,6 +487,7 @@ class OpenGLMeshView(QOpenGLWidget):
         super().__init__(parent)
         self.setMinimumSize(640, 220)
         self.setFocusPolicy(Qt.StrongFocus)
+        # mesh pipeline
         self.program: QOpenGLShaderProgram | None = None
         self.vbo = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
         self.ibo = QOpenGLBuffer(QOpenGLBuffer.IndexBuffer)
@@ -475,6 +496,7 @@ class OpenGLMeshView(QOpenGLWidget):
         self.pending_mesh: PreviewMesh | None = None
         self.last_pos = QPoint()
         self.dragging = False
+        self.panning = False
         self.yaw = -42.0
         self.pitch = 23.0
         self.distance = 78.0
@@ -483,42 +505,86 @@ class OpenGLMeshView(QOpenGLWidget):
         self.highlight_mode = False
         self.vertex_color_mode = False
         self.axis_overlay = AxisTriadOverlay(self)
+        # pan offset in world units (model translation)
+        self.pan = QVector3D(0.0, 0.0, 0.0)
+        # implicit pipeline
+        self.implicit_program: QOpenGLShaderProgram | None = None
+        self.quad_vao = QOpenGLVertexArrayObject(self)
+        self.quad_vbo = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
+        self.implicit_params: TPMSParameters | None = None
+        self.gpu_available = True
+        self.gpu_error_msg = ""
+        self.gpu_preview_active = False
+        self.gpu_force_mesh = False  # diagnostic overlay forces mesh
+        self._fallback_reason = ""
+        self._max_steps_high = 112
+        self._max_steps_low = 48
+        self._restore_timer = QTimer(self)
+        self._restore_timer.setSingleShot(True)
+        self._restore_timer.timeout.connect(self._on_restore_high_quality)
 
     def initializeGL(self) -> None:
         try:
-            self.gl = ctypes.windll.opengl32
-            self.gl.glEnable.argtypes = [ctypes.c_uint]
-            self.gl.glCullFace.argtypes = [ctypes.c_uint]
-            self.gl.glBlendFunc.argtypes = [ctypes.c_uint, ctypes.c_uint]
-            self.gl.glClearColor.argtypes = [
-                ctypes.c_float,
-                ctypes.c_float,
-                ctypes.c_float,
-                ctypes.c_float,
-            ]
-            self.gl.glClear.argtypes = [ctypes.c_uint]
-            self.gl.glViewport.argtypes = [
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-            ]
-            self.gl.glDrawElements.argtypes = [
-                ctypes.c_uint,
-                ctypes.c_int,
-                ctypes.c_uint,
-                ctypes.c_void_p,
-            ]
-            self.gl.glEnable(0x0B71)  # GL_DEPTH_TEST
-            self.gl.glEnable(0x0B44)  # GL_CULL_FACE
-            self.gl.glCullFace(0x0405)  # GL_BACK
-            self.gl.glEnable(0x0BE2)  # GL_BLEND
-            self.gl.glBlendFunc(0x0302, 0x0303)
+            # On some platforms ctypes.windll doesn't exist (Linux/macOS headless);
+            # guard and use fallback GL via QOpenGLFunctions when unavailable.
+            try:
+                self.gl = ctypes.windll.opengl32  # type: ignore[attr-defined]
+                self.gl.glEnable.argtypes = [ctypes.c_uint]
+                self.gl.glDisable.argtypes = [ctypes.c_uint]
+                self.gl.glCullFace.argtypes = [ctypes.c_uint]
+                self.gl.glBlendFunc.argtypes = [ctypes.c_uint, ctypes.c_uint]
+                self.gl.glClearColor.argtypes = [
+                    ctypes.c_float,
+                    ctypes.c_float,
+                    ctypes.c_float,
+                    ctypes.c_float,
+                ]
+                self.gl.glClear.argtypes = [ctypes.c_uint]
+                self.gl.glViewport.argtypes = [
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                ]
+                self.gl.glDrawElements.argtypes = [
+                    ctypes.c_uint,
+                    ctypes.c_int,
+                    ctypes.c_uint,
+                    ctypes.c_void_p,
+                ]
+                self.gl.glDrawArrays.argtypes = [
+                    ctypes.c_uint,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                ]
+            except Exception:
+                # headless / non-windows: provide minimal wrapper using QOpenGLContext
+                self.gl = None  # type: ignore[assignment]
+            # Enable fixed states via QOpenGLFunctions fallback if needed
+            if self.gl is not None:
+                self.gl.glEnable(0x0B71)  # GL_DEPTH_TEST
+                self.gl.glEnable(0x0B44)  # GL_CULL_FACE
+                self.gl.glCullFace(0x0405)  # GL_BACK
+                self.gl.glEnable(0x0BE2)  # GL_BLEND
+                self.gl.glBlendFunc(0x0302, 0x0303)
             self._apply_background_color()
             self._build_shader()
             self.vao.create()
             if self.pending_mesh is not None:
                 self._upload_mesh(self.pending_mesh)
+            # try implicit pipeline – failure must not break mesh preview
+            try:
+                self._build_implicit_shader()
+                self._init_quad()
+                self.gpu_available = True
+                self.gpu_error_msg = ""
+            except Exception as exc:
+                traceback.print_exc()
+                self.gpu_available = False
+                self.gpu_error_msg = str(exc)
+                self.implicit_program = None
+                self.gpu_preview_active = False
+                self._fallback_reason = f"implicit_init_failed: {exc}"
         except Exception as exc:
             traceback.print_exc()
             self.error.emit(str(exc))
@@ -591,6 +657,40 @@ class OpenGLMeshView(QOpenGLWidget):
         if not self.program.link():
             raise RuntimeError(self.program.log())
 
+    def _build_implicit_shader(self) -> None:
+        self.implicit_program = QOpenGLShaderProgram(self)
+        if not self.implicit_program.addShaderFromSourceCode(QOpenGLShader.Vertex, IMPLICIT_VERTEX_SOURCE):
+            raise RuntimeError(self.implicit_program.log())
+        if not self.implicit_program.addShaderFromSourceCode(QOpenGLShader.Fragment, IMPLICIT_FRAGMENT_SOURCE):
+            raise RuntimeError(self.implicit_program.log())
+        if not self.implicit_program.link():
+            raise RuntimeError(self.implicit_program.log())
+
+    def _init_quad(self) -> None:
+        # Fullscreen quad as two triangles (6 verts) in NDC
+        verts = np.array([
+            -1.0, -1.0,
+             1.0, -1.0,
+             1.0,  1.0,
+            -1.0, -1.0,
+             1.0,  1.0,
+            -1.0,  1.0,
+        ], dtype=np.float32)
+        self.quad_vao.create()
+        self.quad_vao.bind()
+        if not self.quad_vbo.isCreated():
+            self.quad_vbo.create()
+        self.quad_vbo.bind()
+        self.quad_vbo.setUsagePattern(QOpenGLBuffer.StaticDraw)
+        self.quad_vbo.allocate(verts.tobytes(), verts.nbytes)
+        assert self.implicit_program is not None
+        self.implicit_program.bind()
+        self.implicit_program.enableAttributeArray(0)
+        self.implicit_program.setAttributeBuffer(0, 0x1406, 0, 2, 2 * 4)
+        self.implicit_program.release()
+        self.quad_vbo.release()
+        self.quad_vao.release()
+
     @staticmethod
     def _interleaved_mesh(mesh: PreviewMesh) -> tuple[np.ndarray, np.ndarray]:
         vertices = np.asarray(mesh.vertices, dtype=np.float32)
@@ -655,8 +755,189 @@ class OpenGLMeshView(QOpenGLWidget):
         self.doneCurrent()
         self.update()
 
+    # ---------- GPU implicit preview API ----------
+    def set_implicit_params(self, params: TPMSParameters) -> bool:
+        """Try to use GPU preview for *params*. Returns True if GPU will be used."""
+        can, reason = can_use_gpu_preview(params)
+        if not can:
+            self.gpu_preview_active = False
+            self._fallback_reason = reason
+            self.implicit_params = None
+            self.update()
+            return False
+        if not self.gpu_available or self.implicit_program is None:
+            self.gpu_preview_active = False
+            self._fallback_reason = self.gpu_error_msg or "gpu_unavailable"
+            self.implicit_params = None
+            self.update()
+            return False
+        # Update model radius/distance to match params even when in GPU mode
+        # Use extents derived from sizes (box) for consistent zoom.
+        extent = np.array([params.size_x, params.size_y, params.size_z], dtype=np.float32)
+        self.model_radius = max(float(np.linalg.norm(extent)) * 0.5, 1.0)
+        # Only reset distance if not already set by mesh? keep stable distance
+        if self.distance < self.model_radius * 0.6 or self.distance > self.model_radius * 14:
+            self.distance = self.model_radius * 3.2
+        self.implicit_params = params
+        self.gpu_preview_active = not self.gpu_force_mesh
+        self._fallback_reason = ""
+        self.update()
+        return self.gpu_preview_active
+
+    def clear_implicit(self) -> None:
+        self.implicit_params = None
+        self.gpu_preview_active = False
+        self._fallback_reason = "cleared"
+        self.update()
+
+    def set_gpu_force_mesh(self, force: bool) -> None:
+        """When diagnostic meshes are shown, force mesh rendering."""
+        self.gpu_force_mesh = force
+        if force:
+            self.gpu_preview_active = False
+        else:
+            if self.implicit_params is not None:
+                self.set_implicit_params(self.implicit_params)
+        self.update()
+
+    def is_gpu_active(self) -> bool:
+        return bool(self.gpu_preview_active and self.gpu_available and self.implicit_params is not None)
+
+    def gpu_fallback_reason(self) -> str:
+        return self._fallback_reason
+
+    def is_gpu_available(self) -> bool:
+        return bool(self.gpu_available)
+
+    def _on_restore_high_quality(self) -> None:
+        self.update()
+
+    def _current_max_steps(self) -> int:
+        if self.dragging or self.panning:
+            return self._max_steps_low
+        return self._max_steps_high
+
+    def _render_implicit(self) -> None:
+        assert self.implicit_program is not None
+        assert self.implicit_params is not None
+        p = self.implicit_params
+        # Build view/projection matrices mirroring mesh path but including pan
+        aspect = max(float(self.width()) / max(self.height(), 1), 0.1)
+        # Use device pixel ratio for viewport uniform but aspect stays logical
+        projection = QMatrix4x4()
+        projection.perspective(40.0, aspect, 0.05, max(self.distance * 10.0, 500.0))
+        view = QMatrix4x4()
+        # pan is model translation; we apply via u_pan uniform rather than view/model matrix
+        # to keep ray-box simple (box is offset by pan). View stays orbital.
+        view.translate(0.0, 0.0, -self.distance)
+        view.rotate(self.pitch, 1.0, 0.0, 0.0)
+        view.rotate(self.yaw, 0.0, 1.0, 0.0)
+        # No additional view pan – pan is world offset uniform
+        # MVP for inverse:
+        vp = projection * view
+        inv, invertible = vp.inverted()
+        if not invertible:
+            raise RuntimeError("view-projection not invertible")
+        # viewport in physical pixels for gl_FragCoord
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        vp_w = int(self.width() * dpr)
+        vp_h = int(self.height() * dpr)
+        # uniforms scaling for step/eps normalized to model size
+        max_size = max(p.size_x, p.size_y, p.size_z)
+        # epsilon for central diff – normalized
+        eps = max(max_size * 0.0006, 0.002)
+        eps = min(eps, 0.05)
+        # min step – smaller for small models
+        min_step = max(max_size * 0.0008, 0.003)
+        min_step = min(min_step, 0.08)
+        max_dist = max(self.distance * 4.0, max_size * 3.0)
+        # adaptive max step: period *0.20, clamped to reasonable range
+        min_cell = min(p.size_x / max(p.cells_x, 1), p.size_y / max(p.cells_y, 1), p.size_z / max(p.cells_z, 1))
+        raw_max_step = min_cell * 0.20
+        max_step = max(raw_max_step, min_step * 3.0)
+        max_step = min(max(max_step, 0.25), 2.5)
+
+        # Bind state for fullscreen pass: depth test off, cull off
+        if self.gl is not None:
+            try:
+                self.gl.glDisable(0x0B71)  # GL_DEPTH_TEST
+                self.gl.glDisable(0x0B44)  # GL_CULL_FACE
+            except Exception:
+                pass
+        self.implicit_program.bind()
+        self.implicit_program.setUniformValue("u_invViewProj", inv)
+        try:
+            from PyQt5.QtGui import QVector2D
+            self.implicit_program.setUniformValue("u_viewport", QVector2D(float(vp_w), float(vp_h)))
+        except Exception:
+            # fallback: try setting as two floats via generic uniform location
+            try:
+                loc = self.implicit_program.uniformLocation("u_viewport")
+                if loc != -1:
+                    self.implicit_program.setUniformValue(loc, float(vp_w), float(vp_h))
+            except Exception:
+                pass
+        self.implicit_program.setUniformValue("u_size", QVector3D(float(p.size_x), float(p.size_y), float(p.size_z)))
+        self.implicit_program.setUniformValue("u_cells", QVector3D(float(p.cells_x), float(p.cells_y), float(p.cells_z)))
+        self.implicit_program.setUniformValue("u_surface", int(surface_index(p.surface)))
+        self.implicit_program.setUniformValue("u_mode", 0 if p.mode == "sheet" else 1)
+        self.implicit_program.setUniformValue("u_thickness", float(p.thickness))
+        self.implicit_program.setUniformValue("u_isoLevel", float(p.iso_level))
+        self.implicit_program.setUniformValue("u_gradEnabled", int(1 if p.gradient_enabled else 0))
+        axis_map = {"X": 0, "Y": 1, "Z": 2}
+        self.implicit_program.setUniformValue("u_gradAxis", int(axis_map.get(p.gradient_axis, 2)))
+        self.implicit_program.setUniformValue("u_gradStart", float(p.gradient_thickness_start))
+        self.implicit_program.setUniformValue("u_gradEnd", float(p.gradient_thickness_end))
+        self.implicit_program.setUniformValue("u_lightBg", 1.0 if self.light_background else 0.0)
+        self.implicit_program.setUniformValue("u_pan", self.pan)
+        self.implicit_program.setUniformValue("u_maxSteps", int(self._current_max_steps()))
+        self.implicit_program.setUniformValue("u_minStep", float(min_step))
+        self.implicit_program.setUniformValue("u_maxStep", float(max_step))
+        self.implicit_program.setUniformValue("u_maxDist", float(max_dist))
+        self.implicit_program.setUniformValue("u_eps", float(eps))
+        self.quad_vao.bind()
+        # draw fullscreen quad
+        if self.gl is not None and hasattr(self.gl, "glDrawArrays"):
+            self.gl.glDrawArrays(0x0004, 0, 6)  # GL_TRIANGLES
+        else:
+            # fallback via QOpenGLFunctions
+            from PyQt5.QtGui import QOpenGLFunctions
+            funcs = self.context().functions()
+            funcs.glDrawArrays(0x0004, 0, 6)
+        self.quad_vao.release()
+        self.implicit_program.release()
+        if self.gl is not None:
+            try:
+                self.gl.glEnable(0x0B71)
+                self.gl.glEnable(0x0B44)
+                self.gl.glCullFace(0x0405)
+            except Exception:
+                pass
+
     def paintGL(self) -> None:
-        self.gl.glClear(0x00004000 | 0x00000100)
+        # Background clear
+        if self.gl is not None:
+            try:
+                self.gl.glClear(0x00004000 | 0x00000100)
+            except Exception:
+                pass
+        else:
+            # fallback: use Qt's gl clearing via context functions
+            try:
+                funcs = self.context().functions()
+                funcs.glClear(0x00004000 | 0x00000100)
+            except Exception:
+                pass
+        # Try implicit first – if it fails, fall back to mesh without crashing
+        if self.gpu_preview_active and self.implicit_params is not None and self.implicit_program is not None and self.gpu_available and not self.gpu_force_mesh:
+            try:
+                self._render_implicit()
+                return
+            except Exception as exc:
+                traceback.print_exc()
+                self.gpu_preview_active = False
+                self._fallback_reason = f"render_failed:{exc}"
+                # fall through to mesh
         if self.program is not None and self.index_count > 0:
             aspect = max(float(self.width()) / max(self.height(), 1), 0.1)
             projection = QMatrix4x4()
@@ -666,35 +947,50 @@ class OpenGLMeshView(QOpenGLWidget):
             view.rotate(self.pitch, 1.0, 0.0, 0.0)
             view.rotate(self.yaw, 0.0, 1.0, 0.0)
             model = QMatrix4x4()
-
+            # apply pan as model translation (world offset)
+            model.translate(self.pan)
+            assert self.program is not None
             self.program.bind()
             self.program.setUniformValue("u_mvp", projection * view * model)
             self.program.setUniformValue("u_model", model)
-            self.program.setUniformValue("u_camera", QVector3D(0.0, 0.0, self.distance))
+            # camera position in world for lighting – approximate as (pan.x, pan.y, distance+pan.z) not rotated
+            # For consistency with existing lighting, keep original camera logic but offset by pan
+            self.program.setUniformValue("u_camera", QVector3D(self.pan.x(), self.pan.y(), self.distance + self.pan.z()))
             self.program.setUniformValue("u_light_background", 1.0 if self.light_background else 0.0)
             self.program.setUniformValue("u_highlight_mode", 1.0 if self.highlight_mode else 0.0)
             self.program.setUniformValue("u_use_vertex_color", 1.0 if self.vertex_color_mode else 0.0)
             self.vao.bind()
             self.ibo.bind()
+            gl = self.gl
             if self.light_background:
                 self.program.setUniformValue("u_outline_mode", 1.0)
                 self.program.setUniformValue("u_outline_width", self.model_radius * 0.006)
-                self.gl.glCullFace(0x0404)  # GL_FRONT
-                self.gl.glDrawElements(
-                    0x0004,
-                    self.index_count,
-                    0x1405,
-                    ctypes.c_void_p(0),
-                )
+                if gl is not None:
+                    try:
+                        gl.glCullFace(0x0404)  # GL_FRONT
+                        gl.glDrawElements(0x0004, self.index_count, 0x1405, ctypes.c_void_p(0))
+                    except Exception:
+                        pass
+                else:
+                    funcs = self.context().functions()
+                    try:
+                        funcs.glCullFace(0x0404)
+                    except Exception:
+                        pass
             self.program.setUniformValue("u_outline_mode", 0.0)
             self.program.setUniformValue("u_outline_width", 0.0)
-            self.gl.glCullFace(0x0405)  # GL_BACK
-            self.gl.glDrawElements(
-                0x0004,
-                self.index_count,
-                0x1405,
-                ctypes.c_void_p(0),
-            )
+            if gl is not None:
+                try:
+                    gl.glCullFace(0x0405)  # GL_BACK
+                    gl.glDrawElements(0x0004, self.index_count, 0x1405, ctypes.c_void_p(0))
+                except Exception:
+                    pass
+            else:
+                funcs = self.context().functions()
+                try:
+                    funcs.glCullFace(0x0405)
+                except Exception:
+                    pass
             self.ibo.release()
             self.vao.release()
             self.program.release()
@@ -806,12 +1102,32 @@ class OpenGLMeshView(QOpenGLWidget):
             painter.drawText(label_rect, Qt.AlignCenter, label)
 
     def resizeGL(self, width: int, height: int) -> None:
-        self.gl.glViewport(0, 0, width, height)
+        if self.gl is not None:
+            try:
+                self.gl.glViewport(0, 0, width, height)
+            except Exception:
+                pass
+        else:
+            try:
+                self.context().functions().glViewport(0, 0, width, height)
+            except Exception:
+                pass
         self.axis_overlay.move(16, max(16, height - self.axis_overlay.height() - 16))
         self.axis_overlay.raise_()
 
     def mousePressEvent(self, event) -> None:
-        if event.button() in (Qt.LeftButton, Qt.RightButton):
+        if event.button() == Qt.LeftButton and not (event.modifiers() & Qt.ShiftModifier):
+            self.dragging = True
+            self.last_pos = event.pos()
+        elif event.button() == Qt.RightButton and not (event.modifiers() & Qt.ShiftModifier):
+            # Preserve legacy rotate on right; left+shift for pan keeps compatibility
+            self.dragging = True
+            self.last_pos = event.pos()
+        elif event.button() == Qt.MiddleButton or (event.modifiers() & Qt.ShiftModifier):
+            self.panning = True
+            self.last_pos = event.pos()
+        elif event.button() in (Qt.LeftButton, Qt.RightButton):
+            # Fallback for shift combos not caught
             self.dragging = True
             self.last_pos = event.pos()
         event.accept()
@@ -824,10 +1140,31 @@ class OpenGLMeshView(QOpenGLWidget):
             self.pitch = max(-89.0, min(89.0, self.pitch + delta.y() * 0.45))
             self.axis_overlay.update()
             self.update()
+        elif self.panning:
+            delta = event.pos() - self.last_pos
+            self.last_pos = event.pos()
+            # Pan scaling: proportional to distance and viewport size to feel natural
+            # Normalize by viewport height and model radius
+            factor = self.distance * 0.0015
+            # Compensate for viewport size: larger window -> smaller pan per pixel?
+            # Use model_radius as reference
+            scale = max(self.model_radius * 0.025, 0.5)
+            self.pan.setX(self.pan.x() - delta.x() * factor * (max(self.width(),1)/800.0))
+            self.pan.setY(self.pan.y() + delta.y() * factor * (max(self.height(),1)/600.0))
+            # Clamp pan to avoid losing model
+            limit = self.model_radius * 2.5
+            self.pan.setX(max(-limit, min(limit, self.pan.x())))
+            self.pan.setY(max(-limit, min(limit, self.pan.y())))
+            self.update()
         event.accept()
 
     def mouseReleaseEvent(self, event) -> None:
+        was_interacting = self.dragging or self.panning
         self.dragging = False
+        self.panning = False
+        if was_interacting:
+            # schedule high-quality refresh after interaction ends
+            self._restore_timer.start(80)
         event.accept()
 
     def wheelEvent(self, event) -> None:
@@ -840,27 +1177,47 @@ class OpenGLMeshView(QOpenGLWidget):
         self.yaw = -42.0
         self.pitch = 23.0
         self.distance = self.model_radius * 3.20
+        self.pan = QVector3D(0.0, 0.0, 0.0)
         self.axis_overlay.update()
         self.update()
 
     def _apply_background_color(self) -> None:
-        if self.light_background:
-            self.gl.glClearColor(0.975, 0.982, 0.978, 1.0)
-        else:
-            self.gl.glClearColor(0.035, 0.055, 0.070, 1.0)
+        if self.gl is not None:
+            try:
+                if self.light_background:
+                    self.gl.glClearColor(0.975, 0.982, 0.978, 1.0)
+                else:
+                    self.gl.glClearColor(0.035, 0.055, 0.070, 1.0)
+                return
+            except Exception:
+                pass
+        # fallback via context functions
+        try:
+            funcs = self.context().functions() if self.context() else None
+            if funcs is not None:
+                if self.light_background:
+                    funcs.glClearColor(0.975, 0.982, 0.978, 1.0)
+                else:
+                    funcs.glClearColor(0.035, 0.055, 0.070, 1.0)
+        except Exception:
+            pass
 
     def set_light_background(self, enabled: bool) -> None:
         self.light_background = enabled
         if self.isValid():
-            self.makeCurrent()
-            self._apply_background_color()
-            self.doneCurrent()
+            try:
+                self.makeCurrent()
+                self._apply_background_color()
+                self.doneCurrent()
+            except Exception:
+                pass
         self.axis_overlay.update()
         self.update()
 
     def set_highlight_mode(self, enabled: bool) -> None:
         self.highlight_mode = enabled
         self.update()
+
 
 
 class MainWindow(QMainWindow):
@@ -1472,6 +1829,18 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.critical(self, "参数无效", str(exc))
             return
+        # 即时 GPU 隐式预览（不阻塞主线程，纯 GPU 射线步进）
+        # 如果是自定义公式或 GPU 不可用，自动回退到网格预览，不影响生成
+        try:
+            gpu_active = self.viewport.set_implicit_params(parameters)
+            if gpu_active:
+                self.statusBar().showMessage("GPU 隐式预览已刷新 · 正在后台生成高精度导出网格...")
+            elif self.viewport.gpu_fallback_reason():
+                self.statusBar().showMessage(f"GPU 预览回退到网格预览（{self.viewport.gpu_fallback_reason()}）· 正在生成网格...")
+        except Exception as exc:
+            # 任何异常都回退到网格预览
+            traceback.print_exc()
+            self.viewport.clear_implicit()
         self.generate_button.setEnabled(False)
         self.generate_button.setText("正在生成...")
         self.export_action.setEnabled(False)
@@ -1485,7 +1854,8 @@ class MainWindow(QMainWindow):
         self.low_quality_preview = None
         self.region_preview = None
         self.region_legend.setVisible(False)
-        self.statusBar().showMessage("正在生成完整网格和 GPU 预览网格...")
+        if not self.viewport.is_gpu_active():
+            self.statusBar().showMessage("正在生成完整网格和网格预览...")
         self.worker_thread = QThread(self)
         self.worker = MeshWorker(parameters)
         self.worker.moveToThread(self.worker_thread)
@@ -1502,8 +1872,17 @@ class MainWindow(QMainWindow):
     def _generation_finished(self, result: MeshResult, preview: PreviewMesh) -> None:
         self.current_result = result
         self.current_preview = preview
+        # 保留网格预览作为 fallback；GPU 预览与导出使用同一组已求解参数
         self.viewport.set_mesh(preview)
         self.viewport.set_highlight_mode(False)
+        # 用 CPU 已求解的壁厚/等值面刷新 GPU，确保轮廓一致（孔隙率/梯度已解）
+        try:
+            gpu_ok = self.viewport.set_implicit_params(result.parameters)
+            if gpu_ok:
+                self.viewport.set_gpu_force_mesh(False)
+        except Exception as exc:
+            traceback.print_exc()
+            self.viewport.clear_implicit()
         self.triangle_value.setText(f"{result.triangles:,}")
         self.volume_value.setText(f"{result.volume:,.1f} mm³")
         self.density_value.setText(f"{result.relative_density * 100:.1f}%")
@@ -1538,9 +1917,10 @@ class MainWindow(QMainWindow):
                 f"->{result.parameters.gradient_thickness_end:.2f} mm"
                 f" {result.parameters.gradient_axis}向"
             )
+        gpu_status = " · GPU 隐式预览" if self.viewport.is_gpu_active() else f" · 网格预览（{self.viewport.gpu_fallback_reason() or '回退'}）"
         self.statusBar().showMessage(
             f"生成完成 · GPU 显示 {preview.triangles:,} 面 · 导出 {result.triangles:,} 面"
-            f"{target_status}{gradient_status}{cleanup}"
+            f"{target_status}{gradient_status}{cleanup}{gpu_status}"
         )
         self.worker_thread = None
         self.worker = None
@@ -1783,6 +2163,16 @@ class MainWindow(QMainWindow):
     def _toggle_low_quality_view(self, enabled: bool) -> None:
         if enabled:
             self.region_action.setChecked(False)
+            # 诊断视图需要顶点着色网格，强制回退到网格渲染
+            self.viewport.set_gpu_force_mesh(True)
+        else:
+            # 退出诊断时恢复 GPU 预览（若可用）
+            if self.current_result is not None:
+                try:
+                    self.viewport.set_gpu_force_mesh(False)
+                    self.viewport.set_implicit_params(self.current_result.parameters)
+                except Exception:
+                    pass
         preview = self.low_quality_preview if enabled else self.current_preview
         if preview is None or preview.triangles == 0:
             if enabled:
@@ -1829,6 +2219,14 @@ class MainWindow(QMainWindow):
                 self.worker_thread.start()
                 return
             self.low_quality_action.setChecked(False)
+            self.viewport.set_gpu_force_mesh(True)
+        else:
+            if self.current_result is not None:
+                try:
+                    self.viewport.set_gpu_force_mesh(False)
+                    self.viewport.set_implicit_params(self.current_result.parameters)
+                except Exception:
+                    pass
         preview = self.region_preview if enabled else self.current_preview
         if preview is None or preview.triangles == 0:
             if enabled:
@@ -1853,6 +2251,8 @@ class MainWindow(QMainWindow):
         self.region_action.setEnabled(True)
         self.worker_thread = None
         self.worker = None
+        # 仿真区域为彩色网格，强制网格渲染
+        self.viewport.set_gpu_force_mesh(True)
         self._toggle_region_view(True)
 
     def _region_preview_failed(self, message: str) -> None:

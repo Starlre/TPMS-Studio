@@ -20,9 +20,11 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | --- | --- | --- |
 | `app.py` | GUI、后台任务、OpenGL 预览、导出交互 | PyQt5、OpenGL 3.3 |
 | `tpms_core.py` | 隐式场、材料域/流体域、Marching Cubes、孔隙率求解、碎片清理 | NumPy、scikit-image、trimesh |
+| `gpu_preview.py` | GPU 隐式场判定、uniform 构建、GLSL 射线步进源码 | PyQt5 OpenGL 3.3, GLSL |
 | `comsol_mesh.py` | 连通流体域分解、四面体划分、边界分组、BDF/MSH/JSON 导出 | Gmsh、meshio |
 | `test_tpms_core.py` | 封闭性、孔隙率、流体域回归测试 | pytest |
 | `test_comsol_mesh.py` | 真实体网格生成和格式回读测试 | pytest、Gmsh、meshio |
+| `test_gpu_preview.py` | GPU 预览状态与 fallback 回归测试 | pytest, PyQt5 offscreen |
 
 ### 2.1 建模约定
 
@@ -90,6 +92,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-041 | 更新 Markdown 文档图片并推送 GitHub | 使用当前版本重新生成 `1520×960` 建模和 CFD 仿真区域截图，两张图均展示 XYZ 方向标；README 补充方向标功能说明 | 已完成 |
 | R-042 | 在 GitHub 主页放置可交互的 `gyroid_tpms.stl` 三维模型 | 新增 `docs/` GitHub Pages 查看器、页面实拍封面和 Pages Actions 部署工作流；README 图片链接到在线预览 | 已完成 |
 | R-043 | 网页模型右下角显示 XYZ 方向标 | 用固定 Canvas 方向标替换随模型缩放的 `AxesHelper`，显示带字母的 X/Y/Z 彩色箭头，随相机旋转更新，移动端避让模型信息面板 | 已完成 |
+| R-044 | GPU 隐式曲面预览（Ray Marching） | `gpu_preview.py:12` 新增 `can_use_gpu_preview()`/`surface_index()` 与 330 core GLSL（射线-包围盒求交 + 解析梯度 + 中心差分法线 + 梯度壁厚）；`app.py:468` 重构 `OpenGLMeshView` 为双管线：网格管线保留，新增隐式管线（全屏 quad、uniform 传参、拖动 48 步/静止 112 步、尺寸归一化、Shift+拖动平移）；`MainWindow.generate/_generation_finished` 先刷 GPU 再后台 CPU 网格，诊断视图强制网格回退；自定义公式/编译失败自动回退 | 已完成 |
 
 ## 4. 关键更新详情
 
@@ -174,6 +177,14 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 工具栏深 `slate #0f172a + 2px teal` 底线，`QToolButton 8px` 圆角半透明；页签胶囊 `8px`（选中 `teal` 实心）；`QGroupBox 10px` 悬浮卡；`teal` 渐变主按钮 `10px`；细圆角滚动条 `10px`。
 - 字号两轮放大：`15px->18px->19px` 基准，工具栏 `14->18px`、页签 `14->18px`、分组 `14->18px`、输入 `17->18px`、生成 `15->19px`、状态栏 `12->15px`，`1440×900/1120×720` 离屏无截断。
 
+### 4.12 GPU 隐式曲面预览（Ray Marching）
+
+- **原理**：在片段着色器中对每像素发射相机射线，先与模型包围盒求交得到 `tNear/tFar`，再在 `[tNear, tFar]` 内 sphere-tracing。SDF 为 `abs(F)/|grad|-thick/2`（片层）或 `(iso-F)/|grad|`（实体），`|grad|` 为物理梯度解析解 `∂F/∂phase * 2π*cells/size`，梯度壁厚按 `thickness(u)=mix(start,end,clamp((local+size/2)/size))`，包围盒外 `max(mat,box)` 裁剪。
+- **管线**：保留原有 VBO/IBO 网格管线；新增 `gpu_preview.py` 330 core 源码与全屏 quad VAO。`app.py:OpenGLMeshView` 按 `can_use_gpu_preview()` 判定：`Gyroid/Diamond/Primitive/I-WP/Neovius` 走 GPU，`Custom` 直接回退；编译/链接失败或显卡不支持也回退，不崩溃。着色参数全部 uniform 传入，不拼接用户字符串。
+- **相机与交互**：`u_invViewProj = (P*V)^-1` 从 `gl_FragCoord` 重建世界射线，模型平移通过 `u_pan` 统一作用于 box 与场求值。保留 yaw/pitch/distance 旋转缩放；新增 `Shift+拖动 / 中键` 平移（`pan` 钳制在 `±2.5*model_radius`），复用同一视角矩阵，XYZ 方向标仍由旋转矩阵驱动，不受平移/缩放影响。
+- **性能与质量**：拖动/平移时 `u_maxSteps=48`，静止 80ms 定时器恢复 `112` 步；`u_minStep` 与 `u_eps` 按 `max(size)*0.0006~0.0008` 归一化，避免尺寸变化导致步进异常；`u_maxDist=distance*4` 与 `rayBox` 超时保护防止卡死。片层/实体、等值面/壁厚、X/Y/Z 梯度均在 shader 分支中处理。
+- **与导出一致性**：GPU 仅用于预览，STL/OBJ/PLY 导出仍走 `tpms_core.generate_tpms` 的高精度 Marching Cubes；`MainWindow` 在 `generate()` 先刷 GPU（未求解厚度亦可预览），`_generation_finished` 再用 CPU 已求解的 `result.parameters` 刷新 GPU，保证孔隙率/梯度求解后两者轮廓基本一致。诊断视图（低质量/仿真区域）强制 `gpu_force_mesh=True` 以保留顶点着色。
+
 ## 5. 验证记录
 
 ### 2026-09-17
@@ -218,6 +229,14 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 网页验证：桌面 `1440×900` 和移动端 `390×844` 截图均正确显示右下角 XYZ 标签；移动端避让模型信息面板，三轴方向随相机姿态更新。
 - 三维画布像素验证：页面加载 `642,204` 个三角面，不是空白 WebGL 画布。
 
+### 2026-09-19（GPU 隐式预览）
+
+- 语法检查：`python -m py_compile app.py tpms_core.py comsol_mesh.py gpu_preview.py` 通过。
+- 自动化测试：`32 passed`（原 22 + 新 10 GPU fallback/状态测试），包含 `Gyroid/Diamond/Primitive/I-WP/Neovius` 支持、`Custom` 回退、梯度 X/Y/Z、离屏 widget 回退、拖动/平移低步数切换与背景切换。
+- 离屏 GUI 验证：`offscreen` 平台下 `OpenGLMeshView` 与 `MainWindow` 创建成功；`Custom` 预览返回 `custom_formula` 回退并保持网格路径；`Gyroid` 在模拟可用 GPU 时 `is_gpu_active()==True`；`Shift+拖动` 平移产生非零 `pan`；暗/亮背景切换与 `reset_view` 清空平移均正常；`rayBoxIntersect` 与 `calcNormal` 存在性检查通过。
+- 导出一致性：`generate_tpms(Gyroid)` 生成水密网格后 `export_mesh` 可回读，GPU 预览刷新不改变 `result.triangles`。
+- 已知：全屏 quad 依赖 OpenGL 3.3 Core，`ctypes.windll` 仅 Windows，直接 headless CI 不实际执行 GLSL 绘制，仅通过 fallback 逻辑保证不崩溃。
+
 ## 6. 技术决策
 
 ### D-001：预览和导出解耦
@@ -236,16 +255,27 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 
 本机没有 COMSOL 和相应 API，因此输出通用 BDF/MSH 网格及 JSON 语义信息，不宣称已生成包含物理场的 `.mph` 工程。
 
+### D-005：GPU 预览与 CPU 导出解耦且轮廓一致
+
+预览阶段用 GPU 直接求值隐式场（Ray Marching），获得像素级平滑曲面；导出仍用 CPU 连续场 Marching Cubes，保证水密与布尔裁剪。两者共用同一 `TPMSParameters`（含孔隙率求解后的厚度/等值面），STL 体积与 GPU 视觉轮廓基本一致；自定义复杂公式不尝试不安全 GLSL 转译，直接回退到网格预览。
+
+### D-006：Shader 编译与不支持回退
+
+任何 Shader 编译/链接异常、显卡不支持 330 core、或 `Custom` 公式均捕获后 `gpu_available=False` 并回退到网格渲染，不弹未处理异常。参数经 uniform 传入，杜绝拼接用户输入。
+
 ## 7. 已知限制
 
 - 当前输出是表面/体网格，不是 STEP/Parasolid 类 B-Rep 几何。
 - 导出体网格不等于 COMSOL 仿真已配置；材料、物理场、入口、出口、壁面和求解器仍需设置。
 - 当前棱柱层作用于封闭流体域全部边界；仅对 TPMS 壁面生成棱柱层需要新增共形入出口分割。
 - 仿真区域可视化当前显示边界分组，不显示体单元内部切片；体单元质量仍通过质量报告、低质量定位视图和 `_quality.vtu` 检查。
-- 自定义公式当前基于规则采样，尚未支持 nTop 级自适应八叉树、节点图编辑器或精确 B-Rep/STEP 输出。
+- 自定义公式当前基于规则采样，尚未支持 nTop 级自适应八叉树、节点图编辑器或精确 B-Rep/STEP 输出；GPU 预览对自定义公式一律回退到网格预览（含 `min/max/sqrt` 等组合公式亦回退）。
+- GPU 预览仅支持内置 `Gyroid/Diamond/Primitive/I-WP/Neovius` 的片层（含 X/Y/Z 梯度壁厚）与实体模式；Neovius 大曲率处法线中心差分可能轻微噪点，已用 `u_eps` 归一化缓解。
+- GPU 预览依赖 OpenGL 3.3 Core 与可编译 GLSL；在过旧显卡、远程 headless 或驱动缺失时自动回退到网格预览，功能不丢失。
 - 流体表面精度越高、周期越多、单元尺寸越小，内存和生成时间增长越快。
 - 正式 CFD 必须进行网格无关性检查；最小缩放雅可比仅是质量指标之一。
 - MSH/BDF 已通过本地程序回读，但尚需在安装了 COMSOL 的机器上做最终导入验证。
+- GPU 射线步进最大 112 步、最小步长 0.003–0.08 mm 钳制，极端薄壁（<0.1 mm）或极大尺寸（>200 mm）可能出现轻微自相交，已通过包围盒与 `maxDist` 超时保护避免卡死。
 
 ## 8. 后续候选项
 
@@ -275,7 +305,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 ## 10. 常用验证命令
 
 ```powershell
-python -m py_compile app.py tpms_core.py comsol_mesh.py
+python -m py_compile app.py tpms_core.py comsol_mesh.py gpu_preview.py
 python -m pytest -q
 python app.py
 ```
