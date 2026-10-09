@@ -95,6 +95,15 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-044 | GPU 隐式曲面预览（Ray Marching） | `gpu_preview.py:12` 新增 `can_use_gpu_preview()`/`surface_index()` 与 330 core GLSL（射线-包围盒求交 + 解析梯度 + 中心差分法线 + 梯度壁厚）；`app.py:468` 重构 `OpenGLMeshView` 为双管线：网格管线保留，新增隐式管线（全屏 quad、uniform 传参、拖动 48 步/静止 112 步、尺寸归一化、Shift+拖动平移）；`MainWindow.generate/_generation_finished` 先刷 GPU 再后台 CPU 网格，诊断视图强制网格回退；自定义公式/编译失败自动回退 | 已完成 |
 | R-045 | 导出精度/面数分级 | 新增导出质量下拉（原始/高~70%/中~40%/低~20%）+ 目标面数 SpinBox，原始默认不改变行为；`tpms_core:prepare_export_mesh` 按面数校验、优先 quadric、回退聚类/原始；`app:export_current` 显示格式/面数/大小，回退提示；`test_export_quality` 覆盖校验与回读 | 已完成 |
 | R-046 | 导出质量 UI 移至顶部工具栏 | 将左侧 `QGroupBox:Export Quality` 移除，改为顶部 `QToolButton.MenuButtonPopup + QMenu`：四档质量单选（`QActionGroup`）、目标面数 `QSpinBox`（`QWidgetAction`）、状态标签；主按钮点击仍按当前选择直接导出，下拉仅改参数；默认原始禁用目标输入；保留 `tpms_core` 算法不变 | 已完成 |
+| R-047 | 开发协作约定 | 从 2026-09-19 起，用户提出的代码、界面、功能和文档更新默认通过 OpenCode 会话执行，并同步更新 DEVELOPMENT_LOG.md；保留现有日志内容，不改其他文件 | 已完成 |
+| R-048 | 导出下拉深色样式与 OpenCode 额度 | 顶部 `QToolButton#exportToolButton` 追加 `::menu-button/:hover/:pressed/:open` 深色样式（`rgba(255,255,255,0.06)` + `border-left` 细分隔线，`menu-arrow 12px`），修复白色窄条；`test_export_quality::test_export_tool_button_style_has_menu_button_states` 覆盖；`Free usage exceeded` 为 OpenCode 外部额度限制，非项目代码错误 | 已完成 |
+| R-049 | 开发执行方式调整 | 记录时间：2026-09-20 00:03:42（Asia/Shanghai）。从该时间起，代码、界面、功能和文档更新不再默认调用 OpenCode，由当前 Codex 会话直接执行；OpenCode 仅在用户明确要求时调用 | 已完成 |
+| R-050 | 开发日志逐次更新规范 | 记录时间：2026-09-20 00:11:15（Asia/Shanghai）。要求开发文档记录每一次更新的唯一编号、精确时间、更新内容、涉及文件、验证结果和完成状态；新记录只追加，不覆盖历史记录 | 已完成 |
+| R-051 | 引入 libfive | 记录时间：2026-10-09 20:33:31（Asia/Shanghai）。新增官方原生内核接入、数学表达式树、自适应表面导出、顶部内核/精度控件、构建脚本和原生验证；在 C 盘临时副本完成。G 盘 exFAT 报告 Full Repair Needed，用户决定先处理磁盘再写回项目 | 实现与验证完成，待写回原项目 |
+| R-052 | 丰富可操作的建模功能 | 记录时间：2026-10-09 21:00:21（Asia/Shanghai）。新增实体与组合工作区、球/盒/圆柱/圆环/TPMS、尺寸/位置/旋转、并集/交集/差集/平滑融合、对象列表、参数项目保存/打开和三种示例。用户允许写回 G 盘，但原生 API 仍报告致命设备错误 | 功能与 C 盘验证完成，G 盘写回受阻 |
+| R-053 | 实体组合入口不明显 | 记录时间：2026-10-09 21:26:11（Asia/Shanghai）。把模式下拉框改为常显双模式按钮，20 px 加粗文字、54 px 高度、深青色选中状态与功能提示；验证切换、生成、TPMS 恢复及两种窗口截图，更新 C 盘可运行版本 | 已完成 |
+| R-054 | 同步 G 盘与排查写入失败 | 记录时间：2026-10-09 21:49:11（Asia/Shanghai）。先备份 G 盘项目及 Git 历史；目录创建仍失败，改用根目录便携 DLL 布局，将 libfive、实体组合、明显模式按钮、文档与图片同步回 G 盘。G 盘全量 89 passed、1 skipped，真实 Qt/OpenGL 三种示例通过 | 同步与验收完成，磁盘故障未修复 |
+| R-055 | 整理 Git 更新与中文备注 | 记录时间：2026-10-09 22:03:56（Asia/Shanghai）。在“新增建模功能”分支整理 libfive、实体与布尔组合、入口按钮、便携安装、文档截图及已有管状核心改动，使用中文提交备注；排除参考仓库与本机 DLL | 已整理，随本次提交记录 |
 
 ## 4. 关键更新详情
 
@@ -194,7 +203,78 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - `app.py` 在顶部工具栏 `export_tool_button:QToolButton.MenuButtonPopup` 追加下拉 `QMenu`：四档质量 `QActionGroup`（原始/高/中/低）、目标面数 `QSpinBox`（`QWidgetAction`）、状态 `QLabel`；主按钮点击直接导出，下拉仅改参数；`_create_export_quality_menu/_on_export_quality_selected/_update_export_quality_defaults/_get_export_quality_and_target` 管理状态，左侧不再占用建模区：`QComboBox` 四档 + `QSpinBox 100-5_000_000` + 信息标签；`_on_export_quality_changed`/`_update_export_quality_defaults` 按原始面数动态设范围与默认值，原始时 Spin 禁用；`_get_export_quality_and_target` + `export_current` 校验并调用 `export_mesh_with_quality`，状态栏显示 `格式 面数 大小 回退?`，回退弹 `QMessageBox`。
 - 默认原始精度，完全不改变现有导出行为与 `current_result.mesh`。
 
+
+### 4.14 顶部导出下拉与深色样式
+
+- 左侧 `QGroupBox:Export Quality` 移除，不再占用建模参数区；导出质量移至顶部 `QToolButton#exportToolButton.MenuButtonPopup + QMenu`，四档质量 `QActionGroup`、目标面数 `QSpinBox`、`QLabel` 状态均置于 `QWidgetAction`，主按钮点击直接导出。
+- `app.py:STYLE` 新增更具体选择器 `QToolButton#exportToolButton` 及其 `::menu-button`、`::menu-button:hover`、`:pressed`、`:open`、`::menu-arrow` 深色样式（`rgba(255,255,255,0.06/0.12)`、`#0f766e`、`border-left`），覆盖全局 `QToolButton` 白色默认，保留 32px 可点击区与箭头可见性，未改 `tpms_core` 算法。
+- 测试：`test_export_quality::test_export_tool_button_style_has_menu_button_states` 校验 `STYLE` 包含 `menu-button` 状态与 `border-left`。
+
+### 4.15 OpenCode 会话与外部额度
+
+- 自 2026-09-19 起，代码/界面/功能/文档更新默认经 OpenCode 会话执行并同步 `DEVELOPMENT_LOG.md`（R-047）。
+- 2026-09-19 出现 `Free usage exceeded` 为 OpenCode 外部服务额度限制，非项目代码错误，不影响本地 `py_compile`/`pytest`/`git` 验证。
+
 ## 5. 验证记录
+
+### R-055：2026-10-09 22:03:56（Asia/Shanghai）本地 Git 更新
+
+- **需求**：提交 Git 更新并填写备注。
+- **范围**：libfive 原生内核接入，实体对象与布尔组合建模，常显模式按钮，便携 DLL 加载，开发文档和截图、第三方许可证、构建支持压缩包；包含原先未提交的 `tpms_core.py` / `comsol_mesh.py` 管状结构改动，以保留新模块依赖的参数接口。`.refs/` 参考仓库、DLL、缓存与模型输出不纳入提交。
+- **备注**：`新增 libfive 实体与布尔组合建模，优化模式入口并同步 G 盘`。
+- **验证**：复用 R-054 对当前代码的全量测试 `89 passed, 1 skipped` 与真实 Qt/OpenGL 三种封闭模型验收；提交前检查暂存差异与文件列表。仅新增日志记录，无额外功能修改。
+- **Git 操作**：在现有“新增建模功能”分支创建本地提交，具体提交编号以 Git 历史为准；本次用户未要求推送 GitHub。
+- **存储兼容处理**：首次 G 盘 `git add` 报 `unable to create temporary file: Invalid argument`，无法插入 CHANGELOG 对象，未产生提交。采用 C 盘独立暂存副本生成正常提交和 Git 对象包，再复制到 G 盘已有 `.git/objects/pack/` 并验证可读性，最后以旧 HEAD 校验更新当前分支引用及索引；避免依赖 G 盘创建新的散列对象目录，不修改 Git 配置。此方式不修复磁盘故障。
+- **差异检查说明**：完整暂存检查发现两份原样分发的 GCC `COPYING.RUNTIME` 许可证末尾含空白行；保留上游许可证原文，仅在该次检查中关闭 `blank-at-eof` 规则，其他空白检查仍启用，未改变仓库配置。
+
+### R-054：2026-10-09 21:49:11（Asia/Shanghai）G 盘同步与存储诊断
+
+- **需求**：G 盘程序没有新功能与按钮改动，要求同步并解释写入失败原因。
+- **实际诊断**：G 盘是 exFAT、未只读、约 628 GB 空闲；卷状态为 Warning / Full Repair Needed，dirty 标记存在。新建 `native/`、`scripts/` 失败，Windows 返回致命设备硬件错误；`docs/libfive-runtime/` 返回 Incorrect function。系统日志包含磁盘 2 的事件 51/153（I/O 错误/重试）及 UASPStor 129（设备重置）。现有目录中可写新文件，测试文件 SHA256 一致。不能仅凭这些事件确定是磁盘本体、USB 线、接口还是桥接器故障。
+- **保护**：在 `C:/Users/郭小亮/TPMS-G-backup-20261009-214007` 备份原项目、`.git`、`.refs/` 和未提交修改；排除缓存与测试输出，robocopy 退出码 1（成功复制）。同步前确认五个待更新文件与基线一致；`tpms_core.py`、`comsol_mesh.py` 与备份哈希一致，没有覆盖已有管状建模改动。
+- **实现**：增加 DLL 便携查找，优先显式环境变量、正常 native 目录，再使用项目根目录。G 盘根目录安装 libfive 与五个依赖 DLL，现有 `docs/` 保存全部第三方许可证。新增模块、测试、文档和截图同步，更新 `app.py`、`.gitignore`、README、CHANGELOG、本日志。正常布局的 `native/`、`scripts/` 文件保存在 G 盘 `libfive-build-support.zip`，可在磁盘恢复后解压；程序运行不依赖 C 盘副本。
+- **验证**：逐文件 SHA256 校验；C 盘原生专项 `28 passed`。实际从 `G:/TPMS建模设计` 加载 app 与根目录 DLL，版本 `c9e9734`；全量 `89 passed, 1 skipped`（已有无显示 GPU 测试跳过），测试临时目录使用 C 盘。真实 Windows Qt/OpenGL 后台生成球体贯穿孔 37,040 面、平滑双球 27,772 面、圆柱 TPMS 流道 91,528 面，均封闭；1120×720 与 1440×900 截图确认新按钮与模型可见。`git diff --check` 通过，只有行尾转换提示。
+- **状态与限制**：同步完成；未提交、推送或改变分支。磁盘的目录创建/I/O 故障仍存在，便携安装不等于磁盘修复；未执行 `chkdsk /f`、`/r` 或格式化。先保留备份、检查 USB 线/直连接口，再安排磁盘修复。
+
+### R-053：2026-10-09 21:26:11（Asia/Shanghai）入口可发现性
+
+- **需求/原因**：用户认为“实体与组合建模 · libfive”入口不明显，原下拉框只展示当前模式，隐藏另一个工作区。
+- **实现**：左侧顶部改为原生 QTabBar 双模式入口“TPMS 建模 / 实体组合”，保持常显、等宽展开；20 px 加粗、至少 54 px 高度、边框与悬停反馈、深青色选中底白字，支持键盘切换。下方展示模式用途；libfive 内核信息留在相应建模逻辑和导出选项中。
+- **指导**：使用 ui-ux-pro-max 的 Active State 指导，突出当前模式，并沿用工程软件色彩。
+- **影响文件**：`app.py`、`README.md`、`CHANGELOG.md`、`docs/solid-modeling.md`、`docs/solid-modeling-ui.png`、`docs/solid-modeling-panel.png`、本日志。
+- **验证**：现有模式切换/编辑/TPMS 恢复测试 `2 passed`；真实 Windows OpenGL 窗口完成球体贯穿孔、双球融合、圆柱 TPMS 流道三个示例；1120×720、1440×900 截图检查入口完整可见，无横向裁切。
+- **位置/状态**：`C:/Users/郭小亮/TPMS-Studio-libfive` 已完成；G 盘原项目尚不包含实体建模版本，本次没有覆盖原项目，也没有提交或推送。
+
+### R-052：2026-10-09 21:00:21（Asia/Shanghai）实体与组合工作区
+
+- **需求**：用户指出仅增加导出内核无法丰富建模能力，要求提供实际可操作的新建模功能。
+- **实现**：左侧工作区增加“实体与组合建模 · libfive”；基本对象球、盒、圆柱、圆环、TPMS 独立参数快照；编辑尺寸、XYZ 位置与旋转；组合并集/交集/差集 A−B/基本实体平滑融合；可继续引用组合结果、选择最终输出、复制、删除、修改名称与输入关系。
+- **数据与可靠性**：有向无环对象引用，最多 64 对象；阻止循环引用、无效输入、引用对象删除、无效尺寸/精度；JSON 原子保存完整参数与关系并校验读取；生成前应用当前对象属性；后台生成使用独立快照，失败保留上次结果。
+- **实际使用**：三种可直接加载示例：圆柱内 Gyroid 与贯穿流道（TPMS∩外柱−流道）、球体贯穿孔、双球平滑融合。TPMS 参数从原工作区读取，支持现有壁厚、梯度与孔隙率设置。
+- **预览导出**：libfive 直接生成封闭网格，已有 OpenGL 网格视口显示最终对象；导出同一网格，不误用 TPMS 参数重生成。任意位置模型在预览中居中，导出世界坐标保持不变；显示实际面数和体积，通用组合不显示没有明确定义的相对密度/孔隙率。
+- **界面验证**：使用 ui-ux-pro-max 的分组、渐进展开、内联错误及后台反馈指导；测试 1120×720、1440×900；首次发现属性区横向裁切，改为纵向 XYZ 行和可收缩控件，修复后真实截图复核。真实 Windows OpenGL 截图展示圆柱 TPMS 与流道模型，保存为 `docs/solid-modeling-ui.png`；单独面板截图 `docs/solid-modeling-panel.png`。
+- **影响文件**：新增 `solid_model.py`、`solid_panel.py`、`test_solid_model.py`、`scripts/verify_solid_ui.py`、`docs/solid-modeling.md` 与两张截图；修改 `app.py`、`libfive_backend.py`、`README.md`、`CHANGELOG.md`、`docs/libfive.md`、本日志与写回说明。
+- **验证**：第一轮全量 `83 passed, 1 skipped`；布局与预览修正后全量仍 `83 passed, 1 skipped`；额外增加畸形项目/坐标/TPMS 恢复验证后实体专项 `18 passed`。真实 Qt 工作线程测试：球体孔 37,040 面、融合双球 27,772 面、圆柱 TPMS 流道 91,528 面；窗口事件循环持续响应，导出可用，组合 CFD 操作禁用。原生体积对照球、盒、圆柱、圆环与布尔盒结果均通过；STL 回读封闭。
+- **限制**：组合 CFD 体网格尚未实现；TPMS 场不是精确距离场，平滑融合只允许基本实体组合；管状卷绕 TPMS 不支持；薄壁/微孔仍需用户做精度收敛检查；无拖拽节点图、撤销重做、STEP/B-Rep。相对密度/孔隙率显示“—”而非错误估计。
+- **安装状态**：用户表示 G 盘已处理并授权写回；再次检查仍 `Warning / Full Repair Needed`，Windows `Directory.CreateDirectory()` 抛出“设备硬件出现致命错误”。当前不覆盖原项目，保存完整实现、DLL 与验证截图在 C 盘副本，待可写后重新核验并合并。未提交/推送 Git。
+- **最终复核时间**：2026-10-09 21:03:08（Asia/Shanghai）；全量 `87 passed, 1 skipped`。另存可运行交付副本到 `C:/Users/郭小亮/TPMS-Studio-libfive`，原 G 盘写回仍受阻。
+
+
+### R-051：2026-10-09 20:33:31（Asia/Shanghai）libfive 接入
+
+- **需求**：用户要求引入 libfive，允许询问接入问题。本阶段先接入可选表面导出内核。
+- **实际实现**：`libfive_backend.py` 使用官方 C API、显式树/网格释放，延迟加载本机 DLL；支持五种 TPMS 的片层/实体、自定义 AST 公式（不使用 eval）、公式布尔组合与 X/Y/Z 梯度壁厚。片层梯度使用现有采样间距的中心差分；通过乘以正梯度归一化项保持材料符号和零等值面，避免区间除零。
+- **导出行为**：使用已生成模型的已求解孔隙率参数，不重复求解；顶部导出下拉新增内核选择和 mm 网格尺寸，libfive 模式暂停面数简化选项；Qt 工作线程导出，显示实际面数/大小；检查封闭性、朝向、有限顶点、正体积；先写临时文件再替换，失败保留旧文件。
+- **界面修复**：检查发现已有导出主按钮未连接点击事件，补上连接；后台导出期间禁用冲突操作并保留各控件原状态，任务结束后恢复；运行中阻止关闭窗口导致线程被销毁。
+- **构建**：固定 libfive 官方版本 `c9e97343e0af998cd1696e85583eccba95532b96`；MSYS2 UCRT64 GCC 16.2 x64 Release，Eigen 3.4.0、libpng/zlib。MSYS2 的 Eigen 包为 5，改为单独获取兼容 Eigen 3.4 并校验 SHA256。中文临时路径导致汇编器 Illegal byte sequence，使用 ASCII 构建/临时目录。没有修改官方内核源码。
+- **影响文件**：`app.py`、`libfive_backend.py`、`test_libfive_backend.py`、`native/CMakeLists.txt`、`native/MPL-2.0.txt`、`scripts/build_libfive.ps1`、`scripts/verify_libfive_ui.py`、`docs/libfive.md`、`.gitignore`、`README.md`、`CHANGELOG.md`、本文件；本机产物 `native/libfive/` 不进入 Git。
+- **验证**：基线 `43 passed, 1 skipped`；接入后全量 `69 passed, 1 skipped`；新增原生/保护/界面测试 `26 passed`；最后导出相关复测 `34 passed`。唯一跳过项是已有真实 GPU 绘制测试。真实球体与球减圆柱、五种曲面两种模式、梯度三轴、孔隙率参数复用、STL/OBJ/PLY 回读均通过。
+- **实际运行证据**：40 mm 两周期 Gyroid、每周期 32 点、libfive 0.5 mm：614,880 面，封闭，孔隙率约 0.81906，约 19.36 秒（单次本机测试，不作为性能保证）。Qt 真实后台导出 10 mm Gyroid：75,372 面、3.59 MB，主事件循环持续处理事件；菜单截图人工检查标签和值可读、控件完整。
+- **安装验证**：随项目构建脚本成功重新构建并安装 DLL、依赖与许可证；并发测试进程加载 DLL 时 Windows 拒绝覆盖，测试退出后重试成功。文档说明安装前关闭软件。
+- **环境阻碍**：G 盘为 TOSHIBA External USB 3.0、exFAT，文件系统 HealthStatus=Warning、OperationalStatus=Full Repair Needed，新建目录返回 WinError 483/1。用户明确选择“我先处理 G 盘，之后再写回原项目”。已停止写入 G 盘，保留原项目的既有管状结构修改和 `.refs/`，未提交或推送 Git。
+- **完成位置**：`C:/Users/郭小亮/AppData/Local/Temp/tpms-libfive-work`；原项目 `G:/TPMS建模设计` 待磁盘恢复后重新检查差异再写回。
+- **限制**：管状卷绕明确不支持；预览、COMSOL 体网格继续走原有路径；自定义公式需满足实数定义域并进行精度收敛检查；没有新增节点编辑器、基本体专用按钮或 STEP/B-Rep；壁厚仍是原有距离近似。采用 ui-ux-pro-max 的长任务反馈/主线程响应指导，新增参数沿用现有菜单。
+- **状态**：实现与验证完成；安装到原 G 盘项目待用户处理磁盘。
 
 ### 2026-09-17
 
@@ -253,6 +333,13 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 测试：`python -m pytest -q` 42 passed 1 skipped（原 22 + gpu 13 + export 7），`test_export_quality` 覆盖 原始不改变/目标校验/默认70/40/20%/简化或回退有效网格/多格式回读/UI 原始默认（headless skip 明确）。
 - 手动：Gyroid 4288 面模型导出 原始 4288/高 3002/中 1715/低 857 面，OBJ/PLY 均可回读；目标 >原始 抛 ValueError；`fast_simplification` 缺失时回退到原始并提示，不伪造。
 
+
+### 2026-09-19（导出下拉与深色样式）
+
+- 语法：`python -m py_compile app.py` 通过；`QToolButton#exportToolButton::menu-button` 深色样式已覆盖全局白色。
+- 测试：`python -m pytest -q` 43 passed, 1 skipped（`test_export_tool_button_style_has_menu_button_states` 通过）；`git diff --check` 仅 CRLF 警告。
+- 外部：`Free usage exceeded` 为 OpenCode 额度限制，已在 R-048/§4.15 记录，不影响项目构建。
+
 ## 6. 技术决策
 
 ### D-001：预览和导出解耦
@@ -306,10 +393,12 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 
 新需求不覆盖历史条目，在第 3 节末尾追加：
 
+每一次更新必须记录唯一编号、更新时间（`YYYY-MM-DD HH:mm:ss`，`Asia/Shanghai`）、更新内容、涉及文件、验证结果和完成状态。
+
 ```markdown
 ### R-XXX：需求标题
 
-- **日期**：YYYY-MM-DD
+- **日期**：YYYY-MM-DD HH:mm:ss（Asia/Shanghai）
 - **需求**：用户想解决的问题。
 - **问题/原因**：缺陷或技术背景。
 - **实现**：实际修改的行为。

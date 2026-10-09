@@ -13,6 +13,9 @@ htmlcov/
 venv/
 env/
 build/
+native/libfive/
+# Portable native runtime (source/build instructions remain versioned)
+/*.dll
 dist/
 *.egg-info/
 

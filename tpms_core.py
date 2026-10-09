@@ -9,6 +9,10 @@ from typing import Callable
 import numpy as np
 import trimesh
 from skimage.measure import marching_cubes
+from trimesh.intersections import slice_faces_plane
+
+
+_TUBULAR_SEAM_PAD = 2
 
 
 TPMS_FORMULAS: dict[str, Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]] = {
@@ -189,6 +193,8 @@ class TPMSParameters:
     gradient_axis: str = "Z"
     gradient_thickness_start: float = 1.0
     gradient_thickness_end: float = 5.0
+    tubular_enabled: bool = False
+    tubular_inner_radius: float = 10.0
 
     def validate(self) -> None:
         if self.surface != CUSTOM_SURFACE and self.surface not in TPMS_FORMULAS:
@@ -218,6 +224,11 @@ class TPMSParameters:
                 raise ValueError("梯度壁厚仅支持片层结构")
             if self.target_porosity is not None:
                 raise ValueError("梯度壁厚与目标孔隙率不能同时启用")
+        if self.tubular_enabled:
+            if self.tubular_inner_radius <= 0:
+                raise ValueError("管状结构内径必须大于 0")
+            if self.tubular_inner_radius > 2000:
+                raise ValueError("管状结构内径不能超过 2000 mm")
 
 
 @dataclass(frozen=True)
@@ -241,9 +252,8 @@ class MeshResult:
 
     @property
     def relative_density(self) -> float:
-        p = self.parameters
-        box_volume = p.size_x * p.size_y * p.size_z
-        return self.volume / box_volume if box_volume else 0.0
+        reference = _reference_volume(self.parameters)
+        return self.volume / reference if reference else 0.0
 
     @property
     def porosity(self) -> float:
@@ -274,9 +284,8 @@ class FluidDomainResult:
 
     @property
     def fluid_fraction(self) -> float:
-        p = self.parameters
-        box_volume = p.size_x * p.size_y * p.size_z
-        return self.volume / box_volume if box_volume else 0.0
+        reference = _reference_volume(self.parameters)
+        return self.volume / reference if reference else 0.0
 
 
 def simplify_mesh_for_preview(mesh: trimesh.Trimesh, target_faces: int) -> PreviewMesh:
@@ -391,10 +400,52 @@ def _grid(parameters: TPMSParameters) -> tuple[np.ndarray, np.ndarray, np.ndarra
             dtype=np.float32,
         )
 
-    x = extended_cell_centers(p.size_x, counts[0])
+    def tubular_centers(size: float, count: int) -> np.ndarray:
+        """Circumferential samples with extra seam padding for plane clipping."""
+        step = size / count
+        pad = _TUBULAR_SEAM_PAD
+        return np.linspace(
+            -size / 2.0 - pad * step,
+            size / 2.0 + pad * step,
+            count + 1 + 2 * pad,
+            dtype=np.float32,
+        )
+
+    x = (
+        tubular_centers(p.size_x, counts[0])
+        if p.tubular_enabled
+        else extended_cell_centers(p.size_x, counts[0])
+    )
     y = extended_cell_centers(p.size_y, counts[1])
     z = extended_cell_centers(p.size_z, counts[2])
     return x, y, z
+
+
+def _tubular_phase_x(parameters: TPMSParameters, x: np.ndarray) -> np.ndarray:
+    """Circumferential phase from the sample index so both seam ends match bitwise."""
+    period = parameters.cells_x * parameters.samples_per_cell
+    indices = np.arange(len(x), dtype=np.int64) % period
+    phase = 2.0 * np.pi * (indices / parameters.samples_per_cell)
+    return np.asarray(phase, dtype=np.float32).reshape(-1, 1, 1)
+
+
+def _ensure_tubular_periodic(
+    parameters: TPMSParameters,
+    field: np.ndarray,
+    x: np.ndarray,
+) -> None:
+    """Reject fields that are not periodic around the circumference."""
+    count = parameters.cells_x * parameters.samples_per_cell
+    pad = _TUBULAR_SEAM_PAD
+    if len(x) != count + 1 + 2 * pad:
+        return
+    low = np.asarray(field[pad], dtype=np.float64)
+    high = np.asarray(field[pad + count], dtype=np.float64)
+    scale = float(field.max() - field.min()) or 1.0
+    if float(np.max(np.abs(low - high))) > 1e-4 * scale:
+        raise ValueError(
+            "管状结构要求隐式场在圆周方向周期重复，当前公式在接缝处不连续"
+        )
 
 
 def _material_scalar_field(
@@ -415,7 +466,10 @@ def _material_scalar_field(
     x, y, z = _grid(p)
     xx, yy, zz = np.meshgrid(x, y, z, indexing="ij", sparse=True)
 
-    phase_x = 2.0 * np.pi * p.cells_x * (xx / p.size_x + 0.5)
+    if p.tubular_enabled:
+        phase_x = _tubular_phase_x(p, x)
+    else:
+        phase_x = 2.0 * np.pi * p.cells_x * (xx / p.size_x + 0.5)
     phase_y = 2.0 * np.pi * p.cells_y * (yy / p.size_y + 0.5)
     phase_z = 2.0 * np.pi * p.cells_z * (zz / p.size_z + 0.5)
     if p.surface == CUSTOM_SURFACE:
@@ -426,6 +480,8 @@ def _material_scalar_field(
         field = evaluate_implicit_formula(p.formula, xx, yy, zz, aliases)
     else:
         field = TPMS_FORMULAS[p.surface](phase_x, phase_y, phase_z).astype(np.float32)
+    if p.tubular_enabled:
+        _ensure_tubular_periodic(p, field, x)
     spacing = tuple(float(v) for v in (x[1] - x[0], y[1] - y[0], z[1] - z[0]))
     gradients = np.gradient(field, *spacing, edge_order=1)
     grad_norm = np.sqrt(sum(component * component for component in gradients))
@@ -471,14 +527,16 @@ def _box_distance(
     xx: np.ndarray,
     yy: np.ndarray,
     zz: np.ndarray,
+    skip_x: bool = False,
 ) -> np.ndarray:
-    return np.maximum.reduce(
-        (
-            np.broadcast_to(np.abs(xx) - p.size_x / 2.0, scalar_shape),
-            np.broadcast_to(np.abs(yy) - p.size_y / 2.0, scalar_shape),
-            np.broadcast_to(np.abs(zz) - p.size_z / 2.0, scalar_shape),
-        )
-    )
+    """Distance to the box wall; ``skip_x`` leaves the circumference uncapped."""
+    terms = [
+        np.broadcast_to(np.abs(yy) - p.size_y / 2.0, scalar_shape),
+        np.broadcast_to(np.abs(zz) - p.size_z / 2.0, scalar_shape),
+    ]
+    if not skip_x:
+        terms.append(np.broadcast_to(np.abs(xx) - p.size_x / 2.0, scalar_shape))
+    return np.maximum.reduce(terms)
 
 
 def _mesh_scalar_field(
@@ -500,14 +558,76 @@ def _mesh_scalar_field(
     return mesh
 
 
+def _reference_volume(parameters: TPMSParameters) -> float:
+    """Volume of the design domain, used for relative density and fluid fraction."""
+    p = parameters
+    if p.tubular_enabled:
+        inner = p.tubular_inner_radius
+        outer = inner + p.size_y
+        return float(np.pi * (outer * outer - inner * inner) * p.size_z)
+    return float(p.size_x * p.size_y * p.size_z)
+
+
+def _clip_at_seam_planes(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    size_x: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Cut the box mesh at x = ±size_x / 2 so both seam outlines match exactly."""
+    planes = (
+        (-0.5 * size_x, (1.0, 0.0, 0.0)),
+        (0.5 * size_x, (-1.0, 0.0, 0.0)),
+    )
+    for plane, normal in planes:
+        vertices, faces, _uv = slice_faces_plane(
+            np.asarray(vertices, dtype=np.float64),
+            np.asarray(faces, dtype=np.int64),
+            plane_origin=(plane, 0.0, 0.0),
+            plane_normal=normal,
+        )
+        vertices = np.asarray(vertices, dtype=np.float64)
+        faces = np.asarray(faces, dtype=np.int64)
+        on_plane = np.abs(vertices[:, 0] - plane) < 1e-6
+        vertices[on_plane, 0] = plane
+    return vertices, faces
+
+
+def _wrap_tubular_ring(mesh: trimesh.Trimesh, parameters: TPMSParameters) -> trimesh.Trimesh:
+    """Wrap a box-domain mesh into a ring: X becomes circumference, Y radius, Z stays axial."""
+    p = parameters
+    vertices, faces = _clip_at_seam_planes(mesh.vertices, mesh.faces, p.size_x)
+    theta = 2.0 * np.pi * (vertices[:, 0] + 0.5 * p.size_x) / p.size_x
+    radius = p.tubular_inner_radius + (vertices[:, 1] + 0.5 * p.size_y)
+    if np.any(radius <= 0.0):
+        raise ValueError("管状结构内径过小，卷绕后出现非正半径")
+    wrapped_x = radius * np.cos(theta)
+    wrapped_y = radius * np.sin(theta)
+    seam = np.abs(np.abs(vertices[:, 0]) - 0.5 * p.size_x) < 1e-6
+    wrapped_x[seam] = radius[seam]
+    wrapped_y[seam] = 0.0
+    wrapped = trimesh.Trimesh(
+        vertices=np.column_stack([wrapped_x, wrapped_y, vertices[:, 2]]),
+        faces=faces.copy(),
+        process=False,
+    )
+    # 接缝两侧顶点重合，按容差焊接后环体才是封闭实体
+    wrapped.merge_vertices(digits_vertex=6)
+    if not wrapped.is_watertight:
+        trimesh.repair.fill_holes(wrapped)
+    wrapped.fix_normals()
+    return wrapped
+
+
 def generate_tpms(parameters: TPMSParameters) -> MeshResult:
     """Generate a closed TPMS mesh clipped to the requested bounding box."""
     p, x, y, z, spacing, material_scalar, xx, yy, zz = _material_scalar_field(parameters)
     clipped_scalar = np.maximum(
         material_scalar,
-        _box_distance(p, material_scalar.shape, xx, yy, zz),
+        _box_distance(p, material_scalar.shape, xx, yy, zz, skip_x=p.tubular_enabled),
     ).astype(np.float32)
     mesh = _mesh_scalar_field(clipped_scalar, x, y, z, spacing)
+    if p.tubular_enabled:
+        mesh = _wrap_tubular_ring(mesh, p)
     mesh, removed_components, removed_faces = remove_tiny_components(mesh)
     return MeshResult(
         mesh=mesh,
@@ -522,9 +642,11 @@ def generate_fluid_domain(parameters: TPMSParameters) -> FluidDomainResult:
     p, x, y, z, spacing, material_scalar, xx, yy, zz = _material_scalar_field(parameters)
     fluid_scalar = np.maximum(
         -material_scalar,
-        _box_distance(p, material_scalar.shape, xx, yy, zz),
+        _box_distance(p, material_scalar.shape, xx, yy, zz, skip_x=p.tubular_enabled),
     ).astype(np.float32)
     mesh = _mesh_scalar_field(fluid_scalar, x, y, z, spacing)
+    if p.tubular_enabled:
+        mesh = _wrap_tubular_ring(mesh, p)
     mesh, removed_components, removed_faces = remove_tiny_components(mesh)
     return FluidDomainResult(
         mesh=mesh,

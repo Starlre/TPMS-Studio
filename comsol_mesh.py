@@ -29,6 +29,23 @@ REGION_COLORS = {
 }
 
 
+def _domain_extents(parameters: TPMSParameters) -> tuple[float, float, float]:
+    """Outer extents of the flow domain, used for refinement boxes and boundary limits."""
+    if parameters.tubular_enabled:
+        outer = 2.0 * (parameters.tubular_inner_radius + parameters.size_y)
+        return (outer, outer, parameters.size_z)
+    return (parameters.size_x, parameters.size_y, parameters.size_z)
+
+
+def _guard_tubular_flow_axis(
+    parameters: TPMSParameters,
+    options: CFDMeshOptions,
+) -> None:
+    """A wrapped ring can only be driven along its axis."""
+    if parameters.tubular_enabled and options.flow_axis != "Z":
+        raise ValueError("管状（环形）结构的流动方向必须是 Z（轴向）")
+
+
 @dataclass(frozen=True)
 class CFDMeshOptions:
     flow_axis: str = "X"
@@ -558,9 +575,10 @@ def generate_simulation_region_preview(
     options: CFDMeshOptions,
 ) -> PreviewMesh:
     """Generate color-coded simulation boundaries without creating volume cells."""
-    sizes = (parameters.size_x, parameters.size_y, parameters.size_z)
+    sizes = _domain_extents(parameters)
     preview_options = replace(options, boundary_layer_enabled=False)
     preview_options.validate(sizes)
+    _guard_tubular_flow_axis(parameters, options)
     fluid_parameters = replace(
         parameters,
         samples_per_cell=options.surface_samples_per_cell,
@@ -610,8 +628,9 @@ def export_comsol_fluid_mesh(
     progress: Callable[[str], None] | None = None,
 ) -> CFDMeshResult:
     """Generate the void domain and export grouped, quality-checked CFD meshes."""
-    sizes = (parameters.size_x, parameters.size_y, parameters.size_z)
+    sizes = _domain_extents(parameters)
     options.validate(sizes)
+    _guard_tubular_flow_axis(parameters, options)
     try:
         import gmsh
     except ImportError as exc:

@@ -47,6 +47,7 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStatusBar,
+    QTabBar,
     QTabWidget,
     QToolBar,
     QVBoxLayout,
@@ -84,6 +85,13 @@ from gpu_preview import (
     can_use_gpu_preview,
     surface_index,
 )
+
+from libfive_backend import (
+    backend_status, export_libfive_mesh, suggested_cell_size,
+    validate_libfive_parameters,
+)
+from solid_model import SolidScene, SolidResult, generate_solid
+from solid_panel import SolidPanel
 
 
 STYLE = """
@@ -357,10 +365,34 @@ QPushButton#generateButton:pressed { background: #0f5f59; }
 QPushButton#generateButton:disabled { background: #cbd5e1; color: #f1f5f9; border-color: #cbd5e1; }
 QWidget#parameterDeck QPushButton#generateButton { min-width: 0; border-radius: 10px; }
 
+/* Always-visible modeling modes, above the parameter pages. */
+QTabBar#modelingModeSwitch { background: transparent; }
+QTabBar#modelingModeSwitch::tab {
+    background: #ffffff;
+    color: #334155;
+    border: 2px solid #94a3b8;
+    border-radius: 8px;
+    min-height: 54px;
+    padding: 0 10px;
+    margin-right: 4px;
+    font-size: 20px;
+    font-weight: 700;
+}
+QTabBar#modelingModeSwitch::tab:hover { background: #f0fdfa; border-color: #0f766e; }
+QTabBar#modelingModeSwitch::tab:selected { background: #0f766e; color: #ffffff; border-color: #0f5f59; }
+QTabBar#modelingModeSwitch::tab:disabled { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+QLabel#modelingModeHint { color: #475569; font-size: 16px; padding: 2px 0; }
+
 /* Status bar - subtle */
 QStatusBar { background: #ffffff; border-top: 1px solid #e2e8f0; color: #475569; font-size: 15px; font-weight: 500; }
 QStatusBar::item { border: none; }
 """
+
+
+class ModelingModeSwitch(QTabBar):
+    """Visible mode tabs with the data interface used by generation workers."""
+    def currentData(self):
+        return self.tabData(self.currentIndex())
 
 
 class MeshWorker(QObject):
@@ -382,6 +414,38 @@ class MeshWorker(QObject):
             else:
                 preview = simplify_mesh_for_preview(result.mesh, target_faces=1_500_000)
             self.finished.emit(result, preview)
+        except Exception as exc:
+            traceback.print_exc()
+            self.failed.emit(str(exc))
+
+
+class SolidModelWorker(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, scene: SolidScene):
+        super().__init__()
+        self.scene = scene
+
+    def run(self):
+        try:
+            self.finished.emit(generate_solid(self.scene))
+        except Exception as exc:
+            traceback.print_exc()
+            self.failed.emit(str(exc))
+
+
+class LibfiveExportWorker(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, result: MeshResult, destination: Path, cell_size: float):
+        super().__init__()
+        self.result, self.destination, self.cell_size = result, destination, cell_size
+
+    def run(self) -> None:
+        try:
+            self.finished.emit(export_libfive_mesh(self.result, self.destination, self.cell_size))
         except Exception as exc:
             traceback.print_exc()
             self.failed.emit(str(exc))
@@ -1297,12 +1361,13 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1120, 720)
         self.resize(1366, 768)
         self.current_result: MeshResult | None = None
+        self.current_solid_result: SolidResult | None = None
         self.current_preview: PreviewMesh | None = None
         self.current_cfd_result: CFDMeshResult | None = None
         self.low_quality_preview: PreviewMesh | None = None
         self.region_preview: PreviewMesh | None = None
         self.worker_thread: QThread | None = None
-        self.worker: MeshWorker | CFDMeshWorker | None = None
+        self.worker: MeshWorker | CFDMeshWorker | LibfiveExportWorker | None = None
         self._gmsh_module = None
         self._gmsh_initialized_by_app = False
         self._build_toolbar()
@@ -1335,6 +1400,7 @@ class MainWindow(QMainWindow):
         self.export_tool_button.setPopupMode(QToolButton.MenuButtonPopup)
         self.export_tool_button.setMenu(self.export_menu)
         self.export_tool_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.export_tool_button.clicked.connect(self.export_current)
         self.export_action.changed.connect(lambda: self.export_tool_button.setEnabled(self.export_action.isEnabled()))
         self.export_tool_button.setEnabled(False)
         toolbar.addWidget(self.export_tool_button)
@@ -1443,6 +1509,23 @@ class MainWindow(QMainWindow):
         subtitle.setObjectName("panelSubtitle")
         deck_layout.addWidget(title)
         deck_layout.addWidget(subtitle)
+        self.modeling_mode = ModelingModeSwitch()
+        self.modeling_mode.setObjectName("modelingModeSwitch")
+        for label, data, tip in (("TPMS 建模", "tpms", "设置曲面、壁厚、孔隙率与 CFD 网格"),
+                                 ("实体组合", "solid", "添加球、盒、圆柱、圆环，执行布尔组合与 TPMS 填充")):
+            index = self.modeling_mode.addTab(label)
+            self.modeling_mode.setTabData(index, data)
+            self.modeling_mode.setTabToolTip(index, tip)
+        self.modeling_mode.setExpanding(True)
+        self.modeling_mode.setDrawBase(False)
+        self.modeling_mode.setUsesScrollButtons(False)
+        self.modeling_mode.setFocusPolicy(Qt.StrongFocus)
+        self.modeling_mode.setAccessibleName("建模工作区")
+        deck_layout.addWidget(self.modeling_mode)
+        self.modeling_mode_hint = QLabel("TPMS 曲面 · 壁厚与孔隙率 · CFD 网格")
+        self.modeling_mode_hint.setObjectName("modelingModeHint")
+        self.modeling_mode_hint.setWordWrap(True)
+        deck_layout.addWidget(self.modeling_mode_hint)
 
         self.parameter_tabs = QTabWidget()
         self.parameter_tabs.setObjectName("parameterTabs")
@@ -1711,6 +1794,11 @@ class MainWindow(QMainWindow):
         cfd_layout.addStretch(1)
         self.parameter_tabs.addTab(self._scroll_page(cfd_tab), "CFD 网格")
         deck_layout.addWidget(self.parameter_tabs, 1)
+        self.solid_panel = SolidPanel(self._parameters)
+        self.solid_panel.setVisible(False)
+        self.solid_panel.changed.connect(self._solid_parameters_changed)
+        deck_layout.addWidget(self.solid_panel, 1)
+        self.modeling_mode.currentChanged.connect(self._modeling_mode_changed)
 
         self.generate_button = QPushButton("生成模型")
         self.generate_button.setObjectName("generateButton")
@@ -1829,6 +1917,35 @@ class MainWindow(QMainWindow):
 
     def _create_export_quality_menu(self):
         from PyQt5.QtWidgets import QActionGroup, QWidgetAction, QLabel, QSpinBox, QHBoxLayout, QVBoxLayout, QWidget
+        backend_widget = QWidget()
+        backend_layout = QFormLayout(backend_widget)
+        backend_layout.setContentsMargins(12, 8, 12, 8)
+        self.export_backend_combo = QComboBox()
+        self.export_backend_combo.addItem("现有网格", "mesh")
+        self.export_backend_combo.addItem("libfive 隐式内核", "libfive")
+        self.export_backend_combo.setAccessibleName("导出内核")
+        self.export_backend_combo.setToolTip("libfive 从数学函数重新划分表面网格；不使用目标面数简化")
+        backend_layout.addRow("导出内核", self.export_backend_combo)
+        self.libfive_cell_spin = QDoubleSpinBox()
+        self.libfive_cell_spin.setDecimals(4)
+        self.libfive_cell_spin.setRange(0.001, 100.0)
+        self.libfive_cell_spin.setSingleStep(0.05)
+        self.libfive_cell_spin.setValue(0.3)
+        self.libfive_cell_spin.setSuffix(" mm")
+        self.libfive_cell_spin.setEnabled(False)
+        self.libfive_cell_spin.setAccessibleName("libfive 网格尺寸")
+        self.libfive_cell_spin.setToolTip("越小越精细、耗时越长；表示八叉树最小划分尺度，不是误差保证")
+        backend_layout.addRow("libfive 网格尺寸", self.libfive_cell_spin)
+        self.libfive_backend_info = QLabel("现有网格：使用已生成模型及下面的面数选项")
+        self.libfive_backend_info.setWordWrap(True)
+        self.libfive_backend_info.setStyleSheet("color: #475569; font-size: 16px;")
+        self.libfive_backend_info.setMaximumWidth(430)
+        backend_layout.addRow(self.libfive_backend_info)
+        backend_action = QWidgetAction(self)
+        backend_action.setDefaultWidget(backend_widget)
+        self.export_menu.addAction(backend_action)
+        self.export_menu.addSeparator()
+        self.export_backend_combo.currentIndexChanged.connect(self._on_export_backend_changed)
         self._export_quality_actions = {}
         self.export_quality_action_group = QActionGroup(self)
         self.export_quality_action_group.setExclusive(True)
@@ -1879,6 +1996,24 @@ class MainWindow(QMainWindow):
         status_action.setDefaultWidget(status_widget)
         self.export_menu.addAction(status_action)
         return self.export_quality_action_group
+
+    def _on_export_backend_changed(self, _index=0) -> None:
+        native = self.export_backend_combo.currentData() == "libfive"
+        self.libfive_cell_spin.setEnabled(native)
+        for action in self._export_quality_actions.values():
+            action.setEnabled(not native)
+        self.export_target_spin.setEnabled(
+            not native and not self._export_quality_actions[EXPORT_QUALITY_ORIGINAL].isChecked())
+        if native:
+            available, message = backend_status()
+            self.libfive_backend_info.setText(
+                f"{message} · 从数学函数生成封闭网格，面数由精度决定。"
+                if available else "libfive 未安装：请运行 scripts/build_libfive.ps1")
+            self.libfive_backend_info.setToolTip(message)
+            self.export_quality_info.setText("libfive 使用网格尺寸；下方简化选项暂停使用")
+        else:
+            self.libfive_backend_info.setText("现有网格：使用已生成模型及下面的面数选项")
+            self._on_export_quality_changed(0)
 
     def _on_export_quality_selected(self, quality: str) -> None:
         for q, act in getattr(self, '_export_quality_actions', {}).items():
@@ -1938,6 +2073,8 @@ class MainWindow(QMainWindow):
             self.export_target_spin.setEnabled(False)
             self.export_quality_info.setText("原始：导出完整网格，不简化")
         self.export_target_spin.blockSignals(False)
+        self.libfive_cell_spin.setValue(suggested_cell_size(self.current_result.parameters))
+        self._on_export_backend_changed()
 
     def _get_export_quality_and_target(self) -> tuple[str, int | None]:
         quality = EXPORT_QUALITY_ORIGINAL
@@ -1959,7 +2096,7 @@ class MainWindow(QMainWindow):
         self.region_action.blockSignals(True)
         self.region_action.setChecked(False)
         self.region_action.blockSignals(False)
-        can_enable = self.current_result is not None and not (
+        can_enable = self.current_result is not None and self.current_solid_result is None and not (
             self.worker_thread is not None and self.worker_thread.isRunning()
         )
         self.region_action.setEnabled(can_enable)
@@ -2032,6 +2169,9 @@ class MainWindow(QMainWindow):
     def generate(self) -> None:
         if self.worker_thread is not None and self.worker_thread.isRunning():
             return
+        if self.modeling_mode.currentData() == "solid":
+            self._generate_solid()
+            return
         parameters = self._parameters()
         try:
             parameters.validate()
@@ -2079,6 +2219,10 @@ class MainWindow(QMainWindow):
         self.worker_thread.start()
 
     def _generation_finished(self, result: MeshResult, preview: PreviewMesh) -> None:
+        self.current_solid_result = None
+        self.export_backend_combo.setEnabled(True)
+        for action in (self.cfd_export_action, self.quality_report_action, self.low_quality_action, self.region_action):
+            action.setToolTip("")
         self.current_result = result
         self.current_preview = preview
         # 保留网格预览作为 fallback；GPU 预览与导出使用同一组已求解参数
@@ -2160,7 +2304,19 @@ class MainWindow(QMainWindow):
     def export_current(self) -> None:
         if self.current_result is None:
             return
-        default_name = f"{self.current_result.parameters.surface.lower()}_tpms.stl"
+        if self.worker_thread is not None and self.worker_thread.isRunning():
+            return
+        native = self.current_solid_result is None and self.export_backend_combo.currentData() == "libfive"
+        if native:
+            try:
+                validate_libfive_parameters(self.current_result.parameters, self.libfive_cell_spin.value())
+                available, message = backend_status()
+                if not available:
+                    raise RuntimeError(message)
+            except (ValueError, RuntimeError) as exc:
+                QMessageBox.critical(self, "libfive 无法导出", str(exc))
+                return
+        default_name = "solid_model.stl" if self.current_solid_result is not None else f"{self.current_result.parameters.surface.lower()}_tpms.stl"
         destination, selected_filter = QFileDialog.getSaveFileName(
             self,
             "导出 TPMS 模型",
@@ -2171,6 +2327,9 @@ class MainWindow(QMainWindow):
             return
         if not Path(destination).suffix:
             destination += ".obj" if "OBJ" in selected_filter else ".ply" if "PLY" in selected_filter else ".stl"
+        if native:
+            self._start_libfive_export(Path(destination))
+            return
         try:
             quality, target = self._get_export_quality_and_target()
             if quality != EXPORT_QUALITY_ORIGINAL:
@@ -2197,7 +2356,156 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "导出失败", str(exc))
 
+    def _modeling_mode_changed(self, _index=0):
+        solid = self.modeling_mode.currentData() == "solid"
+        self.modeling_mode_hint.setText("球 / 盒 / 圆柱 / 圆环 · 布尔组合 · TPMS 填充" if solid else
+                                       "TPMS 曲面 · 壁厚与孔隙率 · CFD 网格")
+        self.parameter_tabs.setVisible(not solid)
+        self.solid_panel.setVisible(solid)
+        self.generate_button.setText("生成实体" if solid else "生成模型")
+        self.generate_button.setToolTip("生成最终输出对象的 libfive 网格" if solid else "使用当前参数生成 TPMS 模型")
+        self.statusBar().showMessage("实体建模：添加对象、创建组合，再生成预览。" if solid else "已切换到 TPMS 参数设置。")
+
+    def _solid_parameters_changed(self):
+        if self.current_solid_result is not None:
+            self.solid_panel.message.setText("对象已修改。预览与导出仍是上次结果，请点击“生成实体”更新。")
+
+    def _generate_solid(self):
+        try:
+            scene = self.solid_panel.snapshot()
+            available, message = backend_status()
+            if not available:
+                raise RuntimeError(message)
+        except (ValueError, RuntimeError) as exc:
+            self.solid_panel.message.setText(str(exc))
+            self.statusBar().showMessage("实体参数无效")
+            return
+        controls = (self.generate_button, self.export_action, self.cfd_export_action,
+                    self.quality_report_action, self.low_quality_action, self.region_action,
+                    self.modeling_mode, self.solid_panel)
+        self._solid_enabled_states = [(control, control.isEnabled()) for control in controls]
+        for control in controls:
+            control.setEnabled(False)
+        self.generate_button.setText("正在生成实体…")
+        self.statusBar().showMessage("libfive 正在生成最终对象… 可继续旋转已有预览")
+        self.worker_thread = QThread(self)
+        self.worker = SolidModelWorker(scene)
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._solid_finished)
+        self.worker.failed.connect(self._solid_failed)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.failed.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self._solid_idle)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.start()
+
+    def _solid_finished(self, result: SolidResult):
+        self.current_solid_result = result
+        bounds = result.scene.bounds()
+        size = bounds[1] - bounds[0]
+        self.current_result = MeshResult(result.mesh, TPMSParameters(size_x=float(size[0]),
+            size_y=float(size[1]), size_z=float(size[2])))
+        raw_preview = simplify_mesh_for_preview(result.mesh, 1_500_000)
+        # Fit transformed solids around the camera origin without changing
+        # their absolute coordinates in exported meshes.
+        center = result.mesh.bounds.mean(axis=0)
+        self.current_preview = PreviewMesh(vertices=(raw_preview.vertices - center).astype(np.float32),
+            faces=raw_preview.faces, colors=raw_preview.colors)
+        self.viewport.clear_implicit()
+        self.viewport.set_gpu_force_mesh(True)
+        self.viewport.set_mesh(self.current_preview)
+        self.viewport.set_highlight_mode(False)
+        self.current_cfd_result = None
+        self.low_quality_preview = None
+        self.region_preview = None
+        self.region_legend.setVisible(False)
+        self.region_action.blockSignals(True)
+        self.region_action.setChecked(False)
+        self.region_action.blockSignals(False)
+        self.low_quality_action.blockSignals(True)
+        self.low_quality_action.setChecked(False)
+        self.low_quality_action.blockSignals(False)
+        self.triangle_value.setText(f"{len(result.mesh.faces):,}")
+        self.volume_value.setText(f"{result.mesh.volume:,.1f} mm³")
+        self.density_value.setText("—")
+        self.porosity_value.setText("—")
+        self._update_export_quality_defaults()
+        self.export_backend_combo.setCurrentIndex(0)
+        self.export_backend_combo.setEnabled(False)
+        self.libfive_backend_info.setText("当前实体已由 libfive 生成，导出与预览使用同一网格。")
+        self.statusBar().showMessage(f"实体生成完成 · {result.scene.by_id(result.scene.root).name} · "
+            f"{len(result.mesh.faces):,} 面 · libfive 封闭网格 · 可导出 STL/OBJ/PLY")
+        self.solid_panel.message.setText("最终对象已生成。可继续编辑对象，或点击顶部“导出模型”。")
+        self._solid_generation_succeeded = True
+
+    def _solid_failed(self, message: str):
+        self._solid_generation_succeeded = False
+        self.solid_panel.message.setText(message)
+        self.statusBar().showMessage("实体生成失败，保留上次模型")
+
+    def _solid_idle(self):
+        self.worker_thread = None
+        self.worker = None
+        for control, enabled in self._solid_enabled_states:
+            control.setEnabled(enabled)
+        self.generate_button.setText("生成实体")
+        if self._solid_generation_succeeded:
+            self.export_action.setEnabled(True)
+            for action in (self.cfd_export_action, self.quality_report_action, self.low_quality_action, self.region_action):
+                action.setEnabled(False)
+                action.setToolTip("实体组合尚未接入 CFD 体网格；请生成 TPMS 参数模型后使用")
+
+    def _start_libfive_export(self, destination: Path) -> None:
+        controls = (self.generate_button, self.export_action, self.cfd_export_action,
+                    self.quality_report_action, self.low_quality_action, self.region_action)
+        self._libfive_enabled_states = [(control, control.isEnabled()) for control in controls]
+        for control in controls:
+            control.setEnabled(False)
+        self.statusBar().showMessage("libfive 正在从数学函数生成封闭网格… 可继续旋转预览")
+        self.worker_thread = QThread(self)
+        self.worker = LibfiveExportWorker(self.current_result, destination, self.libfive_cell_spin.value())
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._libfive_export_finished)
+        self.worker.failed.connect(self._libfive_export_failed)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.failed.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self._libfive_export_idle)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.start()
+
+    def _libfive_export_finished(self, result) -> None:
+        path, faces = result
+        self.statusBar().showMessage(
+            f"libfive 已导出 {path.suffix[1:].upper()} · {faces:,} 面 · "
+            f"{path.stat().st_size / (1024 * 1024):.2f} MB → {path}")
+
+    def _libfive_export_failed(self, message: str) -> None:
+        self.statusBar().showMessage("libfive 导出失败")
+        QMessageBox.critical(self, "libfive 导出失败", message)
+
+    def _libfive_export_idle(self) -> None:
+        self.worker_thread = None
+        self.worker = None
+        for control, enabled in self._libfive_enabled_states:
+            control.setEnabled(enabled)
+        self._libfive_enabled_states = []
+
+    def closeEvent(self, event) -> None:
+        if self.worker_thread is not None and self.worker_thread.isRunning():
+            self.statusBar().showMessage("后台任务运行中，请完成后再关闭窗口。")
+            event.ignore()
+        else:
+            super().closeEvent(event)
+
     def export_comsol_mesh(self) -> None:
+        if self.current_solid_result is not None:
+            return
         if self.current_result is None:
             return
         if self.worker_thread is not None and self.worker_thread.isRunning():
@@ -2299,6 +2607,8 @@ class MainWindow(QMainWindow):
         self.worker = None
 
     def show_quality_report(self) -> None:
+        if self.current_solid_result is not None:
+            return
         if self.current_cfd_result is not None:
             MeshQualityDialog(self.current_cfd_result, self).exec_()
             return
