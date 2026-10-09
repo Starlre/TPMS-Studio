@@ -1,4 +1,8 @@
 # Python bytecode and caches
+# Electron dependencies and built renderer (rebuild from the lockfile)
+node_modules/
+desktop/dist/
+
 __pycache__/
 *.py[cod]
 *$py.class

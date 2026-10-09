@@ -105,6 +105,14 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-054 | 同步 G 盘与排查写入失败 | 记录时间：2026-10-09 21:49:11（Asia/Shanghai）。先备份 G 盘项目及 Git 历史；目录创建仍失败，改用根目录便携 DLL 布局，将 libfive、实体组合、明显模式按钮、文档与图片同步回 G 盘。G 盘全量 89 passed、1 skipped，真实 Qt/OpenGL 三种示例通过 | 同步与验收完成，磁盘故障未修复 |
 | R-055 | 整理 Git 更新与中文备注 | 记录时间：2026-10-09 22:03:56（Asia/Shanghai）。在“新增建模功能”分支整理 libfive、实体与布尔组合、入口按钮、便携安装、文档截图及已有管状核心改动，使用中文提交备注；排除参考仓库与本机 DLL | 已整理，随本次提交记录 |
 
+| R-056 | 按 Electron 方案改造界面 | 记录时间：2026-10-09 23:04:24（Asia/Shanghai），G 盘验收：23:12:48。Electron/React 工程工作台、Three.js/WebGL 混合隐式预览、独立 Python/libfive 计算、CFD 诊断、快照导出、JSON 项目与明暗主题；真实窗口验收及截图；G 盘目录故障采用源码压缩包与 C 盘缓存启动 | 已实现并同步，G 盘实机验收通过 |
+
+| R-057 | G 盘修复后同步所有更新 | 记录时间：2026-10-09 23:34:37（Asia/Shanghai），验收完成：23:55:13。同步完整 Electron 源码/依赖/构建结果、libfive 原生库/许可、开发脚本和文档；启动器使用 G 盘常规目录，不再依赖 C 盘 UI 缓存 | 已完成，G 盘实机验收通过 |
+
+| R-058 | VS Code 批处理入口报命令碎片与乱码 | 更新时间：2026-10-10 00:01:08（Asia/Shanghai）。修正 Windows 启动脚本为 CRLF、无 BOM、ASCII 内容；`run_tpms.bat` 直接调用 Python，中文命名入口转调 ASCII 文件名；补充 Git 的 `.cmd` 换行规则，按 Code Runner 命令验证真实窗口 | 已完成 |
+
+| R-059 | 提交 Git 更新并增加中文备注 | 更新时间：2026-10-10 00:10:33（Asia/Shanghai）。整理 R-056–R-058 的 Electron 工程工作台、完整 G 盘部署、启动脚本修复、文档截图与验证记录，提交当前“新增建模功能”分支 | 随本次本地提交记录 |
+
 ## 4. 关键更新详情
 
 ### 4.1 GPU 预览与网格精度
@@ -216,6 +224,58 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 2026-09-19 出现 `Free usage exceeded` 为 OpenCode 外部服务额度限制，非项目代码错误，不影响本地 `py_compile`/`pytest`/`git` 验证。
 
 ## 5. 验证记录
+
+### R-059：2026-10-10 00:10:33（Asia/Shanghai）本地 Git 提交
+
+- **需求**：提交 Git 更新并增加备注。
+- **范围**：Electron + React + Three.js 工程工作台及独立 Python 通信后端；完整源码、依赖锁文件、界面与后端验收脚本；libfive 构建配置和开发工具；G 盘常规部署、CRLF 启动脚本修复、Git 换行规则；README、开发日志、更新日志与实际界面截图。
+- **中文备注**：`重构 Electron 工程界面，完成 G 盘同步并修复 Windows 启动`。正文记录界面/计算分层、建模与 CFD 接入、项目保存及精度导出、同步与启动修复、文档和验证结果。
+- **验证**：复用 R-057 的 G 盘 89 passed / 1 skipped、Electron 构建、真实 IPC 和真实窗口验收；复用 R-058 的 6 项批处理命令验证及真实窗口启动。提交前检查差异、暂存文件列表和 whitespace。
+- **排除**：`.refs/` 外部参考仓库、`node_modules/`、`desktop/dist/`、原生 DLL、Python 缓存和测试输出不进入提交；Git 持续保存源码、锁文件、构建说明及便携源码压缩包。
+- **Git**：沿用“新增建模功能”分支及现有历史，新增普通本地提交；提交编号与实际提交时间以 Git 历史为准。用户本次未要求推送 GitHub。
+- **状态**：本记录纳入本次本地提交，提交结果见 Git 历史。
+
+### R-058：2026-10-10 00:01:08（Asia/Shanghai）Windows 批处理启动修复
+
+- **需求**：VS Code Code Runner 执行 `cmd /c "g:/TPMS建模设计/run_tpms.bat"` 时出现 `'p'`、`'/d'`、`'l'` 不是命令及中文乱码，软件无法打开。
+- **原因**：实际文件字节使用 LF 换行，未落盘为 Windows CRLF；`.gitattributes` 的规则不会自动修正已经存在的文件。原入口还在切换代码页后嵌套调用中文脚本路径。此前只验证 Electron / Python 启动路径，遗漏批处理真实入口。
+- **修复**：`run_tpms.bat`、`启动Electron.cmd`、`run_qt.bat` 统一为 CRLF、UTF-8 无 BOM 且内容仅 ASCII。默认入口直接选择 `TPMS_PYTHON` / 本机 Anaconda / PATH 中 Python，使用带引号绝对脚本路径；中文命名入口只转调 `run_tpms.bat`，保持退出码和参数传递。只有真实失败才暂停。
+- **Git 规则**：`.gitattributes` 增加 `*.cmd text eol=crlf`，与现有 `.bat` 规则一致。
+- **验证**：通过解释器替身执行 3 个真实 G 盘入口 × `cmd /c` / `cmd /d /c`，6 项均通过，校验 CRLF / 无 BOM / ASCII 字节、中文路径、跨工作目录与参数传递。再次使用用户同一条 `cmd /c` 命令实际启动，TPMS Studio 窗口运行于 `G:/TPMS建模设计/desktop/node_modules/electron/dist/electron.exe`，标准错误为空。
+- **范围**：只改启动脚本和换行规则，未改建模/渲染核心；无需重跑此前已通过的全量几何测试。
+- **备份与同步**：原脚本保存在 `C:/Users/郭小亮/AppData/Local/Temp/tpms-launcher-fix-20261009-235826/before`；修复与开发日志同步 G 盘项目及 C 盘开发副本。
+- **状态**：已修复并实际打开窗口，本次未提交或推送 Git。
+
+### R-057：2026-10-09 23:34:37（Asia/Shanghai）修复后完整同步 G 盘
+
+- **需求**：用户确认 G 盘已修复，要求将所有更新同步回原项目。
+- **检查**：现有 G/C 两盘核心代码及根目录文档一致；G 盘缺少此前不能创建的 Electron 源码/依赖目录、libfive 原生目录和开发脚本。
+- **同步**：从 C 盘验证副本补齐 `desktop/`（含源码、锁文件、测试、构建结果与本机运行依赖）、`native/`（含官方 DLL 和第三方许可）、`scripts/`、文档、截图及根目录启动/后端文件。逐文件 SHA256 校验，仅复制新增或不同内容，不删除 G 盘已有文件。
+- **运行**：`launch_desktop.py` 已有本地目录优先逻辑；存在 `G:/TPMS建模设计/desktop/package.json` 后，直接使用 G 盘 Electron 和 Python/libfive。C 盘历史缓存不参与正常启动，仍保留作兼容回退。
+- **保护**：同步前检查并保存 Git 分支及 HEAD，保留 `.git`、`.refs/`、已有模型和历史备份；差异文件先备份到本次临时同步目录。没有复制历史开发备份、旧测试输出或 Python 缓存。
+- **文档**：README、CHANGELOG、Electron 运行说明和 libfive 安装说明更新为修复后的常规 G 盘部署；历史 R-051–R-056 的故障和缓存记录保留。
+- **同步结果**：5,773 个项目与运行文件逐项 SHA256 校验，其中 172 个新增文件完成复制，5,601 个已有文件一致。一次依赖子目录复制失败后重新检查并有限重试，完整同步通过。
+- **验证**：从 G 盘运行 `python -m pytest -q`：89 passed / 1 skipped；`npm run build`、`npm test` 真实 TPMS/libfive IPC、`npm run verify-ui` 真实 Electron 窗口验收全部通过，页面异常为零。窗口验收覆盖明暗主题、不同窗口尺寸、实体组合、STL、CFD 区域/质量/低质量、JSON 保存打开与公式回退；截图在 G 盘更新。
+- **路径确认**：`locate_desktop` 返回 `G:/TPMS建模设计/desktop`；`library_path` 返回 `G:/TPMS建模设计/native/libfive/libfive.dll`，官方版本 `c9e9734` 可用。
+- **验收时间**：2026-10-09 23:55:13（Asia/Shanghai）。本次清单与文档备份位于 `C:/Users/郭小亮/AppData/Local/Temp/tpms-g-full-sync-20261009-232902`，真实窗口证据位于 `C:/Users/郭小亮/AppData/Local/Temp/tpms-electron-ui-Tu7us9`。
+- **状态**：同步与 G 盘实机验证完成。Git 仍为“新增建模功能”分支，HEAD `12f0c6f`，本次未提交或推送 Git。
+
+### R-056：2026-10-09 23:04:24（Asia/Shanghai）Electron 工程工作台
+
+- **需求**：用户选择之前讨论的 Electron + React/Vue + Three.js + Python/libfive 方案，实现新的桌面 UI。
+- **实现**：使用 React 的左参数 / 中视口 / 右统计工程布局，顶部常显建模模式与导出下拉；统一系统中文字体和明暗主题，支持 XYZ 字母方向标、轴向视角、缩放和键盘操作。
+- **建模**：复用现有五种 TPMS、公式、孔隙率、梯度、卷绕、libfive、基本体及布尔组合。增加对象复制、依赖保护删除、最终输出、JSON 保存/打开和快捷键。
+- **渲染**：将原隐式 GLSL 适配至 WebGL2，由已清理网格 stencil 限定轮廓，漏采样处保留网格底图；公式/管状/实体组合/诊断回退网格。按需渲染、拖动降低像素比、显式释放资源。
+- **进程**：受限 preload、Node 集成关闭、CSP、请求白名单和本机文件对话框；独立 Python JSON-lines 计算，网格二进制传输。取消终止 worker 后清空模型，避免复用过期结果。
+- **仿真**：接入真实 CFD 仿真边界、MSH/BDF/边界 JSON/VTU 导出、质量直方图和低质量单元；沿用已生成快照，组合模式明确禁用 CFD。
+- **文件**：`desktop/`、`electron_backend.py`、`launch_desktop.py`、`启动Electron.cmd`、`run_tpms.bat`、`run_qt.bat`、`scripts/package_electron.py`、`electron-desktop.zip`、`docs/electron.md`、`docs/electron-*.png`、README / CHANGELOG / 本日志。
+- **验证**：原全量测试 89 passed / 1 skipped；IPC 实机验证 TPMS、孔隙率、梯度 libfive、水密布尔、边界色、二进制 STL、错误恢复和取消重启通过；Playwright 真实 Electron 验证两套主题、1120×760 窗口、实体组合、STL 导出、CFD 区域/体单元质量/低质量、JSON 项目、自定义公式回退通过，页面异常为零。
+- **环境处理**：本终端继承 `ELECTRON_RUN_AS_NODE=1` 会把 Electron 作为 Node 执行；在应用启动子进程中清除此标记，不更改系统环境。默认 Electron 二进制下载失败，使用单次安装镜像完成。
+- **存储**：G 盘新建 `desktop/` 再次失败，先在 C 盘验证后同步根目录文件 / 现有 docs 图片和界面源码压缩包。启动器可将 UI 展开到 C 盘版本缓存，并继续运行 G 盘 Python 后端；没有修复或格式化磁盘。
+- **限制**：尚未生成独立安装程序；首次 npm 安装需要网络；混合预览轮廓受生成网格精度影响；原 COMSOL 实机导入限制不变，未声称达到 nTop 性能。Qt 原界面保留作兼容入口。本需求未提交或推送 Git。
+- **G 盘验收时间**：2026-10-09 23:12:48（Asia/Shanghai）。根目录入口、Python 后端、界面源码压缩包、文档和四张截图均已写回并逐项 SHA256 校验。实际以 G 盘 Python/libfive 后端运行 IPC 测试通过；以从 G 盘压缩包展开的 C 盘界面启动真实 Electron，完整窗口验收通过（含 CFD 和项目保存/打开），页面异常为零。
+- **备份**：本次覆盖前的 README / CHANGELOG / 开发日志 / `.gitignore` / `run_tpms.bat` 保存在 `C:/Users/郭小亮/TPMS-electron-backup-20261009-230424`；原项目历史备份继续保留。
+- **状态**：功能已实现、G 盘同步与实机验收完成。G 盘存储故障仍存在。
 
 ### R-055：2026-10-09 22:03:56（Asia/Shanghai）本地 Git 更新
 

@@ -5,6 +5,7 @@
 *.txt text eol=lf
 *.json text eol=lf
 *.bat text eol=crlf
+*.cmd text eol=crlf
 
 *.stl binary
 *.obj binary

@@ -6,6 +6,33 @@ TPMS Studio 是一个本地运行的 TPMS 参数化建模桌面工具，可生�
 
 [版本更新](CHANGELOG.md) · [开发记录、技术决策与已知限制](DEVELOPMENT_LOG.md)
 
+## Electron 工程工作台
+
+新版桌面界面采用 **Electron + React + Three.js/WebGL**，通过独立 Python 进程复用现有 TPMS、libfive 和 CFD 建模能力。默认启动入口为 `run_tpms.bat` 或 `启动Electron.cmd`；`python app.py` / `run_qt.bat` 仍可运行原 Qt 版本。
+
+G 盘修复后，完整 `desktop/` 源码、构建结果、运行依赖、`native/` 原生库与 `scripts/` 工具已同步到 `G:/TPMS建模设计`。默认直接使用 G 盘界面和建模后端；此前的 C 盘界面缓存仅作为缺失本地 `desktop/` 时的兼容回退。
+
+![Electron TPMS 工作台：暗色主题](docs/electron-tpms-dark.png)
+
+| 区域 | 使用方式 |
+| --- | --- |
+| 顶部工作栏 | 切换 TPMS 建模 / 实体组合；打开、保存可编辑 JSON 项目；在“导出”下拉中设置质量、目标面数或 libfive 网格尺寸，导出 STL/OBJ/PLY 和 COMSOL 体网格 |
+| 左侧参数栏 | 几何、结构、CFD 网格分别分组；自定义公式隐藏周期设置；壁厚、孔隙率、梯度、卷绕及建模精度可直接编辑，生成按钮固定在底部 |
+| 中央三维视图 | 拖动旋转、右键平移、滚轮缩放；右侧按钮提供 XYZ 轴向视角、重置、放大和缩小；方向标随相机旋转 |
+| 右侧模型信息 | 显示生成快照的面数、顶点、体积、面积、孔隙率、水密性和世界坐标范围，以及 Python/libfive 状态 |
+| 实体组合 | 对象树、基本体属性、平移旋转、复制、依赖保护删除、布尔组合、融合、最终输出和三个示例 |
+| 诊断与反馈 | 仿真边界颜色图例、真实体网格质量报告、低质量单元定位；计算可取消，进度与错误显示在当前界面 |
+
+点击右上角太阳 / 月亮切换整套明暗主题。参数修改后显示“上次生成的模型”，导出与诊断等待重新生成，避免把旧模型误认为新参数的结果。
+
+![Electron TPMS 工作台：亮色主题](docs/electron-tpms-light.png)
+
+![Electron 实体组合：球体减贯穿孔](docs/electron-solid.png)
+
+![Electron CFD 边界可视化（验收使用每周期 16 点的低精度流体表面）](docs/electron-cfd.png)
+
+安装、工程结构、缓存运行方式及验证命令见 [Electron 开发说明](docs/electron.md)。这是依赖本机 Python/Node.js 的桌面版本，尚未打包为独立安装程序。
+
 ## 核心功能
 
 | 功能模块 | 主要能力 |
@@ -23,7 +50,7 @@ TPMS Studio 是一个本地运行的 TPMS 参数化建模桌面工具，可生�
 | 质量分析 | 模型生成后即可按需计算缩放雅可比直方图、低质量单元定位、质量统计和 VTU 完整质量场 |
 | 仿真区域可视化 | 模型生成后即可按入口、出口和壁面着色显示，并提供颜色图例 |
 
-## 界面预览
+## Qt 兼容版本界面预览
 
 libfive 的安装、数学定义、精度设置及限制见 [libfive 接入说明](docs/libfive.md)。生成模型后，在顶部“导出模型”下拉菜单选择“libfive 隐式内核”，按 mm 设置网格尺寸；后台生成后导出 STL/OBJ/PLY。该内核为可选依赖，GPU 预览和 COMSOL 体网格继续使用已有实现。
 
@@ -98,13 +125,15 @@ python -m pip install -r requirements.txt
 
 主要依赖包括 PyQt5、NumPy、scikit-image、trimesh、Gmsh 和 meshio。
 
+Electron 版本另外需要 **Node.js 22.12+（建议 24 LTS）**；界面依赖在首次启动时按锁文件安装。libfive 实体组合需要按 [内核说明](docs/libfive.md) 配置原生库。
+
 ### 3. 运行软件
 
 ```powershell
-python app.py
+python launch_desktop.py
 ```
 
-Windows 用户也可以直接双击 `run_tpms.bat`。
+Windows 用户也可以直接双击 `run_tpms.bat` 或 `启动Electron.cmd`。首次安装需要网络。旧版界面使用 `python app.py` 或 `run_qt.bat`。
 
 ## TPMS 建模
 

@@ -70,7 +70,9 @@ python app.py
 
 也支持便携布局：将 `libfive.dll` 和同版本依赖 DLL 一起放在项目根目录。查找顺序为环境变量指定路径、`native/libfive/`、项目根目录；不会修改系统 PATH。根目录 DLL 同样由 Git 忽略。第三方许可证必须随程序保留。
 
-本机 G 盘无法创建新目录时，使用根目录便携布局，许可证平铺保存在现有 `docs/`，文件名以 `libfive-license-` 开头。完整 `native/` 构建配置、许可证和 `scripts/` 工具封装在项目根目录 `libfive-build-support.zip`，恢复磁盘后可解压至项目根目录，再按正常流程构建。运行不依赖该压缩包，也不依赖 C 盘副本。此布局只是安装方式，不能修复磁盘错误。
+2026-10-09 23:34:37（Asia/Shanghai），用户确认 G 盘修复后，同步恢复了常规 `native/` 和 `scripts/` 目录；当前优先从 `G:/TPMS建模设计/native/libfive/` 加载 DLL，第三方许可保存在其 `licenses/` 下，不依赖 C 盘副本。
+
+此前 G 盘无法创建新目录时，采用根目录便携 DLL 和现有 `docs/libfive-license-*` 平铺许可。旧便携文件与 `libfive-build-support.zip` 继续保留作安装回退；压缩包包含构建配置、许可和开发工具，不参与正常运行。此布局只是安装方式，不能修复磁盘错误。
 
 ## 限制与验证
 

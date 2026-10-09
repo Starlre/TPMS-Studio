@@ -1,0 +1,24 @@
+{
+  "name": "tpms-studio-desktop",
+  "version": "0.4.0",
+  "private": true,
+  "description": "TPMS Studio Electron engineering workbench",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "node start.cjs",
+    "build": "vite build",
+    "test": "node --test tests/bridge.test.cjs",
+    "verify-ui": "node tests/ui-smoke.cjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "playwright": "^1.58.0",
+    "vite": "^7.3.0"
+  }
+}
