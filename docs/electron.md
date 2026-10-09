@@ -1,6 +1,23 @@
 # Electron 界面开发与运行
 
-更新时间：2026-10-09 23:55:13（Asia/Shanghai）。R-056 实现 Electron 工作台；R-057 在 G 盘修复后同步完整源码、运行依赖和开发脚本。
+更新时间：2026-10-10 00:24:12（Asia/Shanghai）。R-056 实现 Electron 工作台；R-057 同步完整 G 盘项目；R-058 修复 Windows 启动脚本；R-060 更新实际界面截图与操作文档。
+
+## 当前界面
+
+![Electron 工程工作台：TPMS 建模](electron-tpms-dark.png)
+
+顶部切换“TPMS 建模 / 实体组合”，并提供打开、保存项目和导出。左侧参数栏独立滚动，底部生成按钮固定；中间视口支持旋转、平移、缩放、轴向视角与右下角 XYZ 方向标；右侧“模型信息”对应成功生成的完整网格。点击右上角太阳/月亮按钮切换整套主题。
+
+| 实机截图 | 操作重点 |
+| --- | --- |
+| [亮色主题](electron-tpms-light.png) | 浅色工作台与深色模型保持对比 |
+| [结构参数](electron-structure.png) | 壁厚、孔隙率、梯度与向下滚动后的生成精度 |
+| [顶部导出](electron-export.png) | 质量/面数下拉、表面导出与 COMSOL 体网格 |
+| [实体组合](electron-solid.png) | 圆柱 TPMS 减流道对象树，属性与组合编辑见左侧下方 |
+| [仿真区域](electron-cfd.png) | CFD 参数与入口/出口/壁面图例 |
+| [网格质量](electron-quality.png) | 实际体网格统计、直方图与低质量数量 |
+
+全部七张图来自 2026-10-10 的 G 盘实机程序。CFD 样例为 12mm 单周期 Gyroid、流体表面采样 32、体单元尺寸 2mm，未启用边界层和局部加密；质量报告展示 1,335 节点和 4,184 体单元，用于操作说明，正式仿真仍需网格收敛验证。完整逐项说明见 [README](../README.md#新界面操作说明)、[实体组合](solid-modeling.md) 与 [libfive](libfive.md)。
 
 ## 运行
 
@@ -9,6 +26,8 @@
 ```powershell
 python launch_desktop.py
 ```
+
+`launch_desktop.py` 位于项目根目录。可在 VS Code 终端执行；Code Runner 在应用关闭前一直处于运行状态，再次点击运行可能显示 `Code is already running!`。
 
 启动器使用当前 Python 解释器作为建模后端。需要安装 Node.js 22.12+，建议 24 LTS，以及 `requirements.txt` 中的 Python 依赖。libfive 仍按原项目原生库布局加载，缺少该库时 TPMS 连续场建模可用，实体组合明确禁用。
 

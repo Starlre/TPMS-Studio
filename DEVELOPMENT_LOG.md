@@ -3,12 +3,14 @@
 > 用途：持续记录需求、实现、验证结果、技术决策和已知限制。<br>
 > 创建日期：2026-09-17<br>
 > 项目目录：`G:/TPMS建模设计`
+> 当前界面：Electron 工程工作台；早期 Qt 界面记录按当时实现保留，当前操作以 README 和 `docs/electron.md` 为准。
 
 ## 1. 产品目标
 
 TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输入曲面类型、外形尺寸、周期数、壁厚或等值面偏移、精度和目标孔隙率，软件生成 TPMS 封闭模型，并支持：
 
-- OpenGL GPU 三维预览。
+- Three.js/WebGL2 GPU 混合隐式曲面与网格预览；原 Qt/OpenGL 界面保留为兼容入口。
+- libfive 基本实体、变换与布尔组合建模。
 - STL、OBJ 和 PLY 表面网格导出。
 - TPMS 孔隙流体域提取。
 - Gmsh 四面体体网格划分。
@@ -18,7 +20,13 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 
 | 文件 | 职责 | 主要技术 |
 | --- | --- | --- |
-| `app.py` | GUI、后台任务、OpenGL 预览、导出交互 | PyQt5、OpenGL 3.3 |
+| `launch_desktop.py` | 默认桌面入口、解释器选择、依赖安装与启动 | Python、Node.js |
+| `desktop/main.cjs` / `preload.cjs` / `bridge.cjs` | 桌面窗口、受限 IPC、文件对话框、Python 子进程通信 | Electron |
+| `desktop/src/main.jsx` / `style.css` | 工作台、参数与对象树、导出、诊断和明暗主题 | React、CSS |
+| `desktop/src/Viewport.jsx` | 相机、混合隐式预览、网格、边界色和 XYZ 方向标 | Three.js、WebGL2 |
+| `electron_backend.py` | 独立计算进程、生成快照、模型/体网格导出与质量分析 | Python、JSON-lines |
+| `solid_model.py` / `libfive_backend.py` | 实体表达式树、变换与布尔运算、原生自适应表面提取 | libfive C API、ctypes |
+| `app.py` / `solid_panel.py` | Qt 兼容 GUI、后台任务、OpenGL 预览、导出交互 | PyQt5、OpenGL 3.3 |
 | `tpms_core.py` | 隐式场、材料域/流体域、Marching Cubes、孔隙率求解、碎片清理 | NumPy、scikit-image、trimesh |
 | `gpu_preview.py` | GPU 隐式场判定、uniform 构建、GLSL 射线步进源码 | PyQt5 OpenGL 3.3, GLSL |
 | `comsol_mesh.py` | 连通流体域分解、四面体划分、边界分组、BDF/MSH/JSON 导出 | Gmsh、meshio |
@@ -112,6 +120,8 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-058 | VS Code 批处理入口报命令碎片与乱码 | 更新时间：2026-10-10 00:01:08（Asia/Shanghai）。修正 Windows 启动脚本为 CRLF、无 BOM、ASCII 内容；`run_tpms.bat` 直接调用 Python，中文命名入口转调 ASCII 文件名；补充 Git 的 `.cmd` 换行规则，按 Code Runner 命令验证真实窗口 | 已完成 |
 
 | R-059 | 提交 Git 更新并增加中文备注 | 更新时间：2026-10-10 00:10:33（Asia/Shanghai）。整理 R-056–R-058 的 Electron 工程工作台、完整 G 盘部署、启动脚本修复、文档截图与验证记录，提交当前“新增建模功能”分支 | 随本次本地提交记录 |
+
+| R-060 | 推送 GitHub 并使用新界面截图更新 Markdown | 更新时间：2026-10-10 00:24:12（Asia/Shanghai）。更新六份文档与七张 Electron 实机截图，修正旧 Qt 操作说明，记录中文提交并将当前分支更新推送 GitHub | 文档与截图完成，随本次提交同步 |
 
 ## 4. 关键更新详情
 
@@ -224,6 +234,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 2026-09-19 出现 `Free usage exceeded` 为 OpenCode 外部服务额度限制，非项目代码错误，不影响本地 `py_compile`/`pytest`/`git` 验证。
 
 ## 5. 验证记录
+
+### R-060：2026-10-10 00:24:12（Asia/Shanghai）新界面文档与 GitHub 同步
+
+- **需求**：推送 GitHub 更新，更新 Markdown 文档并使用新界面截图。
+- **文档**：更新 README 的参数、导出质量、实体组合、CFD 和质量报告介绍；实体建模说明改为 Electron 对象树与直接编辑流程；libfive 说明补充生成内核和导出重算两条路径；更新 Electron 运行说明、CHANGELOG 和本日志的当前架构。保留早期 Qt 历史记录。
+- **截图**：以 G 盘 Electron、Python 和 libfive 启动独立临时用户配置，真实生成模型后截取深色、亮色、结构、导出、圆柱 TPMS 减流道、CFD 分组和质量报告共七张 PNG。未修改用户当前项目或主题。页面异常为零，截图逐张目视检查。
+- **CFD 样例**：12mm 单周期 Gyroid、每周期流体表面采样 32、体单元尺寸 2mm；边界层、端面局部加密与曲率自适应关闭。真实质量结果为 1,335 节点、4,184 体单元、42 个低质量单元。样例仅展示操作，不作为正式仿真网格质量保证。
+- **影响文件**：`README.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`、`docs/electron.md`、`docs/libfive.md`、`docs/solid-modeling.md`、七张 `docs/electron-*.png`。原桌面截图与在线三维预览资源保留。
+- **验证**：实机截图脚本成功退出，七张截图完成且 `pageErrors=[]`；提交前检查 Markdown 本地链接/图片、截图 PNG 尺寸与 Git 空白差异。未修改应用代码，不重复运行此前已通过的全量建模测试。
+- **Git**：当前“新增建模功能”分支，在 `99fff16` 基础上创建中文文档提交；正常推送到 `origin/新增建模功能`，包含此前 libfive 和 Electron 两次本地提交。实际提交编号与推送结果以 Git 历史和远程引用为准；不更改其他分支或 GitHub 默认分支。
+- **状态**：文档与实际界面截图完成；本记录随本次提交推送，最后核对远程分支 HEAD 与本地一致。
 
 ### R-059：2026-10-10 00:10:33（Asia/Shanghai）本地 Git 提交
 
