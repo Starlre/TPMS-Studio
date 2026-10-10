@@ -43,7 +43,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('已导出'));
     assert.ok((await fs.stat(path.join(output, '实际模型.stl'))).size > 10000);
     await page.getByRole('button', { name: '实体建模', exact: true }).click();
-    await page.locator('.workflow-presets>summary').click();
+    await page.getByRole('button', { name: '新节点', exact: true }).click(); await page.locator('.node-picker .workflow-presets>summary').click();
     await page.getByRole('button', { name: '圆柱 TPMS 减流道', exact: true }).click();
     await page.getByRole('button', { name: '生成工作流', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'));

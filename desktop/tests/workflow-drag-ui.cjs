@@ -18,6 +18,9 @@ async function main() {
   async function waitDone(text) { await page.waitForFunction(t => document.querySelector('.statusbar')?.textContent.includes(t) && !document.querySelector('.generate')?.textContent.includes('正在计算'), text); }
   async function generate() { await page.getByRole('button', { name: '生成工作流', exact: true }).click(); await waitDone('模型已生成'); assert.equal(await page.locator('.error-banner').count(), 0); }
   async function select(id) { await (id.startsWith('p') ? value(id) : step(id)).locator('.notebook-node-select').click(); }
+  async function add(name) { await page.getByRole('button', { name: '新节点', exact: true }).click(); await page.getByRole('region', { name: '创建节点' }).getByRole('button', { name, exact: true }).click(); }
+  async function move(id, direction, name) { await step(id).getByRole('button', { name: `节点操作 ${name}`, exact: true }).click(); await page.getByRole('group', { name: '节点操作菜单' }).getByRole('button', { name: `${direction}节点 ${name}`, exact: true }).click(); await page.keyboard.press('Escape'); }
+  async function settings() { if (!(await page.getByRole('button', { name: '输出设置', exact: true }).getAttribute('aria-expanded') === 'true')) await page.getByRole('button', { name: '输出设置', exact: true }).click(); }
   async function undo() { await page.getByRole('button', { name: '撤销节点修改', exact: true }).click(); }
   async function redo() { await page.getByRole('button', { name: '重做节点修改', exact: true }).click(); }
   async function save(file) { await app.evaluate(({ dialog }, p) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: p }); }, file); await page.getByRole('button', { name: '保存项目', exact: true }).click(); await waitDone('项目已保存'); return JSON.parse(await fs.readFile(file, 'utf8')); }
@@ -37,8 +40,11 @@ async function main() {
       await page.waitForFunction(() => document.querySelector('.node-workspace .panel-scroll').scrollTop > 20);
     }
     await destination.evaluate(el => el.scrollIntoView({ block: 'center' })); const b = await destination.boundingBox();
+    // Chromium emits the first native dragover while traversing the path. Move again
+    // after layout/edge scrolling so the last advertised insertion line matches the drop.
     await page.mouse.move(b.x + b.width * 0.7, b.y + b.height * fraction, { steps: 12 });
-    await page.mouse.move(b.x + b.width * 0.7 + 1, b.y + b.height * fraction + 1, { steps: 2 });
+    const final = await destination.boundingBox();
+    await page.mouse.move(final.x + final.width * 0.65, final.y + final.height * fraction, { steps: 4 });
     if (checkHover) await checkHover();
     await page.mouse.up();
     await page.waitForFunction(() => !document.querySelector('.drop-compatible,.drop-over'));
@@ -47,15 +53,13 @@ async function main() {
   try {
     await waitDone('模型已生成'); await page.getByRole('button', { name: '实体建模', exact: true }).click();
     for (const [kind, symbol] of [['number', 'radius'], ['formula', 'outer'], ['vector', 'offset']]) {
-      await page.getByRole('navigation', { name: '工作流类别' }).getByRole('button', { name: '设计参数', exact: true }).click();
-      await page.getByLabel('新参数节点类型', { exact: true }).selectOption(kind); await page.getByRole('button', { name: '添加参数节点', exact: true }).click();
+      await add({ number: '数值参数', formula: '公式参数', vector: '向量参数' }[kind]);
       await page.locator('[data-value-id]').last().getByLabel('引用符号', { exact: true }).fill(symbol);
     }
     await vEditor('p2').getByLabel('参数公式', { exact: true }).fill('radius + 1');
     await vEditor('p3').getByLabel('向量 X', { exact: true }).fill('20');
     for (const kind of ['sphere', 'cylinder', 'difference', 'transform']) {
-      await page.getByRole('navigation', { name: '工作流类别' }).getByRole('button', { name: '建模步骤', exact: true }).click();
-      await page.getByLabel('新节点类型', { exact: true }).selectOption(kind); await page.getByRole('button', { name: '添加节点', exact: true }).click();
+      await add({ sphere: '球体', cylinder: '圆柱', difference: '差集', transform: '变换' }[kind]);
     }
     await editor('n1').getByLabel('半径参数引用', { exact: true }).selectOption('outer');
     await editor('n2').getByLabel('半径', { exact: true }).fill('1.5'); await editor('n2').getByLabel('高度', { exact: true }).fill('16');
@@ -63,7 +67,9 @@ async function main() {
     await editor('n4').getByLabel('位置向量引用', { exact: true }).selectOption('p3'); await generate();
     const originalSTL = await exportMesh(path.join(output, 'before.stl'));
     await page.getByRole('button', { name: '收起所有节点', exact: true }).click();
-    await drag(step('n4').locator('.notebook-sort-handle'), step('n1').locator('.notebook-node-heading'), 0.2, null, true);
+    await drag(step('n4').locator('.notebook-sort-handle'), step('n1').locator('.notebook-node-heading'), 0.2, async () => {
+      await page.waitForFunction(() => document.querySelector('[data-node-id="n1"] .notebook-node-heading').classList.contains('sort-before-before'));
+    }, true);
     assert.deepEqual(await order('body'), ['n4', 'n1', 'n2', 'n3']); assert.equal(await page.locator('.snapshot-note').count(), 0);
     await undo(); assert.deepEqual(await order('body'), ['n1', 'n2', 'n3', 'n4']); await redo();
     await drag(value('p3').locator('.notebook-sort-handle'), value('p1').locator('.notebook-node-heading'), 0.2);
@@ -73,7 +79,7 @@ async function main() {
     assert.deepEqual(await exportMesh(path.join(output, 'sorted.stl')), originalSTL);
     await open(sortedFile); await generate(); assert.deepEqual(await order('body'), ['n4', 'n1', 'n2', 'n3']);
     assert.deepEqual(await exportMesh(path.join(output, 'reopened.stl')), originalSTL);
-    await select('n4'); await editor('n4').getByRole('button', { name: '下移节点 变换 4', exact: true }).click();
+    await select('n4'); await move('n4', '下移', '变换 4');
     assert.deepEqual(await order('body'), ['n1', 'n4', 'n2', 'n3']);
     const handle = step('n4').locator('.notebook-sort-handle'); await handle.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
     assert.deepEqual(await order('body'), ['n1', 'n2', 'n3', 'n4']); assert.equal(await page.locator('.snapshot-note').count(), 0);
@@ -86,7 +92,7 @@ async function main() {
     await select('n4'); await drag(step('n1').locator('.reference-output'), input({ kind: 'body', id: 'n4', index: 0 }));
     assert.equal(await editor('n4').getByLabel('输入实体', { exact: true }).inputValue(), 'n1'); await generate();
     await undo(); await generate();
-    await drag(step('n1').locator('.reference-output'), input({ kind: 'root' })); assert.equal(await page.getByLabel('输出节点', { exact: true }).inputValue(), 'n1'); await undo(); await generate();
+    await settings(); await drag(step('n1').locator('.reference-output'), input({ kind: 'root' })); assert.equal(await page.getByLabel('输出节点', { exact: true }).inputValue(), 'n1'); await undo(); await generate();
     // Vector replaces component bindings, and disables manual components.
     await select('n4'); await editor('n4').getByLabel('位置向量引用', { exact: true }).selectOption('');
     await editor('n4').getByRole('button', { name: 'X 位置使用表达式', exact: true }).click(); await editor('n4').getByLabel('X 位置', { exact: true }).fill('radius');
@@ -105,17 +111,17 @@ async function main() {
     await drag(value('p1').locator('.reference-output'), input({ kind: 'value-expression', id: 'p2' })); assert.equal(await vEditor('p2').getByLabel('参数公式', { exact: true }).inputValue(), 'radius'); await undo();
     await select('p3'); await drag(value('p2').locator('.reference-output'), input({ kind: 'value-component', id: 'p3', index: 0 })); assert.equal(await vEditor('p3').getByLabel('向量 X', { exact: true }).inputValue(), 'outer'); await undo(); await generate();
     // Sorting does not restart automatic updates, clear cached values or end an intermediate preview.
-    await select('n1'); await editor('n1').getByRole('button', { name: '预览节点 球体 1', exact: true }).click(); await waitDone('中间节点预览已更新');
+    await select('n1'); await step('n1').getByRole('button', { name: '预览节点 球体 1', exact: true }).click(); await waitDone('中间节点预览已更新');
     await page.getByRole('checkbox', { name: '自动更新输出', exact: true }).check();
     const preview = await page.locator('.metrics').allTextContents();
-    await editor('n1').getByRole('button', { name: '下移节点 球体 1', exact: true }).click(); await page.waitForTimeout(1200);
+    await move('n1', '下移', '球体 1'); await page.waitForTimeout(1200);
     assert.deepEqual(await page.locator('.metrics').allTextContents(), preview); assert.equal(await page.getByRole('button', { name: '返回最终输出', exact: true }).count(), 1); assert.equal(await page.locator('.snapshot-note').count(), 0);
     await undo(); await page.getByRole('checkbox', { name: '自动更新输出', exact: true }).uncheck(); await page.getByRole('button', { name: '返回最终输出', exact: true }).click();
     await page.getByRole('button', { name: '收起所有节点', exact: true }).click(); await select('n3');
     await step('n3').evaluate(el => { const pane = el.closest('.panel-scroll'); pane.scrollTop += el.getBoundingClientRect().top - pane.getBoundingClientRect().top - 120; });
     await capture('electron-node-drag-dark.png'); await page.getByRole('button', { name: '切换亮色主题', exact: true }).click(); await page.waitForTimeout(250); await capture('electron-node-drag-light.png');
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1120, 760)); await page.emulateMedia({ reducedMotion: 'reduce' }); await select('n4');
-    assert.ok(await editor('n4').getByRole('button', { name: '上移节点 变换 4', exact: true }).isVisible());
+    await step('n4').getByRole('button', { name: '节点操作 变换 4', exact: true }).click(); assert.ok(await page.getByRole('button', { name: '上移节点 变换 4', exact: true }).isVisible()); await page.keyboard.press('Escape');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ result: 'passed', output, checks: ['native mouse body/value sort and edge scrolling', 'keyboard/buttons reorder', 'sort undo/redo and save/open', 'unchanged STL bytes', 'scalar/body/vector/root drag connections', 'parameter formula/component drag', 'type/cycle/duplicate rejection', 'connection undo/redo', 'sorting preserves preview and automatic-update state', 'dark/light screenshots', '1120x760 and reduced motion'], errors }, null, 2));

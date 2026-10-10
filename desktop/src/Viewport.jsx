@@ -9,13 +9,13 @@ function typed(bytes, Type) {
 }
 
 const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, theme, implicit, wireframe, onError, onRenderer,
-  section = DEFAULT_SECTION, points = [], measuring = false, onBounds, onSectionStatus, onPick, onPickStatus }, ref) {
+  objects = null, selectedObject, translucent = true, onObjectSelect, section = DEFAULT_SECTION, points = [], measuring = false, onBounds, onSectionStatus, onPick, onPickStatus }, ref) {
   const host = useRef();
   const axes = useRef();
   const runtime = useRef();
   const distanceTag = useRef();
   const inspectionCallbacks = useRef({});
-  inspectionCallbacks.current = { onBounds, onSectionStatus, onPick, onPickStatus };
+  inspectionCallbacks.current = { onBounds, onSectionStatus, onPick, onPickStatus, onObjectSelect };
   const errorCallback = useRef(onError);
   const rendererCallback = useRef(onRenderer);
   errorCallback.current = onError;
@@ -52,6 +52,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     scene.add(new THREE.HemisphereLight(0xdcecff, 0x25334c, 2.4));
     const key = new THREE.DirectionalLight(0xffffff, 3.5); key.position.set(30, -50, 70); scene.add(key);
     const fill = new THREE.DirectionalLight(0xa3d6ff, 1.7); fill.position.set(-50, 15, 35); scene.add(fill);
+    let layoutMeshes = [], layoutIds = '', layoutSelection = '', layoutTranslucent = true;
     let mesh, grid, rayMaterial, rayQuad, maskMesh, sectionLines, sectionCap, boxHelper;
     const markers = new THREE.Group(); scene.add(markers);
     let activeSection = DEFAULT_SECTION, measurePoints = [], picking = false, worker = null, sectionTimer, sectionId = 0, pickId = 0, lastGeometry;
@@ -65,8 +66,28 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     const size = new THREE.Vector2();
     const axisContext = axes.current.getContext('2d');
     const clearObject = object => { if (object) { object.geometry.dispose(); object.material.map?.dispose(); object.material.dispose(); object.removeFromParent(); } };
+    function clearLayout() {
+      for (const item of layoutMeshes) { for (const child of [...item.children]) clearObject(child); clearObject(item); }
+      layoutMeshes = []; host.current.dataset.objectCount = '0';
+    }
+    function layoutColor(id) {
+      const palette = light ? ['#24708f', '#97602c', '#567d48', '#775da5', '#ab4560', '#3c8080'] : ['#69adca', '#d4a374', '#8cc484', '#b7a0df', '#d696b3', '#75c5bd'];
+      let hash = 0; for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+      return id === layoutSelection ? (light ? '#b87415' : '#edb765') : palette[hash % palette.length];
+    }
+    function colorLayout() {
+      for (const item of layoutMeshes) {
+        const chosen = item.userData.id === layoutSelection;
+        item.material.color.set(layoutColor(item.userData.id));
+        item.material.transparent = layoutTranslucent;
+        item.material.opacity = layoutTranslucent ? chosen ? 0.72 : 0.42 : 1;
+        item.material.depthWrite = !layoutTranslucent;
+        for (const edge of item.children) { edge.material.color.set(layoutColor(item.userData.id)); edge.material.opacity = chosen ? 0.85 : 0.65; }
+      }
+      schedule();
+    }
     function clearSection() { clearObject(sectionLines); clearObject(sectionCap); sectionLines = null; sectionCap = null; }
-    function updateRendererLabel() { rendererCallback.current(rayMaterial && !activeSection.enabled && !picking && !measurePoints.some(Boolean) ? 'GPU 隐式曲面' : activeSection.enabled ? '剖切网格预览' : '网格预览'); }
+    function updateRendererLabel() { rendererCallback.current(layoutMeshes.length ? '多实体布局预览' : rayMaterial && !activeSection.enabled && !picking && !measurePoints.some(Boolean) ? 'GPU 隐式曲面' : activeSection.enabled ? '剖切网格预览' : '网格预览'); }
     function sectionKey() { return JSON.stringify({ axis: activeSection.axis, normal: activeSection.normal, offset: activeSection.offset }); }
     function createWorker(geometry) {
       worker?.terminate(); clearTimeout(sectionTimer); sectionId++; pickId++;
@@ -131,6 +152,14 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     function pointerDown(event) { if (event.button === 0) pointerStart = { x: event.clientX, y: event.clientY, id: event.pointerId }; }
     function pointerUp(event) {
       const start = pointerStart; pointerStart = null;
+      if (layoutMeshes.length && !picking && start && start.id === event.pointerId && Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 4) {
+        const r = renderer.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
+        camera.updateMatrixWorld();
+        ray.setFromCamera(new THREE.Vector2((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1), camera);
+        const hit = ray.intersectObjects(layoutMeshes, false)[0];
+        if (hit) inspectionCallbacks.current.onObjectSelect?.(hit.object.userData.id);
+        return;
+      }
       if (!picking || !worker || !mesh || !start || start.id !== event.pointerId || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) return;
       const rect = renderer.domElement.getBoundingClientRect(), ndc = new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
       const ray = new THREE.Raycaster(); camera.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
@@ -234,10 +263,47 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         if (sectionLines) sectionLines.material.color.set(light ? '#9b460d' : '#ffbe7e');
         if (sectionCap) sectionCap.material.color.set(light ? '#b96b2c' : '#ffb65f');
         if (boxHelper) boxHelper.material.color.set(light ? '#986415' : '#ead08b');
-        updateMarkers();
+        updateMarkers(); colorLayout();
         schedule();
       },
+      setLayoutStyle(identifier, transparent) { layoutSelection = identifier; layoutTranslucent = transparent; colorLayout(); },
+      setObjects(items, wires) {
+        const hadLayout = layoutMeshes.length > 0;
+        clearLayout();
+        if (!items?.length) {
+          if (hadLayout) { clearObject(grid); grid = null; inspectionCallbacks.current.onBounds?.(null); }
+          layoutIds = ''; schedule(); return;
+        }
+        disableRay(); clearObject(mesh); mesh = null; lastGeometry = null;
+        clearObject(grid); grid = null; clearSection(); clearObject(boxHelper); boxHelper = null;
+        worker?.terminate(); worker = null; clearTimeout(sectionTimer); sectionId++; pickId++;
+        const previousBounds = bounds.clone(), previousDirection = camera.position.clone().sub(controls.target).toArray();
+        bounds.makeEmpty();
+        for (const item of items) {
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.BufferAttribute(typed(item.geometry.positions, Float32Array), 3));
+          geometry.setIndex(new THREE.BufferAttribute(typed(item.geometry.indices, Uint32Array), 1));
+          geometry.computeVertexNormals(); geometry.computeBoundingBox();
+          const object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide, wireframe: wires }));
+          object.userData.id = item.id;
+          const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 30), new THREE.LineBasicMaterial({ transparent: true }));
+          object.add(edge); scene.add(object); layoutMeshes.push(object);
+          bounds.union(geometry.boundingBox);
+        }
+        host.current.dataset.objectCount = String(layoutMeshes.length);
+        colorLayout();
+        if (!bounds.isEmpty()) {
+          const center = bounds.getCenter(new THREE.Vector3()), extent = Math.max(1, ...bounds.getSize(new THREE.Vector3()).toArray());
+          grid = new THREE.GridHelper(extent * 2, 20, 0x7f99af, 0x7f99af); grid.rotation.x = Math.PI / 2;
+          grid.position.set(center.x, center.y, bounds.min.z - extent * 0.03); grid.material.transparent = true; grid.material.opacity = light ? 0.24 : 0.16; scene.add(grid);
+          inspectionCallbacks.current.onBounds?.([bounds.min.toArray(), bounds.max.toArray()]);
+        }
+        const ids = items.map(item => item.id).join('|'), membershipChanged = ids !== layoutIds; layoutIds = ids;
+        rendererCallback.current('多实体布局预览');
+        if (membershipChanged || !previousBounds.containsBox(bounds)) fit(null, layoutIds ? previousDirection : null); else schedule();
+      },
       setGeometry(value, params, source, useImplicit, wires) {
+        clearLayout();
         disableRay();
         const changed = value !== lastGeometry; lastGeometry = value;
         if (changed) { clearObject(mesh); clearObject(grid); clearSection(); clearObject(boxHelper); mesh = null; grid = null; boxHelper = null; worker?.terminate(); worker = null; clearTimeout(sectionTimer); sectionId++; pickId++; }
@@ -299,7 +365,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     return () => {
       disposed = true; cancelAnimationFrame(scheduled); clearTimeout(restore);
       observer.disconnect(); controls.stopListenToKeyEvents(); controls.dispose();
-      clearObject(mesh); clearObject(grid); disableRay(); clearSection(); clearObject(boxHelper);
+      clearLayout(); clearObject(mesh); clearObject(grid); disableRay(); clearSection(); clearObject(boxHelper);
       for (const child of [...markers.children]) clearObject(child);
       worker?.terminate(); clearTimeout(sectionTimer);
       renderer.domElement.removeEventListener('pointerdown', pointerDown); renderer.domElement.removeEventListener('pointerup', pointerUp); window.removeEventListener('keydown', escape);
@@ -310,6 +376,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
 
   useEffect(() => { runtime.current?.setTheme(theme); }, [theme]);
   useEffect(() => { runtime.current?.setGeometry(geometry, parameters, shader, implicit, wireframe); }, [geometry, parameters, shader, implicit, wireframe]);
+  useEffect(() => { runtime.current?.setObjects(objects, wireframe); }, [objects, wireframe]);
+  useEffect(() => { runtime.current?.setLayoutStyle(selectedObject, translucent); }, [selectedObject, translucent]);
   useEffect(() => { runtime.current?.setSection(section); }, [section]);
   useEffect(() => { runtime.current?.setMeasurement(points, measuring); }, [points, measuring]);
   return <><div className="canvas-host" ref={host}>{failed && <div className="empty"><h2>三维预览不可用</h2><p>请检查显卡驱动后重新启动。建模与导出仍可使用。</p></div>}</div><canvas className="axis-triad" width="112" height="112" ref={axes} aria-label="随视角旋转的 XYZ 三轴方向标" /><div className="distance-tag" ref={distanceTag} hidden>{points[0] && points[1] ? `A–B · ${distanceBetween(...points).toFixed(3)} mm` : ''}</div></>;

@@ -429,3 +429,69 @@ table { width:100%; border-collapse:collapse; font-size:13px; }td,th { text-alig
 .node-workspace .generate-footer { padding:12px 20px 16px; }
 @media(max-width:1350px) { .node-workspace { grid-template-columns:440px minmax(280px,1fr) 280px; } }
 @media(max-width:1100px) { .node-workspace { grid-template-columns:410px minmax(260px,1fr) 260px; } .node-workspace .view-options { flex-wrap:wrap; height:auto; padding:6px 10px; } }
+
+/* Quiet engineering notebook: one neutral card list, progressively disclosed controls. */
+.node-workspace .panel-scroll { scroll-padding:12px 0; }
+.card-workflow { padding:4px 0; }
+.card-tools { margin:0 0 10px; justify-content:space-between; border:0; }
+.card-tools>button { font-size:14px; min-height:36px; padding:4px 8px; color:var(--muted); }
+.card-list { list-style:none; padding:0; margin:0; }
+.card-list>.card-node { border:1px solid var(--border); border-radius:4px; margin:0 0 10px; background:var(--panel); overflow:visible; scroll-margin-top:12px; }
+.card-list>.card-node.selected { border-color:var(--accent); background:var(--panel); }
+.card-node.has-error { border-color:var(--danger); }
+.card-node .notebook-node-heading { min-height:42px; border-radius:3px; background:var(--raised); cursor:grab; scroll-margin-top:12px; }
+.card-node.selected>.notebook-node-heading { background:var(--selected); }
+.card-node .notebook-sort-handle { min-width:22px; }
+.card-node .notebook-disclosure { min-width:28px; }
+.card-node .notebook-node-select { gap:8px; padding:7px 4px; }
+.card-node .notebook-node-select>strong { flex:1; font-size:15px; font-weight:600; overflow-wrap:anywhere; }
+.card-node .notebook-node-select>svg { color:var(--muted); }
+.card-preview,.card-menu-trigger { width:30px; min-width:30px; padding:4px; border-radius:0; color:var(--muted); }
+.card-preview[aria-pressed=true] { color:var(--accent); background:var(--selected); }
+.card-workflow .reference-output { color:var(--muted); background:transparent; border:0; min-width:28px; width:28px; margin:0; padding:4px; }
+.card-workflow .reference-output>span { display:none; }
+.card-workflow .reference-token { color:var(--text); background:var(--input); border:1px solid var(--border); font-size:14px; }
+.card-workflow .reference-token>span { color:var(--muted); }
+.card-workflow .notebook-editor { padding:8px 12px 10px; background:var(--panel); }
+.card-workflow .editor-section { padding:0 0 6px; border:0; margin:0; }
+.card-workflow .field { display:grid; grid-template-columns:110px minmax(0,1fr); align-items:center; gap:8px; margin:7px 0; font-size:14px; }
+.card-workflow .field>small,.card-workflow .field>textarea { grid-column:1 / -1; }
+.card-workflow input,.card-workflow select { min-height:34px; font-size:15px; padding:5px 8px; }
+.card-workflow .parameter-binding { display:grid; grid-template-columns:110px minmax(0,1fr); align-items:center; gap:6px 8px; margin:7px 0; }
+.card-workflow .binding-heading { gap:4px; margin:0; }
+.card-workflow .binding-heading>span { font-size:14px; }
+.card-workflow .binding-heading button { min-width:26px; height:28px; padding:2px; font-size:13px; }
+.card-workflow .parameter-binding>select,.card-workflow .parameter-binding>.reference-token { grid-column:2; margin:0; }
+.card-workflow .parameter-binding>select { min-height:28px; font-size:13px; }
+.card-workflow .triple,.card-workflow .double { display:block; }
+.card-workflow .notebook-input { border:0; padding:0; margin:7px 0; }
+.card-workflow .notebook-input>.reference-token { margin-left:118px; width:calc(100% - 118px); }
+.card-workflow .hint { font-size:13px; }
+.card-workflow .editor-transforms { border-top:1px solid var(--border); padding:8px 0 0; margin:8px 0 0; }
+.card-workflow summary { min-height:30px; font-size:14px; color:var(--muted); padding:4px 0; }
+.card-workflow .nested-reference { margin:4px 0 4px 12px; }
+.card-workflow .nested-editor { border-left:1px solid var(--border); padding-left:8px; }
+.card-workflow .nested-editor .notebook-editor { border-top:0; padding:4px 0; }
+.card-workflow .nested-editor .field,.card-workflow .nested-editor .parameter-binding { grid-template-columns:90px minmax(0,1fr); }
+.card-workflow .parameter-result { display:block; font-size:14px; color:var(--muted); padding:4px 0; }
+.card-workflow .parameter-consumers { margin:4px 0; padding:0; }
+.card-workflow .node-error { padding:8px 12px; font-size:13px; }
+.card-add { width:100%; justify-content:flex-start; min-height:42px; border:1px dashed var(--border); color:var(--text); padding:8px 12px; font-size:15px; }
+.card-add:hover { border-color:var(--accent); }
+.node-picker,.card-settings { border:1px solid var(--border); background:var(--panel); border-radius:4px; padding:12px; margin:8px 0 12px; }
+.node-search { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--muted); }
+.node-picker h3 { color:var(--muted); font-size:13px; font-weight:400; margin:12px 4px 4px; }
+.node-picker>div>button { padding:7px 10px; min-height:36px; font-size:14px; margin:2px; border-color:var(--border); }
+.node-picker .workflow-presets { margin-bottom:0; }
+.node-picker .workflow-presets button { display:flex; width:100%; justify-content:flex-start; min-height:36px; padding:6px; font-size:14px; }
+.card-context-menu { position:fixed; z-index:50; width:190px; padding:6px; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:5px; box-shadow:0 6px 20px #0003; }
+.card-context-menu>button { display:flex; justify-content:flex-start; width:100%; min-height:36px; padding:6px 12px; font-size:14px; }
+.card-context-menu .notebook-sort-buttons { margin-top:6px; padding-top:6px; gap:4px; }
+.card-context-menu .notebook-sort-buttons button { flex:1; padding:6px; }
+.workflow-drag-status:empty { display:none; }
+@media(max-width:1200px) { .node-workspace { grid-template-columns:400px minmax(260px,1fr) 260px; } }
+
+.layout-legend { position:absolute; left:16px; top:16px; right:70px; display:flex; flex-wrap:wrap; gap:6px; pointer-events:none; }
+.layout-legend button { pointer-events:auto; padding:4px 9px; background:var(--panel); border:1px solid var(--border); font-size:13px; }
+.layout-legend button[aria-pressed=true] { border-color:var(--accent); background:var(--selected); }
+.layout-note { position:absolute; left:16px; right:70px; bottom:50px; max-height:100px; overflow:auto; padding:6px 10px; background:var(--panel); border:1px solid var(--border); color:var(--muted); font-size:13px; }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { GripVertical, ArrowUp, ArrowDown, Box, Hash, Move3D } from 'lucide-react';
-import { DRAG_MIME, readDrag, reorderScene, connectReference } from './workflow_drag.mjs';
+import { DRAG_MIME, readDrag, notebookOrder, reorderScene, connectReference } from './workflow_drag.mjs';
 
 const Drag = createContext(null);
 const typeName = type => type === 'body' ? '实体' : type === 'vector' ? '向量' : '数值';
@@ -32,7 +32,7 @@ export function WorkflowDrag({ scene, onChange, busy, reportError, children }) {
     start(e, next) {
       if (busy) { e.preventDefault(); return; }
       e.stopPropagation(); e.dataTransfer.setData(DRAG_MIME, JSON.stringify(next)); e.dataTransfer.effectAllowed = next.action === 'sort' ? 'move' : 'link';
-      current.current = next; setPayload(next); setMessage(next.action === 'sort' ? '拖到同组节点标题的上半部或下半部排序' : `将${typeName(next.type)}引用拖到对应输入框`);
+      current.current = next; setPayload(next); setMessage(next.action === 'sort' ? '拖到节点标题的上半部或下半部排序' : `将${typeName(next.type)}引用拖到对应输入框`);
     }, end,
     dropped(e) {
       const data = readDrag(e.dataTransfer);
@@ -66,26 +66,26 @@ export function SortHandle({ group, id, name }) {
   function key(e) {
     if (!['ArrowUp', 'ArrowDown'].includes(e.key) || drag.busy) return;
     e.preventDefault(); e.stopPropagation();
-    const list = group === 'body' ? drag.scene.nodes : drag.scene.value_nodes || [], index = list.findIndex(n => n.id === id), other = list[index + (e.key === 'ArrowUp' ? -1 : 1)];
+    const list = group === 'notebook' ? notebookOrder(drag.scene).map(id => ({ id })) : group === 'body' ? drag.scene.nodes : drag.scene.value_nodes || [], index = list.findIndex(n => n.id === id), other = list[index + (e.key === 'ArrowUp' ? -1 : 1)];
     if (other) drag.sort(group, id, other.id, e.key === 'ArrowUp' ? 'before' : 'after');
   }
   return <button type="button" className="notebook-sort-handle" draggable={!drag.busy} disabled={drag.busy} aria-label={`拖动排序 ${name}`} title="拖动排序；聚焦后按 ↑ / ↓ 移动" onKeyDown={key} onDragStart={e => drag.start(e, { action: 'sort', id, group })} onDragEnd={drag.end}><GripVertical size={16} aria-hidden="true" /></button>;
 }
 export function SortButtons({ group, id, name }) {
-  const drag = useContext(Drag), list = group === 'body' ? drag.scene.nodes : drag.scene.value_nodes || [], index = list.findIndex(n => n.id === id);
+  const drag = useContext(Drag), list = group === 'notebook' ? notebookOrder(drag.scene).map(id => ({ id })) : group === 'body' ? drag.scene.nodes : drag.scene.value_nodes || [], index = list.findIndex(n => n.id === id);
   return <div className="notebook-sort-buttons">{[[-1, '上移', ArrowUp], [1, '下移', ArrowDown]].map(([delta, text, Icon]) => <button key={delta} type="button" className="secondary" disabled={drag.busy || !list[index + delta]} aria-label={`${text}节点 ${name}`} onClick={() => drag.sort(group, id, list[index + delta].id, delta < 0 ? 'before' : 'after')}><Icon size={14} aria-hidden="true" />{text}</button>)}</div>;
 }
-export function SortHeading({ group, id, children }) {
+export function SortHeading({ group, id, children, onContextMenu }) {
   const drag = useContext(Drag), [side, setSide] = useState('');
   const active = drag.payload?.action === 'sort' && drag.payload.group === group && drag.payload.id !== id && !drag.busy;
-  return <div className={`notebook-node-heading ${active && side ? `sort-before-${side}` : ''}`} onDragOver={e => {
+  return <div draggable={!drag.busy} onContextMenu={onContextMenu} onDragStart={e => { if (e.target.closest('input,select,textarea')) { e.preventDefault(); return; } drag.start(e, { action: 'sort', id, group }); }} onDragEnd={drag.end} className={`notebook-node-heading ${active && side ? `sort-before-${side}` : ''}`} onDragOver={e => {
     if (!active) return;
     e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move';
     const r = e.currentTarget.getBoundingClientRect(); setSide(e.clientY < r.top + r.height / 2 ? 'before' : 'after');
   }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setSide(''); }} onDrop={e => {
     if (!active) return;
     e.preventDefault(); e.stopPropagation(); const data = drag.dropped(e);
-    if (data) { const r = e.currentTarget.getBoundingClientRect(); drag.sort(group, data.id, id, e.clientY < r.top + r.height / 2 ? 'before' : 'after'); }
+    if (data) { const r = e.currentTarget.getBoundingClientRect(); drag.sort(group, data.id, id, side || (e.clientY < r.top + r.height / 2 ? 'before' : 'after')); }
     setSide(''); drag.end();
   }}>{children}</div>;
 }

@@ -1,3 +1,2 @@
-// The selected-property layout supersedes the former all-cards-open UI.
-// Preserve the existing validation command and run its migrated end-to-end coverage.
-require('./workflow-layout.cjs');
+// Legacy verification entry point retained for the unified card notebook.
+require('./notebook-cards.cjs');

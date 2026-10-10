@@ -11,6 +11,8 @@
     "verify-inspection": "node tests/inspection-ui.cjs",
     "verify-node-optimization": "node tests/node-optimization.cjs",
     "verify-workflow-layout": "node tests/workflow-layout.cjs",
+    "verify-notebook-cards": "node tests/notebook-cards.cjs",
+    "verify-multi-entity": "node tests/multi-entity-ui.cjs",
     "verify-workflow-navigation": "node tests/workflow-navigation.cjs",
     "verify-ribbon": "node tests/ribbon-ui.cjs",
     "verify-workflow-drag": "node tests/workflow-drag-ui.cjs",

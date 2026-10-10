@@ -7,7 +7,22 @@ export function readDrag(transfer) {
     return value && ['sort', 'reference'].includes(value.action) && typeof value.id === 'string' ? value : null;
   } catch { return null; }
 }
+export function notebookOrder(scene) {
+  const ids = [...(scene.value_nodes || []).map(b => `value:${b.id}`), ...scene.nodes.map(n => n.id)];
+  const saved = Array.isArray(scene.notebook_order) ? scene.notebook_order : [];
+  return [...new Set([...saved.filter(id => ids.includes(id)), ...ids])];
+}
 export function reorderScene(scene, group, id, anchor, side = 'before') {
+  if (group === 'notebook') {
+    const list = notebookOrder(scene);
+    if (id === anchor || !list.includes(id) || !list.includes(anchor)) return scene;
+    const next = list.filter(item => item !== id);
+    next.splice(next.indexOf(anchor) + (side === 'after' ? 1 : 0), 0, id);
+    if (next.every((item, i) => item === list[i])) return scene;
+    return { ...scene, notebook_order: next,
+      nodes: [...scene.nodes].sort((a, b) => next.indexOf(a.id) - next.indexOf(b.id)),
+      value_nodes: [...(scene.value_nodes || [])].sort((a, b) => next.indexOf(`value:${a.id}`) - next.indexOf(`value:${b.id}`)) };
+  }
   const key = group === 'body' ? 'nodes' : group === 'value' ? 'value_nodes' : null;
   const list = scene[key] || [];
   if (!key || id === anchor || !list.some(n => n.id === id) || !list.some(n => n.id === anchor)) return scene;
@@ -18,7 +33,8 @@ export function reorderScene(scene, group, id, anchor, side = 'before') {
 // Stable signature ignores display order, including after save/open or undo/redo.
 export function sceneSignature(scene) {
   const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, stable(value[k])])) : value;
-  return JSON.stringify(stable({ ...scene, nodes: [...scene.nodes].sort((a, b) => a.id.localeCompare(b.id)), value_nodes: [...(scene.value_nodes || [])].sort((a, b) => a.id.localeCompare(b.id)) }));
+  const { notebook_order, ...geometry } = scene;
+  return JSON.stringify(stable({ ...geometry, nodes: [...scene.nodes].sort((a, b) => a.id.localeCompare(b.id)), value_nodes: [...(scene.value_nodes || [])].sort((a, b) => a.id.localeCompare(b.id)) }));
 }
 export const onlyOrderChanged = (before, after) => sceneSignature(before) === sceneSignature(after);
 

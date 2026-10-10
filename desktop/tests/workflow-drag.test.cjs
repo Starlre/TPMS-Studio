@@ -26,6 +26,17 @@ test('display reorder is persistent data but not a geometry edit, with stable hi
   assert.equal(onlyOrderChanged(before, { ...before, root: 'n1' }), false);
   assert.equal(onlyOrderChanged(before, { ...before, value_nodes: [{ ...before.value_nodes[0], value: 9 }, ...before.value_nodes.slice(1)] }), false);
 });
+test('mixed notebook ordering stays independent of computation and ignores stale display IDs', async () => {
+  const { notebookOrder, reorderScene, onlyOrderChanged } = await import('../src/workflow_drag.mjs');
+  const before = scene();
+  before.notebook_order = ['n1', 'value:p1', 'n2', 'value:p2', 'n3', 'n4', 'value:p3', 'missing', 'n1'];
+  const next = reorderScene(before, 'notebook', 'n4', 'value:p1');
+  assert.deepEqual(notebookOrder(next), ['n1', 'n4', 'value:p1', 'n2', 'value:p2', 'n3', 'value:p3']);
+  assert.equal(onlyOrderChanged(before, next), true);
+  assert.equal(next.root, before.root);
+  assert.deepEqual(next.nodes.find(n => n.id === 'n4').inputs, ['n3']);
+  assert.equal(reorderScene(before, 'notebook', 'absent', 'n1'), before);
+});
 test('body links reject cycles, duplicate inputs, missing sources and TPMS smooth unions atomically', async () => {
   const { connectReference } = await import('../src/workflow_drag.mjs'); const before = scene(), original = JSON.stringify(before);
   for (const [target, source, text] of [

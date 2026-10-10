@@ -52,6 +52,9 @@ class PythonBridge {
     this.pending.clear();
   }
   async materialize(result) {
+    if (result?.objects) {
+      result.objects = await Promise.all(result.objects.map(object => this.materialize(object)));
+    }
     if (!result?.geometry) return result;
     const geometry = result.geometry;
     if (!/^[a-f0-9]{32}\.mesh$/.test(geometry.file)) throw new Error('无效的网格传输文件');

@@ -9,9 +9,18 @@ const bridge = new PythonBridge(root, message => {
   if (window && !window.isDestroyed()) window.webContents.send('tpms:progress', message);
 });
 const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_node', 'evaluate_values', 'preset', 'region', 'quality', 'low_quality']);
+// Layout rendering uses a separate worker so edits and final generation stay responsive.
+const layoutBridge = new PythonBridge(root);
+let layoutBusy = false;
 let busy = false;
 ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
-  if (method === 'cancel') { bridge.cancel(); return {}; }
+  if (method === 'cancel') { bridge.cancel(); layoutBridge.cancel(); return {}; }
+  if (method === 'preview_scene') {
+    if (layoutBusy) throw new Error('布局预览正在更新');
+    layoutBusy = true;
+    try { return await layoutBridge.call(method, { scene: payload.scene }); }
+    finally { layoutBusy = false; }
+  }
   if (busy) throw new Error('已有计算任务，请等待完成或点击取消');
   busy = true;
   try {
@@ -63,4 +72,4 @@ app.whenReady().then(() => {
   window.loadFile(path.join(__dirname, 'dist', 'index.html'));
   window.on('closed', () => { window = null; });
 });
-app.on('window-all-closed', async () => { await bridge.close(); app.quit(); });
+app.on('window-all-closed', async () => { await Promise.all([bridge.close(), layoutBridge.close()]); app.quit(); });

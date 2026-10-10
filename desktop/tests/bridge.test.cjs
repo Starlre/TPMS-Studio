@@ -48,6 +48,23 @@ test('real Python/libfive IPC: mesh, region, export, error recovery and cancella
   const solid = await bridge.call('generate_solid', { scene: preset.scene });
   assert.equal(solid.mode, 'solid');
   assert.equal(solid.stats.watertight, true);
+  const exportBeforeLayout = path.join(bridge.transfer, 'before-layout.stl');
+  await bridge.call('export', { destination: exportBeforeLayout });
+  const incomplete = { ...preset.scene.nodes[2], id: 'unfinished', name: '未完成布尔', inputs: ['', ''] };
+  const layoutScene = { ...preset.scene, nodes: [...preset.scene.nodes.map((node, i) =>
+    i === 1 ? { ...node, position: [30, 0, 0] } : node), incomplete] };
+  const layout = await bridge.call('preview_scene', { scene: layoutScene });
+  assert.equal(layout.objects.length, 3);
+  assert.match(layout.errors.unfinished, /输入|引用/);
+  for (const object of layout.objects) {
+    assert.equal(object.geometry.positions.byteLength, object.stats.vertices * 12);
+    assert.equal(object.geometry.indices.byteLength, object.stats.faces * 12);
+  }
+  assert.ok(layout.objects.find(object => object.id === preset.scene.nodes[1].id).stats.bounds[0][0] > 20);
+  const exportAfterLayout = path.join(bridge.transfer, 'after-layout.stl');
+  await bridge.call('export', { destination: exportAfterLayout });
+  assert.deepEqual(await fs.readFile(exportAfterLayout), await fs.readFile(exportBeforeLayout));
+  assert.equal((await fs.readdir(bridge.transfer)).filter(file => file.endsWith('.mesh')).length, 0);
   await assert.rejects(bridge.call('region'), /实体组合暂不支持/);
   assert.ok(progress.length > 0);
   const controlled = await bridge.call('generate_tpms', { parameters: { ...p, target_porosity: 0.7 } });

@@ -52,6 +52,7 @@ class Workbench:
         self.region = None
         self.progress = progress or (lambda message: None)
         self.workflow = WorkflowEngine()
+        self.layout_workflow = WorkflowEngine(max_mesh_bytes=64 * 1024 * 1024, max_meshes=64)
 
     def geometry(self, vertices, faces, colors=None) -> dict:
         # One binary blob rather than millions of numbers in JSON.
@@ -78,6 +79,53 @@ class Workbench:
             answer['parameters'] = asdict(result.parameters)
         return answer
 
+    def preview_scene(self, raw: dict) -> dict:
+        # Each visible object has its own surface. Never union these meshes or commit an export snapshot.
+        nodes = raw.get('nodes', [])
+        if not isinstance(nodes, list) or len(nodes) > 64:
+            raise ValueError('布局预览最多支持 64 个实体')
+        by_id = {node['id']: node for node in nodes}
+        if len(by_id) != len(nodes):
+            raise ValueError('实体标识不能重复')
+        objects, errors, total_bytes = [], {}, 0
+        for node in nodes:
+            try:
+                dependencies, visiting = set(), set()
+                def visit(identifier):
+                    if identifier in visiting:
+                        raise ValueError('输入存在循环引用')
+                    if identifier in dependencies:
+                        return
+                    if identifier not in by_id:
+                        raise ValueError('请选择完整的上游输入')
+                    visiting.add(identifier)
+                    for child in by_id[identifier].get('inputs', []):
+                        visit(child)
+                    visiting.remove(identifier)
+                    dependencies.add(identifier)
+                visit(node['id'])
+                snapshot = SolidScene.from_dict({**raw, 'root': node['id'],
+                    'nodes': [item for item in nodes if item['id'] in dependencies]})
+                resolved = snapshot.resolved()
+                for item in resolved.nodes:
+                    if item.tpms:
+                        parameters(asdict(item.tpms))
+                extent = resolved.bounds()[1] - resolved.bounds()[0]
+                # Layout resolution is independent of the user's final output precision.
+                if not any(item.tpms for item in resolved.nodes):
+                    snapshot.cell_size = min(max(snapshot.cell_size, float(max(extent)) / 72),
+                                             float(min(extent)) / 8)
+                result, _ = self.layout_workflow.generate(snapshot, node['id'])
+                size_bytes = result.mesh.vertices.nbytes + result.mesh.faces.nbytes
+                if total_bytes + size_bytes > 64 * 1024 * 1024:
+                    raise ValueError('多实体预览超过 64 MiB，请简化场景或提高网格尺寸')
+                total_bytes += size_bytes
+                answer = self.generated(result, 'solid', commit=False)
+                objects.append({'id': node['id'], 'name': node['name'], **answer})
+            except (ValueError, TypeError, KeyError, OverflowError, RuntimeError) as exc:
+                errors[node.get('id', '')] = str(exc)
+        return {'objects': objects, 'errors': errors}
+
     def require_tpms(self):
         if not isinstance(self.current, MeshResult):
             raise ValueError("请先生成 TPMS 模型；实体组合暂不支持 CFD 网格")
@@ -85,6 +133,8 @@ class Workbench:
         return replace(self.current.parameters, target_porosity=None)
 
     def dispatch(self, method: str, payload: dict) -> dict:
+        if method == 'preview_scene':
+            return self.preview_scene(payload['scene'])
         if method == 'init':
             available, detail = backend_status()
             return {"libfive": available, "detail": detail, "python": sys.executable,
@@ -194,6 +244,7 @@ def main():
     worker = Workbench(args.transfer)
     import atexit
     atexit.register(worker.workflow.close)
+    atexit.register(worker.layout_workflow.close)
     for line in sys.stdin:
         request = {}
         try:
