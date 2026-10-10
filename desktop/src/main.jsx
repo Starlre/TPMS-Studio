@@ -1,8 +1,10 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, RotateCcw, Scan, ZoomIn, ZoomOut, Plus, Trash2, Copy, Combine, CircleHelp, X, Check, LoaderCircle, Activity, Triangle, Grid3X3, Workflow } from 'lucide-react';
+import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, RotateCcw, Scan, ZoomIn, ZoomOut, Plus, Trash2, Copy, Combine, CircleHelp, X, Check, LoaderCircle, Activity, Triangle, Workflow } from 'lucide-react';
 import Viewport from './Viewport';
 import NodeWorkflow from './NodeWorkflow';
+import InspectionPanel from './InspectionPanel';
+import { DEFAULT_SECTION } from './inspection_math.mjs';
 import { graphErrors, NODE_KINDS, affectedNodes } from './node_graph.mjs';
 import './style.css';
 
@@ -49,6 +51,12 @@ function App() {
   const [selected, setSelected] = useState('');
   const [editorHost, setEditorHost] = useState(null);
   const [inspectorTab, setInspectorTab] = useState('properties');
+  const [section, setSection] = useState({ ...DEFAULT_SECTION });
+  const [inspectionBounds, setInspectionBounds] = useState(null);
+  const [measurePoints, setMeasurePoints] = useState([]);
+  const [measuring, setMeasuring] = useState(false);
+  const [sectionStatus, setSectionStatus] = useState(null);
+  const [pickStatus, setPickStatus] = useState('');
   const [kind, setKind] = useState('sphere');
   const [operation, setOperation] = useState('difference');
   const [a, setA] = useState(''); const [b, setB] = useState(''); const [blend, setBlend] = useState(2);
@@ -261,6 +269,18 @@ function App() {
   const cv = (key, label, props = {}) => <Num label={label} value={cfd[key]} onChange={v => changeCfd(key, v)} {...props} />;
   const objects = scene.nodes.map(n => [n.id, n.name]);
   const activeResult = previewResult || result;
+  function resetInspection() { setSection({ ...DEFAULT_SECTION }); setMeasurePoints([]); setMeasuring(false); setSectionStatus(null); setPickStatus(''); }
+  useEffect(() => { resetInspection(); }, [displayGeometry]);
+  function changeSection(next) {
+    if (['enabled', 'axis', 'offset', 'positive', 'only', 'fill'].some(key => next[key] !== section[key]) || next.normal !== section.normal) { setMeasurePoints([]); setMeasuring(false); setPickStatus(''); }
+    setSection(next);
+  }
+  function pickedPoint(point) {
+    if (!point) { setMeasuring(false); return; }
+    point = point.map(value => Number(value.toFixed(6)));
+    const next = measurePoints[0] ? [measurePoints[0], point] : [point];
+    setMeasurePoints(next); setPickStatus(''); if (next.length === 2) setMeasuring(false);
+  }
 
   return <div className="app-shell">
     <header className="app-header">
@@ -275,7 +295,7 @@ function App() {
         <button className="icon-button" aria-label={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'} title="切换明暗主题" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button><button className="icon-button" aria-label="操作说明" onClick={() => setHelp(true)}><CircleHelp size={20} /></button>
       </div>
     </header>
-    <div className={`workspace ${mode === 'nodes' ? 'node-workspace' : ''}`}>
+    <div className={`workspace ${mode === 'nodes' ? 'node-workspace' : ''} ${inspectorTab === 'inspection' ? 'inspection-workspace' : ''}`}>
       <aside className="parameters" aria-label="建模参数">
         <div className="panel-heading"><div><small>{mode === 'nodes' ? '工作流' : '设计输入'}</small><h2>{mode === 'tpms' ? 'TPMS 参数' : mode === 'nodes' ? '节点建模' : '实体与组合'}</h2></div><span className="badge">{mode !== 'tpms' ? 'libfive' : 'mm'}</span></div>
         {mode === 'tpms' && <nav className="panel-tabs" aria-label="参数类别">{[['geometry', '几何'], ['structure', '结构'], ['cfd', 'CFD 网格']].map(([value, label]) => <button key={value} aria-pressed={tab === value} className={tab === value ? 'selected' : ''} onClick={() => setTab(value)}>{label}</button>)}</nav>}
@@ -320,20 +340,21 @@ function App() {
       <main className="model-area" aria-label="三维模型预览">
         <div className="viewport-toolbar"><div className="viewport-title"><span>三维视图</span><small>{display === 'region' ? '仿真边界' : display === 'low' ? '低质量单元' : renderer}</small></div>{mode === 'nodes' ? <span className="viewport-context">{previewResult ? `预览：${previewResult.name}` : result?.mode === 'solid' ? '最终输出' : '等待生成工作流'}</span> : <div className="viewport-actions"><Tool icon={Activity} disabled={!canCFD} title={!canCFD ? '生成 TPMS 模型后可使用' : '计算体单元质量'} onClick={() => inspectQuality()}>网格质量</Tool><Tool icon={Scan} disabled={!canCFD} active={display === 'region'} onClick={showRegion}>仿真区域</Tool><Tool icon={Triangle} disabled={!canCFD || !quality} title={!quality ? '先计算网格质量' : '定位低质量单元'} active={display === 'low'} onClick={lowQuality}>低质量</Tool></div>}</div>
         {error && <div className="error-banner" role="alert"><span>{error}</span><button aria-label="关闭错误提示" onClick={() => setError('')}><X size={18} /></button></div>}
-        <div className="viewport"><Viewport ref={viewport} geometry={displayGeometry} parameters={display === 'model' ? activeResult?.parameters : null} shader={info?.shader} theme={theme} implicit={implicit} wireframe={wireframe} onError={setError} onRenderer={setRenderer} />
+        <div className="viewport"><Viewport ref={viewport} geometry={displayGeometry} parameters={display === 'model' ? activeResult?.parameters : null} shader={info?.shader} theme={theme} implicit={implicit} wireframe={wireframe} onError={setError} onRenderer={setRenderer} section={section} points={measurePoints} measuring={measuring} onBounds={setInspectionBounds} onSectionStatus={setSectionStatus} onPick={pickedPoint} onPickStatus={setPickStatus} />
           {!displayGeometry && !busy && <div className="empty"><Box size={48} strokeWidth={1} aria-hidden="true" /><h2>从参数定义你的模型</h2><p>设置左侧参数，点击“生成模型”开始。</p></div>}
           <div className="view-tools"><button title="等轴测 / 重置视角" aria-label="重置视角" onClick={() => viewport.current?.fit()}><RotateCcw size={19} /></button>{['X', 'Y', 'Z'].map(axis => <button key={axis} aria-label={`${axis} 轴正交方向观察`} onClick={() => viewport.current?.view(axis)}>{axis}</button>)}<button aria-label="放大" onClick={() => viewport.current?.zoom(0.8)}><ZoomIn size={19} /></button><button aria-label="缩小" onClick={() => viewport.current?.zoom(1.25)}><ZoomOut size={19} /></button></div>
           {display === 'region' && <div className="legend"><span><i className="inlet" />入口 · 101</span><span><i className="outlet" />出口 · 102</span><span><i className="walls" />壁面 · 103</span></div>}
           {display === 'low' && <div className="legend">低质量单元：{format(quality?.quality.low_quality_elements)} · 阈值 {quality?.quality.low_quality_threshold}</div>}
-          <div className="viewport-caption">左键旋转 · 右键平移 · 滚轮缩放</div>
+          <div className="viewport-caption">{measuring ? '单击选择测量点 · 拖动旋转 · Esc 结束' : '左键旋转 · 右键平移 · 滚轮缩放'}</div>
           {previewResult && <div className="intermediate-note"><span>预览：{previewResult.name} · 导出使用最终输出</span><button type="button" className="secondary" disabled={busy} onClick={returnOutput}>返回最终输出</button></div>}
           {dirty && result && !previewResult && <div className="snapshot-note">当前显示上次生成的模型</div>}
         </div>
-        <div className="view-options"><Toggle label="GPU 隐式曲面" value={implicit} disabled={display !== 'model' || !activeResult?.parameters || activeResult.parameters.surface === 'Custom' || activeResult.parameters.tubular_enabled} onChange={setImplicit} /><Toggle label="线框" value={wireframe} onChange={setWireframe} /><span>单位：mm</span></div>
+        <div className="view-options"><button type="button" className={`tool ${inspectorTab === 'inspection' ? 'active' : ''}`} aria-pressed={inspectorTab === 'inspection'} disabled={!displayGeometry} onClick={() => setInspectorTab(inspectorTab === 'inspection' ? mode === 'nodes' ? 'properties' : 'model' : 'inspection')}><Scan size={17} aria-hidden="true" />剖切与测量</button><Toggle label="GPU 隐式曲面" value={implicit && !section.enabled && !measuring && !measurePoints.some(Boolean)} disabled={section.enabled || measuring || measurePoints.some(Boolean) || display !== 'model' || !activeResult?.parameters || activeResult.parameters.surface === 'Custom' || activeResult.parameters.tubular_enabled} onChange={setImplicit} /><Toggle label="线框" value={wireframe} onChange={setWireframe} /><span>单位：mm</span></div>
       </main>
-      <aside className="inspector" aria-label={mode === 'nodes' ? '属性与模型信息' : '模型信息'}>{mode === 'nodes' ? <nav className="inspector-tabs" aria-label="检查器类别">{[['properties', '节点属性'], ['model', '模型信息']].map(([id, name]) => <button type="button" key={id} aria-pressed={inspectorTab === id} className={inspectorTab === id ? 'selected' : ''} onClick={() => setInspectorTab(id)}>{name}</button>)}</nav> : <div className="panel-heading"><h2>模型信息</h2><Grid3X3 size={19} aria-hidden="true" /></div>}
+      <aside className="inspector" aria-label={mode === 'nodes' ? '属性与模型信息' : '模型信息'}><nav className="inspector-tabs" aria-label="检查器类别">{[...(mode === 'nodes' ? [['properties', '节点属性']] : []), ['model', '模型信息'], ['inspection', '剖切测量']].map(([id, name]) => <button type="button" key={id} aria-pressed={inspectorTab === id || mode !== 'nodes' && id === 'model' && inspectorTab === 'properties'} className={inspectorTab === id || mode !== 'nodes' && id === 'model' && inspectorTab === 'properties' ? 'selected' : ''} onClick={() => setInspectorTab(id)}>{name}</button>)}</nav>
+        {inspectorTab === 'inspection' && <div className="inspection-scroll"><InspectionPanel section={section} onSection={changeSection} bounds={inspectionBounds} points={measurePoints} onPoints={value => { setMeasurePoints(value); setPickStatus(''); }} measuring={measuring} onMeasuring={value => { setMeasuring(value); setPickStatus(''); }} status={sectionStatus} domain={display === 'region' ? '流体' : display === 'low' ? '单元' : '材料'} pickStatus={pickStatus} available={!!displayGeometry} viewPlane={normal => viewport.current?.viewNormal(normal)} onReset={resetInspection} /></div>}
         {mode === 'nodes' && <div className="property-host" ref={setEditorHost} hidden={inspectorTab !== 'properties'} />}
-        <div className="inspector-scroll" hidden={mode === 'nodes' && inspectorTab !== 'model'}><div className="result-name"><Box size={28} aria-hidden="true" /><strong>{previewResult ? previewResult.name : activeResult?.mode === 'solid' ? '组合实体' : activeResult?.parameters?.surface || '待生成'}</strong><span>{previewResult ? '中间节点预览' : dirty ? '参数待更新' : activeResult ? '已生成' : '准备就绪'}</span></div>
+        <div className="inspector-scroll" hidden={inspectorTab === 'inspection' || mode === 'nodes' && inspectorTab !== 'model'}><div className="result-name"><Box size={28} aria-hidden="true" /><strong>{previewResult ? previewResult.name : activeResult?.mode === 'solid' ? '组合实体' : activeResult?.parameters?.surface || '待生成'}</strong><span>{previewResult ? '中间节点预览' : dirty ? '参数待更新' : activeResult ? '已生成' : '准备就绪'}</span></div>
         <section className="metrics"><h3>几何统计</h3>{[['三角面', format(activeResult?.stats.faces)], ['顶点', format(activeResult?.stats.vertices)], ['体积', `${format(activeResult?.stats.volume, 2)} mm³`], ['表面积', `${format(activeResult?.stats.area, 2)} mm²`], ['孔隙率', activeResult?.stats.porosity != null ? `${format(activeResult.stats.porosity * 100, 2)} %` : '—'], ['封闭性', activeResult ? activeResult.stats.watertight ? '封闭 / 水密' : '未封闭' : '—']].map(([label, value]) => <div className="metric" key={label}><span>{label}</span><strong>{activeResult ? value : '—'}</strong></div>)}</section>
         {activeResult?.stats.bounds && <section className="metrics"><h3>世界坐标范围 / mm</h3>{['X', 'Y', 'Z'].map((axis, i) => <div className="metric" key={axis}><span>{axis}</span><strong>{format(activeResult.stats.bounds[0][i], 2)} ~ {format(activeResult.stats.bounds[1][i], 2)}</strong></div>)}</section>}
         <section className="kernel-info"><h3>建模内核</h3><div><span className={`connection ${info ? 'connected' : ''}`} /><span>Python {info ? '已连接' : '连接中'}</span></div><div><span className={`connection ${info?.libfive ? 'connected' : ''}`} /><span>libfive {info?.libfive ? '可用' : '不可用'}</span></div>{info && !info.libfive && <p className="hint">{info.detail}</p>}<p className="hint">完整计算模型用于导出。视口显示方式不会改变导出几何。</p></section>

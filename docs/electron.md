@@ -1,6 +1,6 @@
 # Electron 界面开发与运行
 
-更新时间：2026-10-10 12:11:35（Asia/Shanghai）。R-063 将节点工作区整理为步骤列表与选中属性编辑；早期更新按开发日志保留。
+更新时间：2026-10-10 13:08:21（Asia/Shanghai）。R-063 将节点工作区整理为步骤列表与选中属性编辑；R-065 增加剖切与测量，R-066 补充斜截面说明与实机截图。早期更新按开发日志保留。
 
 ## 当前界面
 
@@ -20,6 +20,9 @@
 | [实体组合](electron-solid.png) | 圆柱 TPMS 减流道对象树，属性与组合编辑见左侧下方 |
 | [仿真区域](electron-cfd.png) | CFD 参数与入口/出口/壁面图例 |
 | [网格质量](electron-quality.png) | 实际体网格统计、直方图与低质量数量 |
+| [TPMS 轴向剖切](electron-tpms-section.png) | 材料填充、孔洞保留与截面统计 |
+| [Gyroid 斜截面](electron-tpms-oblique-section.png) | 自定义法向 (1, 0, 1)、45° 切面与世界坐标位置 |
+| [两点测量](electron-measurement.png) | 表面选点、坐标编辑与直线距离 |
 
 界面截图展示实际运行的工作台。CFD 图展示入口、出口和壁面分组，质量报告来自实际体网格计算；示例仅用于操作说明，正式仿真仍需网格收敛验证。完整逐项说明见 [README](../README.md#新界面操作说明)、[实体组合](solid-modeling.md) 与 [libfive](libfive.md)。
 
@@ -59,6 +62,8 @@ Three.js 只处理视图。完整网格按 float32 顶点 + uint32 索引的二�
 
 ## 视口
 
+视口底部“剖切与测量”打开右侧检查器；支持 XYZ/任意法向、保留侧、截面填充与统计、包围盒和两点测量。显示裁剪即时更新，轮廓及选点在 Web Worker 中计算；工具启用时使用网格预览。查看操作不改变导出或项目参数，具体范围见 [剖切与测量](inspection.md)。
+
 - 内置五种 TPMS 的片层/实体/梯度使用现有数学场 GLSL，适配 WebGL2；传入孔隙率求解后的参数，公式不拼接用户输入。
 - GPU 隐式预览叠加在完整网格底图上，由清理后网格的 stencil 轮廓限制显示范围。射线漏采样时保留网格底图，已清理的游离组件不会重新出现在隐式视图。
 - 自定义公式、管状卷绕、实体组合、仿真区域、低质量定位和线框均使用网格显示。着色器编译失败回退网格。
@@ -91,6 +96,7 @@ JSON 项目保存参数、对象、组合关系、CFD 设置；兼容读取旧�
 | `desktop/src/ValueBlocks.jsx` / `workflow_values.py` | 数值、公式、向量参数块与类型化引用解析 |
 | `workflow_engine.py` | 跨次数学场复用、有界网格 LRU 与逐节点计算进度 |
 | `desktop/src/Viewport.jsx` | Three.js 相机、网格、GPU 隐式混合预览、方向标 |
+| `desktop/src/InspectionPanel.jsx` / `inspection_math.mjs` / `inspection.worker.js` | 剖切与测量控件、带孔截面求交和后台表面选点 |
 | `desktop/src/style.css` | 明暗主题、字体、间距、状态和窗口适配 |
 | `electron_backend.py` | 复用建模核心的进程协议 |
 | `launch_desktop.py` | 解释器选择、依赖安装、缓存展开和启动 |
@@ -115,8 +121,9 @@ npm run verify-ui
 npm run verify-nodes
 npm run verify-node-optimization
 npm run verify-workflow-layout
+npm run verify-inspection
 ```
 
-已记录的验收包括 Python 130 项通过、1 项跳过，JavaScript 4 项通过，以及生产构建和真实 Electron 窗口验收。窗口验收覆盖明暗主题、1120×760 布局、节点属性、类型化参数、循环与删除保护、保存恢复、撤销重做、自动更新错误恢复、中间预览与最终 STL 隔离、TPMS 与实体组合、CFD 边界和质量报告。
+已记录的验收包括 Python 130 项通过、1 项跳过，JavaScript 7 项通过，以及生产构建和真实 Electron 窗口验收。窗口验收覆盖明暗主题、1120×760 布局、节点属性、类型化参数、循环与删除保护、保存恢复、撤销重做、自动更新错误恢复、中间预览与最终 STL 隔离、TPMS 与实体组合、CFD 边界和质量报告。
 
 截图来自实际应用。COMSOL 导入、物理场配置、网格无关性和大模型性能基准仍需独立验收。
