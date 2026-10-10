@@ -28,6 +28,23 @@ test('real Python/libfive IPC: mesh, region, export, error recovery and cancella
   assert.equal((await fs.stat(destination)).size, 84 + 50 * exported.faces);
   await assert.rejects(bridge.call('generate_tpms', { parameters: { ...p, samples_per_cell: 512 } }), /上限/);
   const preset = await bridge.call('preset', { kind: 'sphere_hole' });
+  const legacy = { type:'tpms-electron', version:1, mode:'solid', parameters:p,
+    scene:{...preset.scene, parameters:{radius:8},
+      value_nodes:[{id:'p1',kind:'vector',name:'位移',symbol:'offset',components:[3,0,0]}],
+      nodes:preset.scene.nodes.map((node,index) => index === 0 ? {...node,expressions:{'dimensions.0':'radius'},vector_inputs:{position:'p1'}} : node) },
+    cfd:{} };
+  const migrated = (await bridge.call('validate_project', {project:legacy})).project;
+  assert.equal(migrated.mode,'nodes');
+  assert.deepEqual(migrated.scene,legacy.scene);
+  const raw = (await bridge.call('validate_project', {project:legacy.scene})).project;
+  assert.equal(raw.mode,'nodes');
+  assert.equal(raw.scene.root,legacy.scene.root);
+  assert.deepEqual(raw.scene.value_nodes,legacy.scene.value_nodes);
+  assert.deepEqual(raw.scene.nodes[0].expressions,legacy.scene.nodes[0].expressions);
+  assert.deepEqual(raw.scene.nodes[0].vector_inputs,legacy.scene.nodes[0].vector_inputs);
+  assert.equal((await bridge.call('validate_project', {project:{...legacy,mode:'tpms'}})).project.mode,'tpms');
+  assert.equal((await bridge.call('validate_project', {project:{...legacy,mode:'nodes'}})).project.mode,'nodes');
+  await assert.rejects(bridge.call('validate_project', {project:{...legacy,mode:'unknown'}}), /建模模式无效/);
   const solid = await bridge.call('generate_solid', { scene: preset.scene });
   assert.equal(solid.mode, 'solid');
   assert.equal(solid.stats.watertight, true);

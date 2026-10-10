@@ -7,10 +7,13 @@
   "scripts": {
     "start": "node start.cjs",
     "build": "vite build",
-    "test": "node --test tests/bridge.test.cjs tests/node-graph.test.cjs tests/node-optimization.test.cjs tests/inspection.test.cjs",
+    "test": "node --test tests/bridge.test.cjs tests/node-graph.test.cjs tests/node-optimization.test.cjs tests/inspection.test.cjs tests/workflow-drag.test.cjs",
     "verify-inspection": "node tests/inspection-ui.cjs",
     "verify-node-optimization": "node tests/node-optimization.cjs",
     "verify-workflow-layout": "node tests/workflow-layout.cjs",
+    "verify-workflow-navigation": "node tests/workflow-navigation.cjs",
+    "verify-ribbon": "node tests/ribbon-ui.cjs",
+    "verify-workflow-drag": "node tests/workflow-drag-ui.cjs",
     "verify-nodes": "node tests/node-workflow.cjs",
     "verify-ui": "node tests/ui-smoke.cjs"
   },

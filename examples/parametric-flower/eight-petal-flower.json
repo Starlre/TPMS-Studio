@@ -1,0 +1,757 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "sheet",
+    "size_x": 40,
+    "size_y": 40,
+    "size_z": 40,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.2,
+    "iso_level": 0,
+    "samples_per_cell": 64,
+    "target_porosity": null,
+    "formula": "sin(x)*cos(y) + sin(y)*cos(z) + sin(z)*cos(x)",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1,
+    "gradient_thickness_end": 5,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10
+  },
+  "scene": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "花茎",
+        "kind": "cylinder",
+        "dimensions": [
+          6,
+          24
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "stem_radius",
+          "dimensions.1": "stem_height",
+          "position.2": "stem_height / 2"
+        }
+      },
+      {
+        "id": "n2",
+        "name": "花心",
+        "kind": "sphere",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "center_radius",
+          "position.1": "-2",
+          "position.2": "stem_height + 6"
+        }
+      },
+      {
+        "id": "n3",
+        "name": "花瓣母体 · 椭球公式",
+        "kind": "tpms",
+        "dimensions": [],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": {
+          "surface": "Custom",
+          "mode": "solid",
+          "size_x": 30,
+          "size_y": 10,
+          "size_z": 16,
+          "cells_x": 2,
+          "cells_y": 2,
+          "cells_z": 2,
+          "thickness": 1.2,
+          "iso_level": 0,
+          "samples_per_cell": 64,
+          "target_porosity": null,
+          "formula": "1 - (x / 13)**2 - (y / 3.2)**2 - (z / 6.3)**2",
+          "gradient_enabled": false,
+          "gradient_axis": "Z",
+          "gradient_thickness_start": 1,
+          "gradient_thickness_end": 5,
+          "tubular_enabled": false,
+          "tubular_inner_radius": 10
+        },
+        "expressions": {}
+      },
+      {
+        "id": "n4",
+        "name": "花瓣 1 · 0°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * 1.00000000",
+          "position.2": "stem_height + 6 + petal_distance * 0.00000000"
+        }
+      },
+      {
+        "id": "n5",
+        "name": "花瓣 2 · 45°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -45,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * 0.70710678",
+          "position.2": "stem_height + 6 + petal_distance * 0.70710678"
+        }
+      },
+      {
+        "id": "n6",
+        "name": "花瓣 3 · 90°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -90,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * 0.00000000",
+          "position.2": "stem_height + 6 + petal_distance * 1.00000000"
+        }
+      },
+      {
+        "id": "n7",
+        "name": "花瓣 4 · 135°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -135,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * -0.70710678",
+          "position.2": "stem_height + 6 + petal_distance * 0.70710678"
+        }
+      },
+      {
+        "id": "n8",
+        "name": "花瓣 5 · 180°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -180,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * -1.00000000",
+          "position.2": "stem_height + 6 + petal_distance * 0.00000000"
+        }
+      },
+      {
+        "id": "n9",
+        "name": "花瓣 6 · 225°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -225,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * -0.70710678",
+          "position.2": "stem_height + 6 + petal_distance * -0.70710678"
+        }
+      },
+      {
+        "id": "n10",
+        "name": "花瓣 7 · 270°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -270,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * -0.00000000",
+          "position.2": "stem_height + 6 + petal_distance * -1.00000000"
+        }
+      },
+      {
+        "id": "n11",
+        "name": "花瓣 8 · 315°",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -315,
+          0
+        ],
+        "inputs": [
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "petal_distance * 0.70710678",
+          "position.2": "stem_height + 6 + petal_distance * -0.70710678"
+        }
+      },
+      {
+        "id": "n12",
+        "name": "叶片母体 · 椭球公式",
+        "kind": "tpms",
+        "dimensions": [],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": {
+          "surface": "Custom",
+          "mode": "solid",
+          "size_x": 40,
+          "size_y": 6,
+          "size_z": 14,
+          "cells_x": 2,
+          "cells_y": 2,
+          "cells_z": 2,
+          "thickness": 1.2,
+          "iso_level": 0,
+          "samples_per_cell": 64,
+          "target_porosity": null,
+          "formula": "1 - (x / 18)**2 - (y / 1.7)**2 - (z / 5.5)**2",
+          "gradient_enabled": false,
+          "gradient_axis": "Z",
+          "gradient_thickness_start": 1,
+          "gradient_thickness_end": 5,
+          "tubular_enabled": false,
+          "tubular_inner_radius": 10
+        },
+        "expressions": {}
+      },
+      {
+        "id": "n13",
+        "name": "左叶片",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          25,
+          0
+        ],
+        "inputs": [
+          "n12"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "-13",
+          "position.2": "stem_height * 0.45"
+        }
+      },
+      {
+        "id": "n14",
+        "name": "右叶片",
+        "kind": "transform",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          -25,
+          0
+        ],
+        "inputs": [
+          "n12"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "position.0": "13",
+          "position.2": "stem_height * 0.65"
+        }
+      },
+      {
+        "id": "n15",
+        "name": "花朵组合 1",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n1",
+          "n2"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n16",
+        "name": "花朵组合 2",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n15",
+          "n4"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n17",
+        "name": "花朵组合 3",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n16",
+          "n5"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n18",
+        "name": "花朵组合 4",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n17",
+          "n6"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n19",
+        "name": "花朵组合 5",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n18",
+          "n7"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n20",
+        "name": "花朵组合 6",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n19",
+          "n8"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n21",
+        "name": "花朵组合 7",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n20",
+          "n9"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n22",
+        "name": "花朵组合 8",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n21",
+          "n10"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n23",
+        "name": "花朵组合 9",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n22",
+          "n11"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n24",
+        "name": "花朵组合 10",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n23",
+          "n13"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n25",
+        "name": "八瓣花 · 最终实体",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n24",
+          "n14"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      }
+    ],
+    "root": "n25",
+    "cell_size": 0.3,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "花茎高度",
+        "symbol": "stem_height",
+        "kind": "number",
+        "value": 80
+      },
+      {
+        "id": "p2",
+        "name": "花茎半径",
+        "symbol": "stem_radius",
+        "kind": "number",
+        "value": 2.5
+      },
+      {
+        "id": "p3",
+        "name": "花瓣展开半径",
+        "symbol": "petal_distance",
+        "kind": "number",
+        "value": 14
+      },
+      {
+        "id": "p4",
+        "name": "花心半径",
+        "symbol": "center_radius",
+        "kind": "number",
+        "value": 7.5
+      }
+    ]
+  },
+  "cfd": {
+    "flow_axis": "X",
+    "element_size": 1.5,
+    "surface_samples_per_cell": 32,
+    "boundary_layer_enabled": false,
+    "boundary_layer_layers": 3,
+    "boundary_layer_first_height": 0.05,
+    "boundary_layer_growth": 1.2,
+    "end_refinement_enabled": true,
+    "end_refinement_distance": 2,
+    "end_refinement_size_factor": 0.5,
+    "curvature_refinement_enabled": true,
+    "curvature_points": 18,
+    "low_quality_threshold": 0.2
+  }
+}

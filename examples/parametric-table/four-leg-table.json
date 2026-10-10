@@ -1,0 +1,580 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "sheet",
+    "size_x": 40,
+    "size_y": 40,
+    "size_z": 40,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.2,
+    "iso_level": 0,
+    "samples_per_cell": 64,
+    "target_porosity": null,
+    "formula": "sin(x)*cos(y) + sin(y)*cos(z) + sin(z)*cos(x)",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1,
+    "gradient_thickness_end": 5,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10
+  },
+  "scene": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "桌面",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "table_length",
+          "dimensions.1": "table_width",
+          "dimensions.2": "top_thickness",
+          "position.2": "table_height - top_thickness / 2"
+        }
+      },
+      {
+        "id": "n2",
+        "name": "前左桌腿",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "leg_width",
+          "dimensions.1": "leg_width",
+          "dimensions.2": "table_height - top_thickness + 2",
+          "position.0": "-1 * (table_length / 2 - leg_offset)",
+          "position.1": "-1 * (table_width / 2 - leg_offset)",
+          "position.2": "(table_height - top_thickness + 2) / 2"
+        }
+      },
+      {
+        "id": "n3",
+        "name": "前右桌腿",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "leg_width",
+          "dimensions.1": "leg_width",
+          "dimensions.2": "table_height - top_thickness + 2",
+          "position.0": "1 * (table_length / 2 - leg_offset)",
+          "position.1": "-1 * (table_width / 2 - leg_offset)",
+          "position.2": "(table_height - top_thickness + 2) / 2"
+        }
+      },
+      {
+        "id": "n4",
+        "name": "后左桌腿",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "leg_width",
+          "dimensions.1": "leg_width",
+          "dimensions.2": "table_height - top_thickness + 2",
+          "position.0": "-1 * (table_length / 2 - leg_offset)",
+          "position.1": "1 * (table_width / 2 - leg_offset)",
+          "position.2": "(table_height - top_thickness + 2) / 2"
+        }
+      },
+      {
+        "id": "n5",
+        "name": "后右桌腿",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "leg_width",
+          "dimensions.1": "leg_width",
+          "dimensions.2": "table_height - top_thickness + 2",
+          "position.0": "1 * (table_length / 2 - leg_offset)",
+          "position.1": "1 * (table_width / 2 - leg_offset)",
+          "position.2": "(table_height - top_thickness + 2) / 2"
+        }
+      },
+      {
+        "id": "n6",
+        "name": "前横梁",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "table_length - 2 * leg_offset",
+          "dimensions.1": "rail_thickness",
+          "dimensions.2": "rail_height",
+          "position.1": "-1 * (table_width / 2 - leg_offset)",
+          "position.2": "table_height - top_thickness - rail_height / 2 + 5"
+        }
+      },
+      {
+        "id": "n7",
+        "name": "后横梁",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "table_length - 2 * leg_offset",
+          "dimensions.1": "rail_thickness",
+          "dimensions.2": "rail_height",
+          "position.1": "1 * (table_width / 2 - leg_offset)",
+          "position.2": "table_height - top_thickness - rail_height / 2 + 5"
+        }
+      },
+      {
+        "id": "n8",
+        "name": "左横梁",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "rail_thickness",
+          "dimensions.1": "table_width - 2 * leg_offset",
+          "dimensions.2": "rail_height",
+          "position.0": "-1 * (table_length / 2 - leg_offset)",
+          "position.2": "table_height - top_thickness - rail_height / 2 + 5"
+        }
+      },
+      {
+        "id": "n9",
+        "name": "右横梁",
+        "kind": "box",
+        "dimensions": [
+          16,
+          16,
+          16
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "rail_thickness",
+          "dimensions.1": "table_width - 2 * leg_offset",
+          "dimensions.2": "rail_height",
+          "position.0": "1 * (table_length / 2 - leg_offset)",
+          "position.2": "table_height - top_thickness - rail_height / 2 + 5"
+        }
+      },
+      {
+        "id": "n10",
+        "name": "组合 1 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n1",
+          "n2"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n11",
+        "name": "组合 2 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n10",
+          "n3"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n12",
+        "name": "组合 3 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n11",
+          "n4"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n13",
+        "name": "组合 4 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n12",
+          "n5"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n14",
+        "name": "组合 5 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n13",
+          "n6"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n15",
+        "name": "组合 6 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n14",
+          "n7"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n16",
+        "name": "组合 7 · 桌面与支架",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n15",
+          "n8"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n17",
+        "name": "四腿桌 · 最终实体",
+        "kind": "union",
+        "dimensions": [
+          8
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n16",
+          "n9"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      }
+    ],
+    "root": "n17",
+    "cell_size": 5,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "桌长",
+        "symbol": "table_length",
+        "kind": "number",
+        "value": 1200
+      },
+      {
+        "id": "p2",
+        "name": "桌宽",
+        "symbol": "table_width",
+        "kind": "number",
+        "value": 700
+      },
+      {
+        "id": "p3",
+        "name": "桌高",
+        "symbol": "table_height",
+        "kind": "number",
+        "value": 750
+      },
+      {
+        "id": "p4",
+        "name": "桌面厚度",
+        "symbol": "top_thickness",
+        "kind": "number",
+        "value": 32
+      },
+      {
+        "id": "p5",
+        "name": "桌腿宽度",
+        "symbol": "leg_width",
+        "kind": "number",
+        "value": 60
+      },
+      {
+        "id": "p6",
+        "name": "桌腿中心距桌边",
+        "symbol": "leg_offset",
+        "kind": "number",
+        "value": 90
+      },
+      {
+        "id": "p7",
+        "name": "横梁高度",
+        "symbol": "rail_height",
+        "kind": "number",
+        "value": 80
+      },
+      {
+        "id": "p8",
+        "name": "横梁厚度",
+        "symbol": "rail_thickness",
+        "kind": "number",
+        "value": 24
+      }
+    ]
+  },
+  "cfd": {
+    "flow_axis": "X",
+    "element_size": 1.5,
+    "surface_samples_per_cell": 32,
+    "boundary_layer_enabled": false,
+    "boundary_layer_layers": 3,
+    "boundary_layer_first_height": 0.05,
+    "boundary_layer_growth": 1.2,
+    "end_refinement_enabled": true,
+    "end_refinement_distance": 2,
+    "end_refinement_size_factor": 0.5,
+    "curvature_refinement_enabled": true,
+    "curvature_points": 18,
+    "low_quality_threshold": 0.2
+  }
+}

@@ -120,7 +120,7 @@ class Workbench:
             project = payload['project']
             if project.get('version') != 1 or project.get('type') != 'tpms-electron':
                 # Existing solid workspace JSON remains readable.
-                return {"project": {"version": 1, "type": "tpms-electron", "mode": "solid",
+                return {"project": {"version": 1, "type": "tpms-electron", "mode": "nodes",
                                     "scene": SolidScene.from_dict(project).to_dict()}}
             parameters(project['parameters'])
             if project.get('scene', {}).get('nodes'):
@@ -132,7 +132,8 @@ class Workbench:
                 raise ValueError('项目建模模式无效')
             from comsol_mesh import CFDMeshOptions
             CFDMeshOptions(**project.get('cfd', {})).validate()
-            return {"project": project}
+            # Legacy workspace names migrate without changing geometry or references.
+            return {"project": {**project, "mode": "nodes" if project["mode"] == "solid" else project["mode"]}}
         if method == 'export':
             if self.current is None:
                 raise ValueError('计算进程中没有模型，请重新生成')

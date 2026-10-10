@@ -42,12 +42,15 @@ async function main() {
     await page.getByRole('button', { name: '导出 STL / OBJ / PLY', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('已导出'));
     assert.ok((await fs.stat(path.join(output, '实际模型.stl'))).size > 10000);
-    await page.getByRole('button', { name: '实体组合', exact: true }).click();
+    await page.getByRole('button', { name: '实体建模', exact: true }).click();
+    await page.locator('.workflow-presets>summary').click();
     await page.getByRole('button', { name: '圆柱 TPMS 减流道', exact: true }).click();
-    await page.getByRole('button', { name: '生成实体', exact: true }).click();
+    await page.getByRole('button', { name: '生成工作流', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'));
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('网格预览'));
-    assert.equal(await page.getByRole('button', { name: '仿真区域', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('tab', { name: '仿真与网格', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '显示仿真边界', exact: true }).count(), 0);
+    await page.getByRole('tab', { name: '建模', exact: true }).click();
     await page.locator('.panel-scroll').evaluate(element => { element.scrollTop = 0; });
     await page.screenshot({ path: path.join(root, 'docs', 'electron-solid.png') });
     await page.getByRole('button', { name: 'TPMS 建模', exact: true }).click();
