@@ -8,7 +8,7 @@ let window;
 const bridge = new PythonBridge(root, message => {
   if (window && !window.isDestroyed()) window.webContents.send('tpms:progress', message);
 });
-const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preset', 'region', 'quality', 'low_quality']);
+const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_node', 'evaluate_values', 'preset', 'region', 'quality', 'low_quality']);
 let busy = false;
 ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
   if (method === 'cancel') { bridge.cancel(); return {}; }

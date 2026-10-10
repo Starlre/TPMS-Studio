@@ -32,7 +32,7 @@ libfive 提供数学表达式树与自适应 Dual Contouring 表面网格生成�
 | 管状卷绕 | 本阶段明确拒绝，继续选择“现有网格”导出 |
 | GPU 预览、CFD/COMSOL 体网格 | 预览与表面内核独立；CFD 沿用已有 Gmsh 实现，组合实体暂不支持 CFD |
 
-新增 [实体与组合建模工作区](solid-modeling.md) 提供基本体、变换与组合控件，不需要编写公式也能建模。节点图拖拽编辑、STEP/B-Rep 或新体网格算法尚未包含。数学表达式也可继续通过现有自定义公式入口使用。
+[实体与组合建模工作区](solid-modeling.md) 提供基本体、变换与组合控件，不需要编写公式也能建模。[节点建模工作区](node-modeling.md) 进一步提供步骤列表、选中属性编辑、数值/公式/向量参数、上游引用和中间预览。自由连线画布、STEP/B-Rep 或新体网格算法尚未包含。
 
 ## 数学定义与实现
 
@@ -46,7 +46,7 @@ libfive C API 实现中的 `res` 实际设定 `min_feature=1/res`，适配器传
 
 ## Windows 安装与构建
 
-本机已验证 MSYS2 UCRT64 GCC x64 路线。先在 UCRT64 终端安装工具：
+Windows 构建脚本采用 MSYS2 UCRT64 GCC x64 工具链。先在 UCRT64 终端安装工具：
 
 ```bash
 pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-boost mingw-w64-ucrt-x86_64-libpng mingw-w64-ucrt-x86_64-pkgconf
@@ -60,26 +60,18 @@ pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w
 powershell -ExecutionPolicy Bypass -File .\scripts\build_libfive.ps1
 ```
 
-脚本固定官方源码版本并单独获取 Eigen 3.4.0（验证 SHA256），仅编译内核，复制 DLL、依赖及许可证到 `native/libfive/`。MSYS2 的 `eigen3` 包已包含 Eigen 5，不能直接当作兼容的 Eigen 3 使用。构建位置默认 `C:/msys64/tmp/tpms-libfive-build`，避免 MinGW 对中文临时路径的编码问题。不修改系统 PATH，环境变量在脚本结束时恢复。已有不同版本或改动的源码目录会被保留并报错，请改用新的 `-BuildRoot`。
-
-```powershell
-.\scripts\build_libfive.ps1 -MsysRoot C:\msys64 -BuildRoot C:\msys64\tmp\tpms-libfive-build-2 -Jobs 2
-```
+脚本固定官方源码版本并单独获取 Eigen 3.4.0（验证 SHA256），仅编译内核，复制 DLL、依赖及许可证到 `native/libfive/`。构建不使用不兼容的 Eigen 5。可用 `-MsysRoot` 指定 MSYS2 安装目录、`-BuildRoot` 指定仅含 ASCII 字符的构建目录、`-Jobs` 设置并行任务数。不修改系统 PATH，环境变量在脚本结束时恢复。已有不同版本或改动的源码目录会被保留并报错，此时请指定新的构建目录。
 
 Python 和 DLL 必须同为 64 位。软件从自身目录定位 DLL，与启动工作目录无关；也支持指定现成库：
 
 ```powershell
-$env:TPMS_LIBFIVE_LIBRARY = 'C:\path\to\libfive.dll'
+$env:TPMS_LIBFIVE_LIBRARY = (Resolve-Path '.\native\libfive\libfive.dll').Path
 python launch_desktop.py
 ```
 
-`native/libfive/` 是本机构建产物，已加入 Git 忽略；其他机器需要运行构建脚本或安装匹配的原生库。Linux/macOS 可编译官方内核后使用同一环境变量，当前未做实机验证。
+`native/libfive/` 中的二进制构建产物不纳入 Git；安装时需要运行构建脚本或提供匹配的原生库。Linux/macOS 可编译官方内核后使用同一环境变量，当前尚未完成平台验收。
 
 也支持便携布局：将 `libfive.dll` 和同版本依赖 DLL 一起放在项目根目录。查找顺序为环境变量指定路径、`native/libfive/`、项目根目录；不会修改系统 PATH。根目录 DLL 同样由 Git 忽略。第三方许可证必须随程序保留。
-
-2026-10-09 23:34:37（Asia/Shanghai），用户确认 G 盘修复后，同步恢复了常规 `native/` 和 `scripts/` 目录；当前优先从 `G:/TPMS建模设计/native/libfive/` 加载 DLL，第三方许可保存在其 `licenses/` 下，不依赖 C 盘副本。
-
-此前 G 盘无法创建新目录时，采用根目录便携 DLL 和现有 `docs/libfive-license-*` 平铺许可。旧便携文件与 `libfive-build-support.zip` 继续保留作安装回退；压缩包包含构建配置、许可和开发工具，不参与正常运行。此布局只是安装方式，不能修复磁盘错误。
 
 ## 限制与验证
 

@@ -14,10 +14,12 @@ import trimesh
 from libfive_backend import (NativeKernel, _TreeArena, _field_tree, _Region,
                             _Interval, render_tree_mesh, validate_libfive_parameters)
 from tpms_core import TPMSParameters, _material_scalar_field
+from parametric import TPMS_FIELDS, evaluate_expression, validate_parameters
+from workflow_values import resolve_values, copy_value_nodes
 
 KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
          "tpms": "TPMS", "union": "并集", "intersection": "交集",
-         "difference": "差集 A−B", "smooth_union": "平滑融合"}
+         "difference": "差集 A−B", "smooth_union": "平滑融合", "transform": "变换"}
 OPERATIONS = {"union", "intersection", "difference", "smooth_union"}
 
 
@@ -32,6 +34,8 @@ class SolidNode:
     inputs: tuple[str, ...] = ()
     blend: float = 2.0
     tpms: TPMSParameters | None = None
+    expressions: dict[str, str] = field(default_factory=dict)
+    vector_inputs: dict[str, str] = field(default_factory=dict)
 
 
 def rotation_matrix(angles) -> np.ndarray:
@@ -46,6 +50,48 @@ class SolidScene:
     nodes: list[SolidNode] = field(default_factory=list)
     root: str = ""
     cell_size: float = 0.6
+    parameters: dict[str, float] = field(default_factory=dict)
+    value_nodes: list[dict] = field(default_factory=list)
+
+    def resolved(self) -> SolidScene:
+        """Resolve bindings in a copy, retaining editable formulas in the project."""
+        values, outputs = resolve_values(self.parameters, self.value_nodes)
+        nodes = []
+        for node in self.nodes:
+            if not isinstance(node.expressions, dict) or len(node.expressions) > 32:
+                raise ValueError(f"{node.name} 的参数表达式格式无效")
+            args = {"dimensions": list(node.dimensions), "position": list(node.position),
+                    "rotation": list(node.rotation), "blend": node.blend, "tpms": node.tpms}
+            if not isinstance(node.vector_inputs, dict):
+                raise ValueError(f"节点 {node.name}：向量输入格式无效")
+            for target, identifier in node.vector_inputs.items():
+                output = outputs.get(identifier)
+                if target not in {'position', 'rotation'} or not output or output['type'] != 'vector':
+                    raise ValueError(f"节点 {node.name} / {target}：请选择向量类型的参数节点")
+                if any(key.startswith(target + '.') for key in node.expressions):
+                    raise ValueError(f"节点 {node.name} / {target}：向量引用与分量表达式不能同时使用")
+                args[target] = list(output['value'])
+            for target, expression in node.expressions.items():
+                try:
+                    value = evaluate_expression(expression, values)
+                    parts = target.split(".")
+                    if target == "blend" and node.kind == "smooth_union":
+                        args["blend"] = value
+                    elif len(parts) == 2 and parts[0] in {"dimensions", "position", "rotation"} and parts[1] in {"0", "1", "2"}:
+                        args[parts[0]][int(parts[1])] = value
+                    elif len(parts) == 2 and parts[0] == "tpms" and parts[1] in TPMS_FIELDS and node.tpms is not None:
+                        if parts[1] in {"cells_x", "cells_y", "cells_z", "samples_per_cell"}:
+                            if not value.is_integer():
+                                raise ValueError("周期和采样数的表达式须得到整数")
+                            value = int(value)
+                        args["tpms"] = replace(args["tpms"], **{parts[1]: value})
+                    else:
+                        raise ValueError("不支持的参数目标")
+                except (ValueError, IndexError, AttributeError) as exc:
+                    raise ValueError(f"节点 {node.name} / {target}：{exc}") from exc
+            nodes.append(replace(node, dimensions=tuple(args["dimensions"]), position=tuple(args["position"]),
+                                 rotation=tuple(args["rotation"]), blend=args["blend"], tpms=args["tpms"], expressions={}, vector_inputs={}))
+        return SolidScene(nodes, self.root, self.cell_size, values)
 
     def by_id(self, identifier: str) -> SolidNode:
         for node in self.nodes:
@@ -74,6 +120,12 @@ class SolidScene:
             self.root = self.nodes[-1].id if self.nodes else ""
 
     def validate(self) -> None:
+        self.resolved()._validate_concrete()
+
+    def validate_values(self) -> None:
+        resolve_values(self.parameters, self.value_nodes)
+
+    def _validate_concrete(self) -> None:
         if not self.nodes or len(self.nodes) > 64:
             raise ValueError("请添加 1–64 个建模对象")
         if not math.isfinite(self.cell_size) or not 0.001 <= self.cell_size <= 100:
@@ -96,6 +148,10 @@ class SolidScene:
                     self.by_id(child)
                 if node.kind == "smooth_union" and (not math.isfinite(node.blend) or not 0.001 <= node.blend <= 100):
                     raise ValueError("融合宽度须在 0.001–100 mm 之间")
+            elif node.kind == "transform":
+                if len(node.inputs) != 1:
+                    raise ValueError("变换节点需要一个上游实体")
+                self.by_id(node.inputs[0])
             elif node.inputs:
                 raise ValueError("基本实体不能引用其他对象")
             if node.kind == "tpms":
@@ -104,7 +160,7 @@ class SolidScene:
                 node.tpms.validate()
                 if node.tpms.tubular_enabled:
                     raise ValueError("实体组合暂不支持管状卷绕 TPMS")
-            elif node.kind not in OPERATIONS:
+            elif node.kind not in OPERATIONS and node.kind != "transform":
                 counts = {"sphere": 1, "box": 3, "cylinder": 2, "torus": 2}
                 if len(node.dimensions) != counts[node.kind] or not all(
                     math.isfinite(value) and 0 < value <= 2000 for value in node.dimensions):
@@ -129,13 +185,30 @@ class SolidScene:
                 raise ValueError("TPMS 场不是精确距离场；平滑融合目前仅支持基本实体组合")
 
     def contains_tpms(self, identifier: str) -> bool:
-        node = self.by_id(identifier)
-        return node.kind == "tpms" or any(self.contains_tpms(child) for child in node.inputs)
+        pending, seen = [identifier], set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            node = self.by_id(current)
+            if node.kind == "tpms":
+                return True
+            pending.extend(node.inputs)
+        return False
 
-    def bounds(self, identifier: str | None = None) -> np.ndarray:
+    def bounds(self, identifier: str | None = None, _cache=None) -> np.ndarray:
+        if any(node.expressions or node.vector_inputs for node in self.nodes):
+            return self.resolved().bounds(identifier)
+        if _cache is None:
+            _cache = {}
         node = self.by_id(identifier or self.root)
-        if node.kind in OPERATIONS:
-            a, b = [self.bounds(child) for child in node.inputs]
+        if node.id in _cache:
+            return _cache[node.id].copy()
+        if node.kind == "transform":
+            bounds = self.bounds(node.inputs[0], _cache)
+        elif node.kind in OPERATIONS:
+            a, b = [self.bounds(child, _cache) for child in node.inputs]
             if node.kind == "difference":
                 bounds = a
             elif node.kind == "intersection":
@@ -156,10 +229,13 @@ class SolidScene:
             bounds = np.array([-np.array(half), half])
         corners = np.array([[bounds[(mask >> axis) & 1, axis] for axis in range(3)] for mask in range(8)])
         transformed = corners @ rotation_matrix(node.rotation).T + node.position
-        return np.array([transformed.min(axis=0), transformed.max(axis=0)])
+        result = np.array([transformed.min(axis=0), transformed.max(axis=0)])
+        _cache[node.id] = result
+        return result.copy()
 
     def to_dict(self) -> dict:
         return {"version": 1, "root": self.root, "cell_size": self.cell_size,
+                "parameters": dict(self.parameters), "value_nodes": copy_value_nodes(self.value_nodes),
                 "nodes": [asdict(node) for node in self.nodes]}
 
     @classmethod
@@ -177,7 +253,9 @@ class SolidScene:
                 if args.get("tpms") is not None:
                     args["tpms"] = TPMSParameters(**args["tpms"])
                 nodes.append(SolidNode(**args))
-            scene = cls(nodes=nodes, root=data["root"], cell_size=float(data["cell_size"]))
+            scene = cls(nodes=nodes, root=data["root"], cell_size=float(data["cell_size"]),
+                        parameters=validate_parameters(data.get("parameters", {})),
+                        value_nodes=copy_value_nodes(data.get("value_nodes", [])))
             scene.validate()
             return scene
         except (KeyError, TypeError, OverflowError, RecursionError) as exc:
@@ -203,10 +281,22 @@ class SolidScene:
             raise ValueError("建模项目不是有效 JSON") from exc
 
 
-def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict):
+def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict,
+                reuse=None, keys=None, report=None):
     if identifier in cache:
         return cache[identifier]
     node = scene.by_id(identifier)
+    key = keys[identifier] if keys else None
+    if reuse is not None and key in reuse:
+        cache[identifier] = reuse[key]
+        if report:
+            report(identifier, 'cached')
+        # Report all dependencies even when the whole parent field is reused.
+        for child in node.inputs:
+            _scene_tree(arena, scene, child, cache, reuse, keys, report)
+        return cache[identifier]
+    if report:
+        report(identifier, 'evaluating')
     coords = [arena.op(f"var-{axis}") for axis in "xyz"]
     x, y, z = coords
     op = arena.op
@@ -228,8 +318,10 @@ def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict):
             p = _material_scalar_field(p)[0]
         validate_libfive_parameters(p, scene.cell_size)
         tree = _field_tree(arena, p)
+    elif node.kind == "transform":
+        tree = _scene_tree(arena, scene, node.inputs[0], cache, reuse, keys, report)
     else:
-        a, b = [_scene_tree(arena, scene, child, cache) for child in node.inputs]
+        a, b = [_scene_tree(arena, scene, child, cache, reuse, keys, report) for child in node.inputs]
         if node.kind == "union":
             tree = op("min", a, b)
         elif node.kind == "intersection":
@@ -245,6 +337,10 @@ def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict):
     if any(node.position) or any(node.rotation):
         tree = tree.remap(local)
     cache[identifier] = tree
+    if reuse is not None:
+        reuse[key] = tree
+    if report:
+        report(identifier, 'ready')
     return tree
 
 
@@ -255,8 +351,9 @@ class SolidResult:
 
 
 def generate_solid(scene: SolidScene) -> SolidResult:
-    scene = SolidScene.from_dict(scene.to_dict())  # frozen snapshot of GUI state
-    scene.validate()
+    snapshot = SolidScene.from_dict(scene.to_dict())  # retains editable bindings
+    scene = snapshot.resolved()
+    scene._validate_concrete()
     bounds = scene.bounds()
     size = bounds[1] - bounds[0]
     margin = scene.cell_size * 2
@@ -270,7 +367,7 @@ def generate_solid(scene: SolidScene) -> SolidResult:
         tree = _scene_tree(arena, scene, scene.root, {})
         region = _Region(*[_Interval(float(lo - margin), float(hi + margin)) for lo, hi in zip(*bounds)])
         mesh = render_tree_mesh(kernel, tree, region, scene.cell_size)
-    return SolidResult(mesh, scene)
+    return SolidResult(mesh, snapshot)
 
 
 def demo_scene(kind: str = "tpms_channel") -> SolidScene:

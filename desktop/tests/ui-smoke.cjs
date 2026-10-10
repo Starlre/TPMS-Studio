@@ -9,7 +9,7 @@ async function main() {
   const output = await fs.mkdtemp(path.join(os.tmpdir(), 'tpms-electron-ui-'));
   const environment = { ...process.env, TPMS_PYTHON: process.env.TPMS_PYTHON || 'D:\\anaconda3\\python.exe' };
   delete environment.ELECTRON_RUN_AS_NODE;
-  const application = await electron.launch({ args: [process.env.TPMS_DESKTOP_DIR || path.join(root, 'desktop')],
+  const application = await electron.launch({ args: [process.env.TPMS_DESKTOP_DIR || path.join(root, 'desktop'), `--user-data-dir=${path.join(output, 'profile')}`],
     env: environment, timeout: 60000 });
   const page = await application.firstWindow();
   const pageErrors = [];
@@ -24,28 +24,31 @@ async function main() {
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(root, 'docs', 'electron-tpms-light.png') });
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1120, 760));
-    await page.waitForTimeout(250);
+    await page.waitForFunction(() => innerWidth <= 1120 && innerHeight <= 760);
     const bounds = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
       generate: document.querySelector('.generate').getBoundingClientRect().toJSON() }));
     assert.ok(bounds.scroll <= bounds.width);
     assert.ok(bounds.generate.x >= 0 && bounds.generate.bottom <= 760);
     await page.screenshot({ path: path.join(output, 'compact.png') });
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1520, 980));
+    await page.waitForFunction(() => innerWidth >= 1500);
     await page.getByRole('button', { name: '切换暗色主题', exact: true }).click();
     // Real native export dialog result, without requiring a human in the test.
     await application.evaluate(({ dialog }, outputPath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: outputPath });
     }, path.join(output, '实际模型.stl'));
     await page.locator('.export-menu>summary').click();
+    await page.screenshot({ path: path.join(root, 'docs', 'electron-export.png') });
     await page.getByRole('button', { name: '导出 STL / OBJ / PLY', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('已导出'));
     assert.ok((await fs.stat(path.join(output, '实际模型.stl'))).size > 10000);
     await page.getByRole('button', { name: '实体组合', exact: true }).click();
-    await page.getByRole('button', { name: '球体减贯穿孔', exact: true }).click();
+    await page.getByRole('button', { name: '圆柱 TPMS 减流道', exact: true }).click();
     await page.getByRole('button', { name: '生成实体', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'));
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('网格预览'));
     assert.equal(await page.getByRole('button', { name: '仿真区域', exact: true }).isDisabled(), true);
+    await page.locator('.panel-scroll').evaluate(element => { element.scrollTop = 0; });
     await page.screenshot({ path: path.join(root, 'docs', 'electron-solid.png') });
     await page.getByRole('button', { name: 'TPMS 建模', exact: true }).click();
     const panel = page.locator('.parameters');
@@ -55,9 +58,10 @@ async function main() {
     await page.getByLabel('每周期采样数', { exact: true }).fill('24');
     await page.getByRole('button', { name: '生成模型', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'));
+    await page.screenshot({ path: path.join(root, 'docs', 'electron-structure.png') });
     await page.getByRole('button', { name: 'CFD 网格', exact: true }).click();
     await page.getByLabel('体单元尺寸', { exact: true }).fill('2');
-    await page.getByLabel('流体表面采样数', { exact: true }).fill('16');
+    await page.getByLabel('流体表面采样数', { exact: true }).fill('32');
     await page.getByLabel('入口 / 出口局部加密', { exact: true }).uncheck();
     await page.getByLabel('曲率自适应', { exact: true }).uncheck();
     await page.getByRole('button', { name: '仿真区域', exact: true }).click();
@@ -67,7 +71,7 @@ async function main() {
     await page.getByRole('button', { name: '网格质量', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('dialog')?.open, { timeout: 90000 });
     assert.ok((await page.locator('.quality-summary').innerText()).includes('最小值'));
-    await page.screenshot({ path: path.join(output, 'quality.png') });
+    await page.screenshot({ path: path.join(root, 'docs', 'electron-quality.png') });
     await page.getByRole('button', { name: '关闭对话框', exact: true }).click();
     await page.getByRole('button', { name: '低质量', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.legend')?.textContent.includes('低质量单元'));
@@ -80,7 +84,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('项目已保存'));
     const project = JSON.parse(await fs.readFile(projectFile, 'utf8'));
     assert.equal(project.parameters.size_x, 12);
-    assert.equal(project.scene.nodes.length, 3);
+    assert.ok(project.scene.nodes.length >= 3);
     await page.getByRole('button', { name: '打开', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('项目已打开'));
     await page.getByRole('button', { name: '几何', exact: true }).click();

@@ -1,12 +1,16 @@
 # Electron 界面开发与运行
 
-更新时间：2026-10-10 00:24:12（Asia/Shanghai）。R-056 实现 Electron 工作台；R-057 同步完整 G 盘项目；R-058 修复 Windows 启动脚本；R-060 更新实际界面截图与操作文档。
+更新时间：2026-10-10 12:11:35（Asia/Shanghai）。R-063 将节点工作区整理为步骤列表与选中属性编辑；早期更新按开发日志保留。
 
 ## 当前界面
 
+顶部“节点建模”工作区采用左侧“建模步骤 / 设计参数 / 输出设置”、中央模型预览、右侧“节点属性 / 模型信息”。选中步骤或参数时只显示它的编辑表单，输入依赖以对象名称展示；输出名称、自动更新和生成固定在左下方。点击“预览此步骤”切换到中间实体统计，导出保持最终输出。操作见 [节点建模文档](node-modeling.md)。
+
+![节点步骤列表与右侧属性](electron-workflow-steps-dark.png)
+
 ![Electron 工程工作台：TPMS 建模](electron-tpms-dark.png)
 
-顶部切换“TPMS 建模 / 实体组合”，并提供打开、保存项目和导出。左侧参数栏独立滚动，底部生成按钮固定；中间视口支持旋转、平移、缩放、轴向视角与右下角 XYZ 方向标；右侧“模型信息”对应成功生成的完整网格。点击右上角太阳/月亮按钮切换整套主题。
+顶部切换“TPMS 建模 / 实体组合 / 节点建模”，并提供打开、保存项目和导出。左侧参数栏独立滚动，底部生成按钮固定；中间视口支持旋转、平移、缩放、轴向视角与右下角 XYZ 方向标；右侧“模型信息”对应成功生成的完整网格。点击右上角太阳/月亮按钮切换整套主题。
 
 | 实机截图 | 操作重点 |
 | --- | --- |
@@ -17,11 +21,11 @@
 | [仿真区域](electron-cfd.png) | CFD 参数与入口/出口/壁面图例 |
 | [网格质量](electron-quality.png) | 实际体网格统计、直方图与低质量数量 |
 
-全部七张图来自 2026-10-10 的 G 盘实机程序。CFD 样例为 12mm 单周期 Gyroid、流体表面采样 32、体单元尺寸 2mm，未启用边界层和局部加密；质量报告展示 1,335 节点和 4,184 体单元，用于操作说明，正式仿真仍需网格收敛验证。完整逐项说明见 [README](../README.md#新界面操作说明)、[实体组合](solid-modeling.md) 与 [libfive](libfive.md)。
+界面截图展示实际运行的工作台。CFD 图展示入口、出口和壁面分组，质量报告来自实际体网格计算；示例仅用于操作说明，正式仿真仍需网格收敛验证。完整逐项说明见 [README](../README.md#新界面操作说明)、[实体组合](solid-modeling.md) 与 [libfive](libfive.md)。
 
 ## 运行
 
-本机 Python 为 `D:/anaconda3/python.exe`。双击项目根目录 `启动Electron.cmd` / `run_tpms.bat`，或者执行：
+安装 Python、Node.js 和项目依赖后，双击项目根目录 `启动Electron.cmd` / `run_tpms.bat`，或者执行：
 
 ```powershell
 python launch_desktop.py
@@ -47,11 +51,11 @@ Electron 主进程：原生文件对话框、请求白名单、二进制网格�
 tpms_core.py / solid_model.py / libfive_backend.py / comsol_mesh.py
 ```
 
-Three.js 只处理视图。完整网格按 float32 顶点 + uint32 索引的二进制文件传入 Electron，避免百万级 JSON 数组。传输文件位于程序创建的独立临时目录，读取后删除；关闭程序清理临时数据。正式导出由本机文件对话框确定目标，采用临时文件完成后替换的方式保留已有文件。
+Three.js 只处理视图。完整网格按 float32 顶点 + uint32 索引的二进制文件传入 Electron，避免百万级 JSON 数组。传输文件位于程序创建的独立临时目录，读取后删除；关闭程序清理临时数据。正式导出由原生文件对话框确定目标，采用临时文件完成后替换的方式保留已有文件。
 
 渲染进程关闭 Node 集成，启用 contextIsolation、sandbox 和 CSP；阻止新窗口及外部导航，不开放任意 shell 命令或任意文件系统 API。Python 的数学公式仍由现有安全解析器执行。
 
-生成、导出、CFD 分析在独立 Python 进程串行运行。取消直接终止计算进程，后续启动新进程，必须重新生成模型。CFD 中的原多进程分域加速暂时关闭，减少桌面进程退出后残留子进程的风险；现有 Gmsh 本机计算仍保留。
+生成、导出、CFD 分析在独立 Python 进程串行运行。取消直接终止计算进程，后续启动新进程，必须重新生成模型。CFD 中的原多进程分域加速暂时关闭，减少桌面进程退出后残留子进程的风险；现有 Gmsh 计算仍保留。
 
 ## 视口
 
@@ -82,22 +86,22 @@ JSON 项目保存参数、对象、组合关系、CFD 设置；兼容读取旧�
 | `desktop/preload.cjs` | 受限界面通信 API |
 | `desktop/bridge.cjs` | Python 子进程、请求恢复、二进制网格传输 |
 | `desktop/src/main.jsx` | 工程工作台、表单、对象树、项目和诊断交互 |
+| `desktop/src/NodeWorkflow.jsx` / `node_graph.mjs` | 步骤列表、选中节点属性、输入引用、拓扑排序、共享参数绑定和输出编辑 |
+| `parametric.py` | 安全数值表达式和共享参数验证 |
+| `desktop/src/ValueBlocks.jsx` / `workflow_values.py` | 数值、公式、向量参数块与类型化引用解析 |
+| `workflow_engine.py` | 跨次数学场复用、有界网格 LRU 与逐节点计算进度 |
 | `desktop/src/Viewport.jsx` | Three.js 相机、网格、GPU 隐式混合预览、方向标 |
 | `desktop/src/style.css` | 明暗主题、字体、间距、状态和窗口适配 |
 | `electron_backend.py` | 复用建模核心的进程协议 |
 | `launch_desktop.py` | 解释器选择、依赖安装、缓存展开和启动 |
 
-界面设计使用 ui-ux-pro-max 的可读性、交互与性能规范；检索生成的宣传页布局没有用于工程工具。采用左右分区、系统中文字体、16px 正文、蓝色单一主色和明确的禁用/选中状态。
+界面采用系统中文字体、16px 正文和明确的禁用/选中状态。节点属性只展示当前选中项，长内容独立滚动。
 
-## G 盘运行与便携兼容布局
+## 源码与分发
 
-G 盘修复后，完整 `desktop/` 源码、锁文件、测试、构建结果和本机 `node_modules` 已同步回项目，同时恢复 `native/` 和 `scripts/`。`launch_desktop.py` 优先使用项目内 `desktop/package.json`，界面、Electron 可执行文件及 Python/libfive 后端直接从 G 盘运行。Python 和 Node.js 仍使用本机已安装的环境，不需要此前的 C 盘开发副本或 UI 缓存。
+常规运行使用项目内的 `desktop/`。兼容压缩包 `electron-desktop.zip` 包含界面源码、锁文件、测试和构建结果，不包含 `node_modules`。当源码目录不可用时，启动器按压缩包内容哈希展开界面并安装依赖；建模后端仍使用项目源码。
 
-下方说明保留故障期间使用的便携回退方式。`electron-desktop.zip` 包含完整界面源码、锁文件、测试、打包脚本和已构建界面，不包含 `node_modules`。
-
-项目没有可读取的 `desktop/package.json` 时，启动器将该压缩包按 SHA256 内容版本展开到 `%LOCALAPPDATA%/TPMSStudio/electron/<内容哈希>/desktop`，界面依赖也安装在此处。`TPMS_PROJECT_ROOT` 仍指向启动器所在项目，Python 核心和 G 盘 DLL 仍从原项目加载。此方法绕开目录创建故障，不修复 G 盘，也不隐藏对 C 盘缓存的依赖。
-
-当前项目已使用常规 `desktop/` 源码布局。`node_modules`、`desktop/dist/` 和 `native/libfive/` 继续由 `.gitignore` 排除；运行文件已安装在 G 盘，不代表应把它们提交到 Git。原有备份和 `.refs/` 未覆盖，未自动提交或推送。
+`node_modules`、`desktop/dist/` 和 `native/libfive/` 二进制构建产物不纳入 Git。完整安装包尚未提供，Python、Node.js 和原生库需要单独配置。
 
 ## 验证
 
@@ -108,12 +112,11 @@ npm ci
 npm run build
 npm test
 npm run verify-ui
+npm run verify-nodes
+npm run verify-node-optimization
+npm run verify-workflow-layout
 ```
 
-验证已完成：原项目 89 passed / 1 skipped；真实 Python/libfive IPC 测试覆盖生成、水密性、孔隙率、梯度 libfive、边界色、STL 长度、失败恢复、取消后重启；真实 Electron 测试覆盖暗/亮主题、1120×760 窗口、模型预览、实体组合、导出、CFD 区域/质量/低质量、JSON 保存打开和自定义公式回退。截图来自实际应用，不是静态效果图。
+已记录的验收包括 Python 130 项通过、1 项跳过，JavaScript 4 项通过，以及生产构建和真实 Electron 窗口验收。窗口验收覆盖明暗主题、1120×760 布局、节点属性、类型化参数、循环与删除保护、保存恢复、撤销重做、自动更新错误恢复、中间预览与最终 STL 隔离、TPMS 与实体组合、CFD 边界和质量报告。
 
-G 盘同步后再次以 G 盘后端和从 G 盘压缩包展开的 C 盘缓存界面运行相同 IPC / 真实 Electron 验收，通过。所有交付文件逐项进行 SHA256 同步校验。
-
-R-057 完整同步验收于 2026-10-09 23:55:13（Asia/Shanghai）完成：5,773 个文件校验通过；原 Python 测试 89 passed / 1 skipped；从 `G:/TPMS建模设计/desktop` 运行 Electron 构建、IPC 测试和真实窗口验收全部通过，页面异常为零。当前测试与正常启动均使用 G 盘 Electron 目录和 G 盘 libfive 原生库，不使用此前的 C 盘 UI 缓存。
-
-正式 CFD 的 COMSOL 实机导入、物理场配置、网格无关性和大模型性能基准仍沿用既有验收限制。
+截图来自实际应用。COMSOL 导入、物理场配置、网格无关性和大模型性能基准仍需独立验收。

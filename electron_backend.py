@@ -23,6 +23,8 @@ from tpms_core import (TPMSParameters, MeshResult, generate_tpms,
                        prepare_export_mesh, PreviewMesh)
 from libfive_backend import backend_status, generate_libfive_mesh, suggested_cell_size
 from solid_model import SolidScene, generate_solid, demo_scene
+from workflow_engine import WorkflowEngine
+from workflow_values import resolve_values
 from gpu_preview import IMPLICIT_FRAGMENT_SOURCE
 
 
@@ -49,6 +51,7 @@ class Workbench:
         self.cfd = None
         self.region = None
         self.progress = progress or (lambda message: None)
+        self.workflow = WorkflowEngine()
 
     def geometry(self, vertices, faces, colors=None) -> dict:
         # One binary blob rather than millions of numbers in JSON.
@@ -62,8 +65,9 @@ class Workbench:
         return {"file": name, "vertices": len(positions), "faces": len(indices),
                 "colors": colors is not None}
 
-    def generated(self, result, mode: str) -> dict:
-        self.current, self.cfd, self.region = result, None, None
+    def generated(self, result, mode: str, commit=True) -> dict:
+        if commit:
+            self.current, self.cfd, self.region = result, None, None
         mesh = result.mesh
         stats = {"faces": len(mesh.faces), "vertices": len(mesh.vertices),
                  "volume": abs(float(mesh.volume)), "area": float(mesh.area),
@@ -93,13 +97,21 @@ class Workbench:
             else:
                 result = generate_tpms(p)
             return self.generated(result, 'tpms')
-        if method == 'generate_solid':
+        if method in {'generate_solid', 'preview_node'}:
+            if method == 'preview_node' and not payload.get('node_id'):
+                raise ValueError('请选择需要预览的几何节点')
             scene = SolidScene.from_dict(payload['scene'])
-            for node in scene.nodes:
+            for node in scene.resolved().nodes:
                 if node.tpms:
                     parameters(asdict(node.tpms))
-            self.progress('libfive 正在提取布尔组合零等值面…')
-            return self.generated(generate_solid(scene), 'solid')
+            result, metadata = self.workflow.generate(scene, payload.get('node_id') if method == 'preview_node' else None, self.progress)
+            answer = self.generated(result, 'solid', commit=method != 'preview_node')
+            answer['workflow'] = metadata
+            return answer
+        if method == 'evaluate_values':
+            raw = payload['scene']
+            _, outputs = resolve_values(raw.get('parameters', {}), raw.get('value_nodes', []))
+            return {'values': outputs}
         if method == 'preset':
             if payload.get('kind') not in {'sphere_hole', 'smooth', 'tpms_channel'}:
                 raise ValueError('未知示例')
@@ -113,7 +125,10 @@ class Workbench:
             parameters(project['parameters'])
             if project.get('scene', {}).get('nodes'):
                 SolidScene.from_dict(project['scene'])
-            if project.get('mode') not in {'tpms', 'solid'}:
+            else:
+                raw_scene = project.get('scene', {})
+                resolve_values(raw_scene.get('parameters', {}), raw_scene.get('value_nodes', []))
+            if project.get('mode') not in {'tpms', 'solid', 'nodes'}:
                 raise ValueError('项目建模模式无效')
             from comsol_mesh import CFDMeshOptions
             CFDMeshOptions(**project.get('cfd', {})).validate()
@@ -176,6 +191,8 @@ def main():
         protocol.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + '\n')
         protocol.flush()
     worker = Workbench(args.transfer)
+    import atexit
+    atexit.register(worker.workflow.close)
     for line in sys.stdin:
         request = {}
         try:
