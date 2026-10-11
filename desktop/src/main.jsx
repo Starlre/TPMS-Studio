@@ -8,6 +8,7 @@ import { createValueBlock } from './ValueBlocks';
 import { Circle, Cylinder, CircleDot, Move3D, Hash, Variable, Undo2, Redo2, Eye, Scissors, Ruler, SlidersHorizontal, Waves, Grid3X3, GitMerge, GitCompare, Minus, Sparkles } from 'lucide-react';
 import InspectionPanel from './InspectionPanel';
 import { DEFAULT_SECTION } from './inspection_math.mjs';
+import { supportsImplicitPreview } from './display_geometry.mjs';
 import { graphErrors, affectedNodes, createNode, ancestors } from './node_graph.mjs';
 import { notebookOrder, onlyOrderChanged, sceneSignature as computationalSignature } from './workflow_drag.mjs';
 import './style.css';
@@ -21,7 +22,7 @@ const CFD = { flow_axis: 'X', element_size: 1.5, surface_samples_per_cell: 32,
   boundary_layer_enabled: false, boundary_layer_layers: 3, boundary_layer_first_height: 0.05, boundary_layer_growth: 1.2,
   end_refinement_enabled: true, end_refinement_distance: 2, end_refinement_size_factor: 0.5,
   curvature_refinement_enabled: true, curvature_points: 18, low_quality_threshold: 0.2 };
-const emptyScene = () => ({ version: 1, nodes: [], root: '', cell_size: 0.6, parameters: {}, value_nodes: [] });
+const emptyScene = () => ({ version: 1, nodes: [], root: '', cell_size: 0.3, parameters: {}, value_nodes: [] });
 const format = (n, digits = 0) => Number(n ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: digits });
 
 function Num({ label, value, onChange, unit, min, max, step = 0.1, disabled = false }) {
@@ -32,8 +33,8 @@ function Select({ label, value, onChange, options, disabled }) {
   const id = useId();
   return <label className="field" htmlFor={id}><span>{label}</span><select id={id} aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}>{options.map(option => { const [val, text] = Array.isArray(option) ? option : [option, option]; return <option key={val} value={val}>{text}</option>; })}</select></label>;
 }
-function Toggle({ label, value, onChange, disabled }) {
-  return <label className="toggle"><input type="checkbox" checked={value} disabled={disabled} onChange={e => onChange(e.target.checked)} /><span>{label}</span></label>;
+function Toggle({ label, value, onChange, disabled, title }) {
+  return <label className="toggle" title={title}><input type="checkbox" checked={value} disabled={disabled} onChange={e => onChange(e.target.checked)} /><span>{label}</span></label>;
 }
 function Section({ title, children, hint }) {
   return <section className="section"><h3>{title}</h3>{children}{hint && <p className="hint">{hint}</p>}</section>;
@@ -304,6 +305,8 @@ function App() {
   const cv = (key, label, props = {}) => <Num label={label} value={cfd[key]} onChange={v => changeCfd(key, v)} {...props} />;
   const layoutSelected = layoutScene.objects.find(object => object.id === selected) || visibleObjects?.[0];
   const activeResult = layoutActive ? layoutSelected : previewResult || result;
+  const canImplicit = !layoutActive && !section.enabled && !measuring && !measurePoints.some(Boolean) &&
+    display === 'model' && !wireframe && !viewGeometry?.colors && !!info?.shader && supportsImplicitPreview(activeResult?.parameters);
   function resetInspection() { setSection({ ...DEFAULT_SECTION }); setMeasurePoints([]); setMeasuring(false); setSectionStatus(null); setPickStatus(''); }
   useEffect(() => { resetInspection(); }, [displayGeometry]);
   function changeSection(next) {
@@ -445,7 +448,7 @@ function App() {
           {layoutActive && (layoutPending || layoutError || Object.keys(layoutScene.errors).length > 0) && <div className="layout-note" role="status">{layoutError || (layoutPending ? '正在更新实体布局预览…' : `未显示 ${Object.keys(layoutScene.errors).length} 个输入未完成或计算失败的实体`)}{!layoutPending && Object.entries(layoutScene.errors).map(([id, reason]) => <div key={id}>{scene.nodes.find(node => node.id === id)?.name || id}：{reason}</div>)}</div>}
           {dirty && result && !previewResult && !layoutActive && <div className="snapshot-note">当前显示上次生成的模型</div>}
         </div>
-        <div className="view-options">{mode === 'nodes' && <><Toggle label="全部实体" value={allEntities} onChange={value => value ? showAllEntities() : returnOutput()} /><Toggle label="半透明" value={translucent} disabled={!layoutActive} onChange={setTranslucent} /></>}<button type="button" className={`tool ${inspectorTab === 'inspection' ? 'active' : ''}`} aria-pressed={inspectorTab === 'inspection'} disabled={!hasView || layoutActive} onClick={() => setInspectorTab(inspectorTab === 'inspection' ? 'model' : 'inspection')}><Scan size={17} aria-hidden="true" />剖切与测量</button><Toggle label="GPU 隐式曲面" value={implicit && !section.enabled && !measuring && !measurePoints.some(Boolean)} disabled={layoutActive || section.enabled || measuring || measurePoints.some(Boolean) || display !== 'model' || !activeResult?.parameters || activeResult.parameters.surface === 'Custom' || activeResult.parameters.tubular_enabled} onChange={setImplicit} /><Toggle label="线框" value={wireframe} onChange={setWireframe} /><span>单位：mm</span></div>
+        <div className="view-options">{mode === 'nodes' && <><Toggle label="全部实体" value={allEntities} onChange={value => value ? showAllEntities() : returnOutput()} /><Toggle label="半透明" value={translucent} disabled={!layoutActive} onChange={setTranslucent} /></>}<button type="button" className={`tool ${inspectorTab === 'inspection' ? 'active' : ''}`} aria-pressed={inspectorTab === 'inspection'} disabled={!hasView || layoutActive} onClick={() => setInspectorTab(inspectorTab === 'inspection' ? 'model' : 'inspection')}><Scan size={17} aria-hidden="true" />剖切与测量</button><Toggle label="GPU 隐式曲面" value={canImplicit && implicit} disabled={!canImplicit} title={canImplicit ? '使用数学函数渲染 TPMS 曲面' : '当前显示网格；GPU 隐式曲面仅用于支持的 TPMS，剖切、测量和线框使用网格'} onChange={setImplicit} /><Toggle label="线框" value={wireframe} onChange={setWireframe} /><span>单位：mm</span></div>
       </main>
       <aside className="inspector" aria-label="模型信息与检查工具"><nav className="inspector-tabs" aria-label="检查器类别">{[['model', '模型信息'], ['inspection', '剖切测量']].map(([id, name]) => <button type="button" key={id} aria-pressed={inspectorTab === id} className={inspectorTab === id ? 'selected' : ''} onClick={() => setInspectorTab(id)}>{name}</button>)}</nav>
         {inspectorTab === 'inspection' && <div className="inspection-scroll"><InspectionPanel section={section} onSection={changeSection} bounds={inspectionBounds} points={measurePoints} onPoints={value => { setMeasurePoints(value); setPickStatus(''); }} measuring={measuring} onMeasuring={value => { setMeasuring(value); setPickStatus(''); }} status={sectionStatus} domain={display === 'region' ? '流体' : display === 'low' ? '单元' : '材料'} pickStatus={pickStatus} available={!!displayGeometry && !layoutActive} viewPlane={normal => viewport.current?.viewNormal(normal)} onReset={resetInspection} /></div>}

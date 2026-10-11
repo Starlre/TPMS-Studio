@@ -12,3 +12,6 @@
 *.ply binary
 *.msh binary
 *.bdf binary
+
+# Bundled WebGL shaders contain intentional whitespace inside string literals.
+docs/viewer-assets/** -text -whitespace linguist-generated=true

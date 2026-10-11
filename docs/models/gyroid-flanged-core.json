@@ -1,0 +1,582 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "sheet",
+    "size_x": 40.0,
+    "size_y": 40.0,
+    "size_z": 40.0,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.2,
+    "iso_level": 0.0,
+    "samples_per_cell": 64,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1.0,
+    "gradient_thickness_end": 5.0,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10.0
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n19",
+    "cell_size": 0.4,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "点阵壁厚 / mm",
+        "kind": "number",
+        "symbol": "wall",
+        "value": 1.4
+      },
+      {
+        "id": "p2",
+        "name": "法兰半径 / mm",
+        "kind": "number",
+        "symbol": "flange_radius",
+        "value": 23
+      },
+      {
+        "id": "p3",
+        "name": "轴向流道半径 / mm",
+        "kind": "number",
+        "symbol": "bore_radius",
+        "value": 4
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "Gyroid · 三周期片层",
+        "kind": "tpms",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": {
+          "surface": "Gyroid",
+          "mode": "sheet",
+          "size_x": 36,
+          "size_y": 36,
+          "size_z": 32,
+          "cells_x": 3,
+          "cells_y": 3,
+          "cells_z": 3,
+          "thickness": 1.4,
+          "iso_level": 0.0,
+          "samples_per_cell": 32,
+          "target_porosity": null,
+          "formula": "",
+          "gradient_enabled": false,
+          "gradient_axis": "Z",
+          "gradient_thickness_start": 1.0,
+          "gradient_thickness_end": 5.0,
+          "tubular_enabled": false,
+          "tubular_inner_radius": 10.0
+        },
+        "expressions": {
+          "tpms.thickness": "wall"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n2",
+        "name": "圆柱裁剪域",
+        "kind": "cylinder",
+        "dimensions": [
+          15,
+          32
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n3",
+        "name": "圆柱形点阵芯",
+        "kind": "intersection",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n1",
+          "n2"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n4",
+        "name": "下法兰外柱",
+        "kind": "cylinder",
+        "dimensions": [
+          23,
+          6
+        ],
+        "position": [
+          0,
+          0,
+          -17
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "flange_radius"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n5",
+        "name": "下法兰内孔",
+        "kind": "cylinder",
+        "dimensions": [
+          13,
+          8
+        ],
+        "position": [
+          0,
+          0,
+          -17
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n6",
+        "name": "下法兰环",
+        "kind": "difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n4",
+          "n5"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n7",
+        "name": "上法兰 · 共享下法兰",
+        "kind": "transform",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0,
+          0,
+          34
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n6"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n8",
+        "name": "点阵芯与下法兰",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n3",
+          "n6"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n9",
+        "name": "双法兰点阵主体",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n8",
+          "n7"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n10",
+        "name": "安装孔 1",
+        "kind": "cylinder",
+        "dimensions": [
+          2.3,
+          48
+        ],
+        "position": [
+          18,
+          0,
+          0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n11",
+        "name": "安装孔 2",
+        "kind": "cylinder",
+        "dimensions": [
+          2.3,
+          48
+        ],
+        "position": [
+          0,
+          18,
+          0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n12",
+        "name": "安装孔 3",
+        "kind": "cylinder",
+        "dimensions": [
+          2.3,
+          48
+        ],
+        "position": [
+          -18,
+          0,
+          0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n13",
+        "name": "安装孔 4",
+        "kind": "cylinder",
+        "dimensions": [
+          2.3,
+          48
+        ],
+        "position": [
+          0,
+          -18,
+          0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n14",
+        "name": "合并安装孔 1–2",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n10",
+          "n11"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n15",
+        "name": "合并安装孔 1–3",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n14",
+          "n12"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n16",
+        "name": "合并安装孔 1–4",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n15",
+          "n13"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n17",
+        "name": "双法兰减四孔",
+        "kind": "difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n9",
+          "n16"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n18",
+        "name": "贯穿轴向流道",
+        "kind": "cylinder",
+        "dimensions": [
+          4,
+          48
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "bore_radius"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n19",
+        "name": "Gyroid 双法兰 · 最终实体",
+        "kind": "difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n17",
+          "n18"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      }
+    ],
+    "notebook_order": [
+      "value:p1",
+      "value:p2",
+      "value:p3",
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "n5",
+      "n6",
+      "n7",
+      "n8",
+      "n9",
+      "n10",
+      "n11",
+      "n12",
+      "n13",
+      "n14",
+      "n15",
+      "n16",
+      "n17",
+      "n18",
+      "n19"
+    ]
+  }
+}

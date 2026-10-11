@@ -7,8 +7,11 @@
   "scripts": {
     "start": "node start.cjs",
     "build": "vite build",
-    "test": "node --test tests/bridge.test.cjs tests/node-graph.test.cjs tests/node-optimization.test.cjs tests/inspection.test.cjs tests/workflow-drag.test.cjs",
+    "build:web": "node ../scripts/build_web.mjs",
+    "test": "node --test tests/bridge.test.cjs tests/node-graph.test.cjs tests/node-optimization.test.cjs tests/inspection.test.cjs tests/workflow-drag.test.cjs tests/display-geometry.test.cjs",
     "verify-inspection": "node tests/inspection-ui.cjs",
+    "verify-edge-quality": "node tests/edge-quality-ui.cjs",
+    "verify-web": "node tests/web-viewer-ui.cjs",
     "verify-node-optimization": "node tests/node-optimization.cjs",
     "verify-workflow-layout": "node tests/workflow-layout.cjs",
     "verify-notebook-cards": "node tests/notebook-cards.cjs",

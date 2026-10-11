@@ -165,9 +165,11 @@ python launch_desktop.py
 
 ## 在线预览
 
-[![在线查看 Gyroid 三维模型](docs/model-preview.png)](https://starlre.github.io/TPMS-Studio/)
+[![在线工作台：Gyroid 双法兰结构、节点说明与三维预览](docs/model-preview.png)](https://starlre.github.io/TPMS-Studio/)
 
-GitHub Pages 提供可旋转、缩放、切换背景和下载的 Gyroid 查看器。网页展示预置 STL，与本地建模软件分别运行。
+打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 查看 Gyroid 双法兰结构。界面沿用桌面软件的暗色工具栏、左侧节点卡片、三维视口与右侧模型检查器；支持旋转缩放、XYZ 视角、暗亮主题、线框、任意法向剖切、截面统计和两点测量，并可下载原始 STL 与可编辑项目。
+
+网页展示软件实际导出的预置模型，参数与节点为只读说明；修改与重新生成使用桌面软件。详见 [在线预览指南](docs/online-viewer.md)。
 
 ## 开发验证
 

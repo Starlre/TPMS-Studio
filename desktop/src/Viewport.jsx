@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } f
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_SECTION, planeNormal, distanceBetween } from './inspection_math.mjs';
+import { createDisplayGeometry, IMPLICIT_SURFACES, supportsImplicitPreview } from './display_geometry.mjs';
 
 function typed(bytes, Type) {
   const buffer = Uint8Array.from(bytes).buffer;
@@ -280,10 +281,10 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         const previousBounds = bounds.clone(), previousDirection = camera.position.clone().sub(controls.target).toArray();
         bounds.makeEmpty();
         for (const item of items) {
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute('position', new THREE.BufferAttribute(typed(item.geometry.positions, Float32Array), 3));
-          geometry.setIndex(new THREE.BufferAttribute(typed(item.geometry.indices, Uint32Array), 1));
-          geometry.computeVertexNormals(); geometry.computeBoundingBox();
+          const sourceGeometry = new THREE.BufferGeometry();
+          sourceGeometry.setAttribute('position', new THREE.BufferAttribute(typed(item.geometry.positions, Float32Array), 3));
+          sourceGeometry.setIndex(new THREE.BufferAttribute(typed(item.geometry.indices, Uint32Array), 1));
+          const geometry = createDisplayGeometry(sourceGeometry); sourceGeometry.dispose();
           const object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide, wireframe: wires }));
           object.userData.id = item.id;
           const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 30), new THREE.LineBasicMaterial({ transparent: true }));
@@ -308,12 +309,14 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         const changed = value !== lastGeometry; lastGeometry = value;
         if (changed) { clearObject(mesh); clearObject(grid); clearSection(); clearObject(boxHelper); mesh = null; grid = null; boxHelper = null; worker?.terminate(); worker = null; clearTimeout(sectionTimer); sectionId++; pickId++; }
         if (!value) { inspectionCallbacks.current.onBounds?.(null); for (const child of [...markers.children]) clearObject(child); schedule(); return; }
-        const geometry = changed ? new THREE.BufferGeometry() : mesh.geometry;
+        let geometry = changed ? new THREE.BufferGeometry() : mesh.geometry;
         if (changed) {
           geometry.setAttribute('position', new THREE.BufferAttribute(typed(value.positions, Float32Array), 3));
           geometry.setIndex(new THREE.BufferAttribute(typed(value.indices, Uint32Array), 1));
           if (value.colors) geometry.setAttribute('color', new THREE.BufferAttribute(typed(value.colors, Float32Array), 3));
-          geometry.computeVertexNormals(); geometry.computeBoundingBox();
+          const sourceGeometry = geometry;
+          if (!params && !value.colors) geometry = createDisplayGeometry(sourceGeometry);
+          else { geometry.computeVertexNormals(); geometry.computeBoundingBox(); }
           mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: value.colors ? '#ffffff' : (light ? '#24708f' : '#69adca'), roughness: 0.44, metalness: 0.15, side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
           scene.add(mesh);
           if (geometry.boundingBox && !geometry.boundingBox.isEmpty()) bounds.copy(geometry.boundingBox);
@@ -321,15 +324,16 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           const extent = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
           grid = new THREE.GridHelper(extent * 2, 20, 0x7f99af, 0x7f99af); grid.rotation.x = Math.PI / 2;
           grid.position.set(center.x, center.y, bounds.min.z - extent * 0.03); grid.material.transparent = true; grid.material.opacity = light ? 0.24 : 0.16; scene.add(grid);
-          createWorker(geometry);
+          createWorker(sourceGeometry);
+          if (sourceGeometry !== geometry) sourceGeometry.dispose();
           inspectionCallbacks.current.onBounds?.([bounds.min.toArray(), bounds.max.toArray()]);
           updateInspection();
           updateMarkers();
         }
         mesh.material.wireframe = wires;
         const extent = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
-        const surfaces = ['Gyroid', 'Diamond', 'Primitive', 'I-WP', 'Neovius'];
-        if (useImplicit && source && params && surfaces.includes(params.surface) && !params.tubular_enabled && !value.colors && !wires) {
+        const surfaces = IMPLICIT_SURFACES;
+        if (useImplicit && source && supportsImplicitPreview(params) && !value.colors && !wires) {
           const cell = Math.min(params.size_x / params.cells_x, params.size_y / params.cells_y, params.size_z / params.cells_z);
           rayMaterial = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3,
             vertexShader: 'precision highp float; in vec3 position; void main() { gl_Position = vec4(position, 1.0); }',

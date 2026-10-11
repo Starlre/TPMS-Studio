@@ -49,7 +49,7 @@ def rotation_matrix(angles) -> np.ndarray:
 class SolidScene:
     nodes: list[SolidNode] = field(default_factory=list)
     root: str = ""
-    cell_size: float = 0.6
+    cell_size: float = 0.3
     parameters: dict[str, float] = field(default_factory=dict)
     value_nodes: list[dict] = field(default_factory=list)
 
@@ -371,7 +371,7 @@ def generate_solid(scene: SolidScene) -> SolidResult:
 
 
 def demo_scene(kind: str = "tpms_channel") -> SolidScene:
-    scene = SolidScene(cell_size=0.6)
+    scene = SolidScene(cell_size=0.3)
     if kind == "sphere_hole":
         a = scene.add("sphere", dimensions=(10,))
         b = scene.add("cylinder", dimensions=(3, 26))

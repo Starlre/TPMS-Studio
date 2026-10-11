@@ -1,0 +1,19 @@
+{
+  "name": "Gyroid 双法兰结构",
+  "file": "gyroid_tpms.stl",
+  "download_name": "gyroid-flanged-core.stl",
+  "project": "models/gyroid-flanged-core.json",
+  "sha256": "99cb4e25c458982f22d95fa7e8ef5538dbb66421e0c098cf550b32bb5112f696",
+  "stl_bytes": 18177284,
+  "faces": 363544,
+  "vertices": 181500,
+  "bounds_mm": [[-23, -23, -20], [23, 23, 20]],
+  "extents_mm": [46, 46, 40],
+  "volume_mm3": 19896.890892,
+  "area_mm2": 19234.945316,
+  "watertight": true,
+  "winding_consistent": true,
+  "connected_components": 1,
+  "cell_size_mm": 0.4,
+  "units": "mm"
+}

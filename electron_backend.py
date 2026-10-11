@@ -113,7 +113,7 @@ class Workbench:
                 extent = resolved.bounds()[1] - resolved.bounds()[0]
                 # Layout resolution is independent of the user's final output precision.
                 if not any(item.tpms for item in resolved.nodes):
-                    snapshot.cell_size = min(max(snapshot.cell_size, float(max(extent)) / 72),
+                    snapshot.cell_size = min(max(snapshot.cell_size, float(max(extent)) / 144),
                                              float(min(extent)) / 8)
                 result, _ = self.layout_workflow.generate(snapshot, node['id'])
                 size_bytes = result.mesh.vertices.nbytes + result.mesh.faces.nbytes
