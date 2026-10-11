@@ -1,0 +1,358 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "sheet",
+    "size_x": 40.0,
+    "size_y": 40.0,
+    "size_z": 40.0,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.2,
+    "iso_level": 0.0,
+    "samples_per_cell": 64,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1.0,
+    "gradient_thickness_end": 5.0,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10.0
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n11",
+    "cell_size": 0.4,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "球壳外半径 / mm",
+        "kind": "number",
+        "symbol": "radius",
+        "value": 19
+      },
+      {
+        "id": "p2",
+        "name": "球壳壁厚 / mm",
+        "kind": "number",
+        "symbol": "wall",
+        "value": 2.5
+      },
+      {
+        "id": "p3",
+        "name": "三向开孔半径 / mm",
+        "kind": "number",
+        "symbol": "bore_radius",
+        "value": 9
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "外球",
+        "kind": "sphere",
+        "dimensions": [
+          19
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "radius"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n2",
+        "name": "内球 · 共享壁厚",
+        "kind": "sphere",
+        "dimensions": [
+          16.5
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "radius - wall"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n3",
+        "name": "空心球壳",
+        "kind": "difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n1",
+          "n2"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n4",
+        "name": "赤道加强环",
+        "kind": "torus",
+        "dimensions": [
+          18,
+          2.8
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "radius - 1"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n5",
+        "name": "球壳与加强环",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n3",
+          "n4"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n6",
+        "name": "X 向贯穿流道",
+        "kind": "cylinder",
+        "dimensions": [
+          9,
+          50
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0,
+          90,
+          0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "bore_radius"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n7",
+        "name": "Y 向贯穿流道",
+        "kind": "cylinder",
+        "dimensions": [
+          9,
+          50
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "bore_radius"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n8",
+        "name": "Z 向贯穿流道",
+        "kind": "cylinder",
+        "dimensions": [
+          9,
+          50
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {
+          "dimensions.0": "bore_radius"
+        },
+        "vector_inputs": {}
+      },
+      {
+        "id": "n9",
+        "name": "XY 贯穿流道",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n6",
+          "n7"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n10",
+        "name": "XYZ 三向贯穿流道",
+        "kind": "union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n9",
+          "n8"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      },
+      {
+        "id": "n11",
+        "name": "三向开孔球壳 · 最终实体",
+        "kind": "difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n5",
+          "n10"
+        ],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {}
+      }
+    ],
+    "notebook_order": [
+      "value:p1",
+      "value:p2",
+      "value:p3",
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "n5",
+      "n6",
+      "n7",
+      "n8",
+      "n9",
+      "n10",
+      "n11"
+    ]
+  }
+}

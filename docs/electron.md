@@ -1,130 +1,107 @@
-# Electron 界面开发与运行
+# Electron 工程工作台
 
-更新时间：2026-10-11 00:45:31（Asia/Shanghai）。R-075 简化纵向节点卡片；R-073 按工作区显示选项卡及工具。早期更新按开发日志保留。
+TPMS Studio 的默认桌面界面使用 Electron、React 和 Three.js。界面负责交互和视图，独立 Python 计算进程复用 TPMS、libfive 和 Gmsh 内核。本文描述当前版本；原 Qt 界面保留为兼容入口。
 
-## 当前界面
-
-顶部功能选项卡按当前工作区筛选：“TPMS 建模”显示 TPMS、检查与测量、仿真与网格；“实体建模”显示建模、TPMS 节点、参数与公式、检查与测量。不适用的分类及工具分组不进入导航；实体中的 TPMS 节点只提供添加 TPMS 和隐式公式，不显示普通 TPMS 参数编辑工具。切换工作区后重置到各自默认分类并展开工具栏，避免停留在已隐藏的选项卡。左右/Home/End 键只遍历当前分类。
-
-下方工具以图标和文字分组，并保留禁用状态与提示。点击分类只修改查看状态；新建实体或参数展开节点属性，沿用共享节点工厂、依赖检查、项目保存和撤销历史。打开/保存/导出入口保留。旧实体项目自动进入节点树，保存时统一为节点项目。
-
-![顶部功能选项卡与分组工具栏](electron-ribbon-dark.png)
-
-工具栏右侧“收起”隐藏工具分组并扩大工作区；点击分类或“展开”恢复。分类支持左右键、Home / End，焦点与选择状态明确。工具文字与图标适配明暗主题，较窄窗口中工具区域可独立横向滚动，生成按钮仍固定在左下方。TPMS 平滑融合、未生成模型的诊断及组合实体 CFD 操作保持禁用。
-
-![顶部工具栏创建并生成节点模型](electron-ribbon-nodes.png)
-
-顶部“实体建模”工作区采用左侧纵向节点卡片、中央模型预览、右侧模型信息与剖切测量。空项目只显示“＋新节点”，搜索创建后自动展开。实体与参数可交错排列，标题保留折叠、名称、眼睛预览、引用图标和操作菜单；右键或“⋯”提供复制、删除、设为输出及排序。“设置”集中输出精度、参数求值、共享常量和示例。布尔输入可展开上游，嵌套编辑共享原节点数据；生成与自动更新在有实体后固定于底部。操作见 [节点建模文档](node-modeling.md)。
-
-![Notebook 节点树与节点内编辑](electron-notebook-cards-dark.png)
-
-卡片不再使用固定分组和区域标签；空项目只保留创建入口，非空项目提供收起、撤销/重做与设置。选择、展开、引用定位和菜单均属于查看状态，不修改模型或撤销历史。
-
-节点标题和左侧手柄可排序，实体与参数允许交错；右侧类型图标可拖到实体输入、数值字段或位置/旋转向量输入；已有引用标签也可拖动。兼容高亮、插入提示和边缘滚动帮助完成操作，类型/循环/重复输入错误会被拒绝。排序保留模型且随 JSON 保存；连接参与几何更新。菜单上移/下移、手柄键盘操作、下拉和 fx 提供替代方式。
-
-![Electron 工程工作台：TPMS 建模](electron-tpms-dark.png)
-
-顶部切换“TPMS 建模 / 实体建模”，并提供打开、保存项目和导出。左侧参数栏独立滚动，底部生成按钮固定；中间视口支持旋转、平移、缩放、轴向视角与右下角 XYZ 方向标；右侧“模型信息”对应成功生成的完整网格。点击右上角太阳/月亮按钮切换整套主题。
-
-| 实机截图 | 操作重点 |
-| --- | --- |
-| [亮色主题](electron-tpms-light.png) | 浅色工作台与深色模型保持对比 |
-| [结构参数](electron-structure.png) | 壁厚、孔隙率、梯度与向下滚动后的生成精度 |
-| [顶部导出](electron-export.png) | 质量/面数下拉、表面导出与 COMSOL 体网格 |
-| [实体建模](electron-solid.png) | 圆柱 TPMS 减流道节点树，展开节点编辑属性与上游引用 |
-| [仿真区域](electron-cfd.png) | CFD 参数与入口/出口/壁面图例 |
-| [网格质量](electron-quality.png) | 实际体网格统计、直方图与低质量数量 |
-| [TPMS 轴向剖切](electron-tpms-section.png) | 材料填充、孔洞保留与截面统计 |
-| [Gyroid 斜截面](electron-tpms-oblique-section.png) | 自定义法向 (1, 0, 1)、45° 切面与世界坐标位置 |
-| [两点测量](electron-measurement.png) | 表面选点、坐标编辑与直线距离 |
-
-界面截图展示实际运行的工作台。CFD 图展示入口、出口和壁面分组，质量报告来自实际体网格计算；示例仅用于操作说明，正式仿真仍需网格收敛验证。完整逐项说明见 [README](../README.md#新界面操作说明)、[实体组合](solid-modeling.md) 与 [libfive](libfive.md)。
+![当前工作台：复杂 Gyroid 组合与节点卡片](showcase-gyroid-dark.png)
 
 ## 运行
 
-安装 Python、Node.js 和项目依赖后，双击项目根目录 `启动Electron.cmd` / `run_tpms.bat`，或者执行：
+安装 Python 依赖与 Node.js 22.12+（建议 24 LTS），在项目根目录运行：
 
 ```powershell
+python -m pip install -r requirements.txt
 python launch_desktop.py
 ```
 
-`launch_desktop.py` 位于项目根目录。可在 VS Code 终端执行；Code Runner 在应用关闭前一直处于运行状态，再次点击运行可能显示 `Code is already running!`。
+Windows 可双击 `run_tpms.bat` / `启动Electron.cmd`。启动器首次安装界面依赖并构建，后续在源码变化时重新构建；首次安装需要网络。libfive 配置见 [原生内核说明](libfive.md)，没有该库时普通 TPMS 连续场建模仍可使用，实体工作区会提示依赖缺失。
 
-启动器使用当前 Python 解释器作为建模后端。需要安装 Node.js 22.12+，建议 24 LTS，以及 `requirements.txt` 中的 Python 依赖。libfive 仍按原项目原生库布局加载，缺少该库时 TPMS 连续场建模可用，实体组合明确禁用。
+旧 Qt 入口为 `python app.py` / `run_qt.bat`。当前没有包含 Python、Node.js 与原生库的独立安装包。
 
-首次启动安装 npm 依赖并构建界面，后续只在源文件更新时重新构建。Electron 默认下载失败时，仅对本次安装尝试 `npmmirror`；可以提前设置自己的 `ELECTRON_MIRROR`。此行为不改变系统 npm 配置。无需联网加载字体、图标或模型。
+## 工作区与布局
 
-`run_qt.bat` / `python app.py` 保留原 Qt 兼容入口。当前尚无带 Python/native 运行时的独立 EXE 安装包。
+| 工作区 | 顶部工具 | 左侧编辑 | 输出 |
+| --- | --- | --- | --- |
+| TPMS 建模 | TPMS、检查与测量、仿真与网格 | 几何、结构、CFD 参数 | TPMS 表面与流体体网格 |
+| 实体建模 | 建模、TPMS 节点、参数与公式、检查与测量 | 可拖动实体/参数卡片、上游引用和输出设置 | libfive 组合表面 |
 
-## 分层
+中央提供旋转、右键平移、滚轮缩放和 XYZ 视角。右侧分为模型信息与剖切测量，统计对应当前查看对象。太阳/月亮按钮切换整套主题；长内容独立滚动，生成操作固定在左侧底部。
+
+实体项目从空白卡片区开始，搜索创建后在节点内编辑。实体与参数统一排序；标题和手柄用于调整显示顺序，类型图标用于拖动引用，两者不混用。布尔 A/B 的上游可按需嵌套展开，编辑的是同一节点数据。操作见 [节点建模](node-modeling.md) 与 [实体建模](solid-modeling.md)。
+
+## 三种实体查看状态
+
+| 状态 | 显示内容 | 用途 | 正式导出 |
+| --- | --- | --- | --- |
+| 全部实体 | 各有效几何节点的独立网格 | 相对位置、相交、源实体与结果对比 | 保留已生成的最终快照 |
+| 单独预览 | 一个中间节点的依赖结果 | 检查步骤、独立统计与剖切 | 保留已生成的最终快照 |
+| 最终输出 | 指定输出节点的生成结果 | 检查完整布尔组合、正式导出 | 使用该生成快照 |
+
+![多实体查看：球壳、加强环与三向贯穿孔](showcase-layout-dark.png)
+
+布局支持半透明、稳定颜色、选中高亮、模型/标签选择和逐个显隐。编辑后 450 ms 防抖更新；视野范围增大时适配可见实体，并保留观察方向。排序、选择、显隐和透明度不改变几何。
+
+修改尺寸或引用使最终输出待更新，正式导出等待重新生成。“生成工作流”切回最终输出。自动更新输出默认关闭，开启后停止编辑 900 ms 更新；输入错误或取消后不反复重试相同设置。显示布局并不意味着独立实体已完成并集，重叠体积也不直接相加。
+
+## 进程与数据流
 
 ```text
-React 参数 / 对象树 / 质量报告
-              ↓ 受限 preload IPC
-Electron 主进程：原生文件对话框、请求白名单、二进制网格传输
-              ↓ 私有 stdin / stdout JSON-lines
-独立 Python 进程：electron_backend.py
-              ↓
-tpms_core.py / solid_model.py / libfive_backend.py / comsol_mesh.py
+React 参数、卡片与检查工具
+         │ 受限 preload IPC
+Electron 主进程与原生文件对话框
+         ├─ 主 Python worker：最终生成、导出、CFD 与中间预览
+         └─ 布局 Python worker：各几何节点独立预览
+                 │
+tpms_core / solid_model / libfive_backend / workflow_engine / comsol_mesh
+                 │ 二进制顶点与索引
+Three.js / WebGL2 模型显示
 ```
 
-Three.js 只处理视图。完整网格按 float32 顶点 + uint32 索引的二进制文件传入 Electron，避免百万级 JSON 数组。传输文件位于程序创建的独立临时目录，读取后删除；关闭程序清理临时数据。正式导出由原生文件对话框确定目标，采用临时文件完成后替换的方式保留已有文件。
+最终计算与布局使用独立 PythonBridge，布局不会占用主生成队列。布局逐个提取节点依赖子图，失败节点单独反馈，其余有效实体继续显示；请求防抖、串行并丢弃过期结果。基本实体可用较粗布局提取尺度，项目的最终精度不被覆盖。
 
-渲染进程关闭 Node 集成，启用 contextIsolation、sandbox 和 CSP；阻止新窗口及外部导航，不开放任意 shell 命令或任意文件系统 API。Python 的数学公式仍由现有安全解析器执行。
+顶点以 float32、索引以 uint32 二进制传输，避免大规模 JSON 网格数组。传输文件由主进程私有目录管理，读入后清理，窗口关闭结束 worker 并清理临时数据。
 
-生成、导出、CFD 分析在独立 Python 进程串行运行。取消直接终止计算进程，后续启动新进程，必须重新生成模型。CFD 中的原多进程分域加速暂时关闭，减少桌面进程退出后残留子进程的风险；现有 Gmsh 计算仍保留。
+主工作流复用数学场与近期网格，网格 LRU 最多 8 个、数组合计 96 MiB；布局缓存最多 64 个、数组合计 64 MiB，并限制单次预览传输规模。这些预算不包含所有属性缓存和计算峰值。取消或重启 worker 清空缓存，需重新生成输出。
 
-## 视口
+渲染进程关闭 Node 集成，启用 contextIsolation、sandbox 与 CSP；禁止外部导航及新窗口，IPC 不暴露任意 shell/文件系统。空间公式和数值表达式由受限 AST 解析。文件保存完成后替换目标，避免生成失败破坏原文件。
 
-视口底部“剖切与测量”打开右侧检查器；支持 XYZ/任意法向、保留侧、截面填充与统计、包围盒和两点测量。显示裁剪即时更新，轮廓及选点在 Web Worker 中计算；工具启用时使用网格预览。查看操作不改变导出或项目参数，具体范围见 [剖切与测量](inspection.md)。
+## 预览与检查
 
-- 内置五种 TPMS 的片层/实体/梯度使用现有数学场 GLSL，适配 WebGL2；传入孔隙率求解后的参数，公式不拼接用户输入。
-- GPU 隐式预览叠加在完整网格底图上，由清理后网格的 stencil 轮廓限制显示范围。射线漏采样时保留网格底图，已清理的游离组件不会重新出现在隐式视图。
-- 自定义公式、管状卷绕、实体组合、仿真区域、低质量定位和线框均使用网格显示。着色器编译失败回退网格。
-- 相机采用 Z 向上；XYZ 字母方向标与相机旋转一致；恢复视角后完整模型适配窗口。
-- 按需 requestAnimationFrame 渲染，阻尼结束后停止绘制。拖动降低像素比，松开后恢复；切换模型时显式释放 GPU 几何与材质。
-- 当前混合预览轮廓仍受生成网格精度影响；不是无限精度几何，也未声称达到 nTop 的复杂场性能。未测定正式 FPS 基准。
+- 普通内置 TPMS 支持 WebGL2 混合隐式预览：解析数学场叠加网格底图，清理后网格轮廓限定显示范围，漏采样时保留底图。
+- 自定义公式、卷绕、实体组合、仿真边界、低质量与线框采用网格显示。着色器失败回退网格。
+- 按需绘制，阻尼结束后停止；拖动时降低像素比，结束后恢复；切换模型释放几何、边缘与材质资源。
+- 剖切显示即时裁剪，截面求交与拾取在 Web Worker 计算；检查不改变正式导出。
+- 全部实体模式不聚合重叠网格截面，切回最终输出或单独预览后检查。
 
-## 功能与快照
+![最终输出纵向剖切](showcase-gyroid-section.png)
 
-TPMS 参数包括五种内置曲面、自定义公式、尺寸、周期、片层/实体、孔隙率、梯度、卷绕、采样数及连续场/libfive 内核。自定义公式输入时隐藏周期控件，参数验证由 Python 最终执行。
+混合隐式预览的轮廓仍受网格精度影响，软件未发布无限精度或商业软件性能等价的保证。
 
-统一实体建模工作区支持球、长方体、圆柱、圆环、TPMS；位置、旋转、复制、受引用对象删除保护；并集、交集、差集、基本体平滑融合；最终输出选择与三个示例。TPMS 对象保存独立参数快照，可用按钮更新为当前 TPMS 参数。组合仍沿用已有 64 对象、无循环和网格规模限制。
+## 项目与导出
 
-模型统计和导出始终对应成功生成的快照。修改建模参数会标记未生成，禁止导出与 CFD；CFD 设置单独改变时只使质量结果失效。诊断使用已求解后的生成参数，避免二次孔隙率求解。目标孔隙率与梯度互斥，实体模式禁用梯度。
+JSON 保存 TPMS 参数、CFD 设置、实体与参数节点、表达式、引用、输出、精度及卡片顺序。兼容旧 Qt 实体项目和旧 Electron 实体模式，打开后进入统一实体工作区；保存项目不等于保存网格，打开后重新生成。
 
-导出质量/面数集中在顶部“导出”菜单，包括原始、高、中、低、自定义面数和 TPMS libfive 重算。简化沿用原有方法，实际面数和水密性显示在状态栏；正式仿真应优先使用水密的原始或验证过的网格。
+查看显隐、透明度、展开状态、撤销历史和缓存不保存。历史最多 50 步；文本框保留自身撤销，非文本状态的 Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 控制工作流。
 
-JSON 项目保存参数、对象、组合关系、CFD 设置；兼容读取旧实体组合 JSON 和旧 Electron 实体模式项目，自动进入统一节点工作区。保存项目不等于保存网格，打开项目后需生成。快捷键：Ctrl+O 打开，Ctrl+S 保存项目，Ctrl+Shift+S 导出，Ctrl+Enter 生成。
+顶部导出集中设置原始、分级质量或目标面数。普通非卷绕 TPMS 在原生库可用时还提供 libfive 重算；实体组合使用已生成 libfive 网格。CFD 输出仅对普通 TPMS 可用，详见 [CFD 网格](cfd-meshing.md)。
+
+快捷键：Ctrl+O 打开、Ctrl+S 保存、Ctrl+Shift+S 导出、Ctrl+Enter 生成。
 
 ## 工程文件
 
 | 文件 | 职责 |
 | --- | --- |
-| `desktop/main.cjs` | 桌面窗口、IPC 白名单、文件对话框 |
-| `desktop/preload.cjs` | 受限界面通信 API |
-| `desktop/bridge.cjs` | Python 子进程、请求恢复、二进制网格传输 |
-| `desktop/src/main.jsx` | 工程工作台、表单、对象树、项目和诊断交互 |
-| `desktop/src/NodeWorkflow.jsx` / `node_graph.mjs` | Notebook 节点树、展开状态、节点内编辑、引用定位、依赖检查、共享参数绑定和输出编辑 |
-| `desktop/src/WorkflowDrag.jsx` / `workflow_drag.mjs` | 节点显示排序、拖动引用、类型/循环校验、边缘滚动与计算签名 |
-| `parametric.py` | 安全数值表达式和共享参数验证 |
-| `desktop/src/ValueBlocks.jsx` / `workflow_values.py` | 数值、公式、向量参数块与类型化引用解析 |
-| `workflow_engine.py` | 跨次数学场复用、有界网格 LRU 与逐节点计算进度 |
-| `desktop/src/Viewport.jsx` | Three.js 相机、网格、GPU 隐式混合预览、方向标 |
-| `desktop/src/InspectionPanel.jsx` / `inspection_math.mjs` / `inspection.worker.js` | 剖切与测量控件、带孔截面求交和后台表面选点 |
-| `desktop/src/style.css` | 明暗主题、字体、间距、状态和窗口适配 |
-| `electron_backend.py` | 复用建模核心的进程协议 |
-| `launch_desktop.py` | 解释器选择、依赖安装、缓存展开和启动 |
+| `desktop/main.cjs` / `preload.cjs` / `bridge.cjs` | 主窗口、受限 IPC、两个 Python worker 与二进制传输 |
+| `desktop/src/main.jsx` | 工作区、参数、项目、生成与诊断 |
+| `NodeWorkflow.jsx` / `CardMenu.jsx` | 卡片、上游编辑、选择与操作菜单 |
+| `ValueBlocks.jsx` / `node_graph.mjs` | 参数节点、引用与依赖检查 |
+| `WorkflowDrag.jsx` / `workflow_drag.mjs` | 排序、拖动引用及显示顺序无关签名 |
+| `Viewport.jsx` | 三维相机、混合预览、多实体、方向标与资源释放 |
+| `InspectionPanel.jsx` / `inspection.worker.js` | 剖切、截面与两点测量 |
+| `electron_backend.py` | 计算协议、生成快照、布局和网格传输 |
+| `workflow_engine.py` / `workflow_values.py` | 数学场与网格缓存、受限参数求值 |
+| `launch_desktop.py` | 启动、界面依赖与缓存展开 |
 
-界面采用系统中文字体、16px 正文和明确的禁用/选中状态。节点属性在左侧展开项内编辑，可同时打开多个节点；参数树和右侧检查工具分别滚动，生成按钮始终可见。
-
-## 源码与分发
-
-常规运行使用项目内的 `desktop/`。兼容压缩包 `electron-desktop.zip` 包含界面源码、锁文件、测试和构建结果，不包含 `node_modules`。当源码目录不可用时，启动器按压缩包内容哈希展开界面并安装依赖；建模后端仍使用项目源码。
-
-`node_modules`、`desktop/dist/` 和 `native/libfive/` 二进制构建产物不纳入 Git。完整安装包尚未提供，Python、Node.js 和原生库需要单独配置。
-
-## 验证
+## 验证与截图
 
 ```powershell
 python -m pytest -q
@@ -135,21 +112,26 @@ npm test
 npm run verify-ui
 npm run verify-nodes
 npm run verify-node-optimization
-npm run verify-workflow-layout
-npm run verify-workflow-navigation
+npm run verify-notebook-cards
+npm run verify-multi-entity
 npm run verify-ribbon
 npm run verify-workflow-drag
 npm run verify-inspection
 ```
 
-已记录的验收包括 Python 130 项通过、1 项跳过，JavaScript 7 项通过，以及生产构建和真实 Electron 窗口验收。R-067 为界面改造，本轮重新验证 JavaScript、生产构建与真实窗口，覆盖明暗主题、1120×760 布局、节点内编辑、多节点展开、键盘折叠、引用定位、类型化参数、循环与删除保护、保存恢复、撤销重做、自动更新错误恢复、中间预览与最终 STL 隔离、TPMS 与实体组合、CFD 边界和质量报告。
+从项目根目录重建画廊项目并截取实际窗口：
 
-截图来自实际应用。COMSOL 导入、物理场配置、网格无关性和大模型性能基准仍需独立验收。
+```powershell
+python scripts/create_showcase.py --output examples/showcase
+node desktop/tests/capture-showcase.cjs
+```
 
-R-071 验证生产构建、JavaScript 11 项、顶部工具栏实际窗口操作，以及节点布局与滚动导航回归。覆盖分类的查看状态隔离、键盘与折叠、明暗和窄窗口、实体/参数真实创建、求值、撤销、项目保存、libfive 生成及 CFD/平滑融合限制。
+截图脚本打开三个可编辑项目、生成最终实体、导出 STL、比较剖切前后文件，并截取明暗、布局与剖切画面。运行需可用的 libfive 和桌面图形环境；可通过 `TPMS_PYTHON` 指定已安装依赖的解释器，`--output` 指定图片目录。输出报告包含本次临时导出位置，不作为公开文档提交。
 
-R-072 验证两个统一工作区入口、旧 Electron 实体模式和 Qt 实体裸 JSON 的打开/保存/重新生成，保留参数和引用。JavaScript 11 项、生产构建、顶部工具栏、完整节点工作流和 TPMS/实体/CFD/导出/质量窗口回归通过，页面异常为零。
+当前 JavaScript 基础测试为 12 项；窗口验收覆盖卡片、引用排序、多实体、工作区、CFD、质量与导出隔离。历史与每次具体结果见 [开发记录](../DEVELOPMENT_LOG.md)，画廊实际几何数据见 [模型画廊](model-gallery.md)。COMSOL 实机导入、制造验证和大模型性能基准仍需独立验收。
 
-R-073 验证两个工作区的选项卡与工具筛选、双向切换和默认选中项、键盘范围、折叠、明暗主题及窄窗口；顶部工具栏和 TPMS/实体/导出/CFD/质量窗口验收通过，页面异常为零。
+## 分发
 
-R-068 验证 JavaScript 11 项、生产构建、实际鼠标排序与引用连接、边缘滚动、键盘/按钮替代、保存恢复及撤销重做。排序前后与重新打开后 STL 字节一致；类型、循环和重复 A/B 拒绝不改写项目。原有节点与 TPMS/实体/CFD/网格质量窗口回归通过，页面异常为零。
+`desktop/` 为界面源码，`electron-desktop.zip` 包含源码、测试、锁文件与构建结果，不含 node_modules。源码目录不可用时，启动器按压缩包哈希展开界面并安装依赖，建模后端仍使用项目源码。
+
+`node_modules`、`desktop/dist` 和原生构建二进制不纳入 Git。完整安装包尚未提供，环境与内核配置需按指南完成。
