@@ -1,12 +1,14 @@
 // Same workspace categories, tool labels and grouping as the desktop Ribbon.
 // This presentation shell never modifies the downloaded project or mesh.
+import { PRIMITIVES, COMMON_PRIMITIVES } from '../desktop/src/primitive_catalog.mjs';
+import { createPrimitivePalette, primitiveIcon } from './primitive-palette.js';
 const $ = id => document.getElementById(id);
 const desktopHint = '界面展示模式：创建、编辑和重新计算请使用桌面 App';
 const tool = (label, icon, attributes = {}) => ({ label, icon, ...attributes });
 const group = (label, tools) => ({ label, tools });
 const categories = [
   { id:'model', label:'建模', modes:['nodes'], groups:[
-    group('基本实体 · libfive', [['球体','circle'],['长方体','box'],['圆柱','cylinder'],['圆环','torus']].map(([label,icon]) => tool(`创建${label}`,icon))),
+    {...group('基本体',PRIMITIVES.map(item => tool(`创建${item.name}`,null,{primitive:item.kind}))),palette:true},
     group('布尔与融合', [['并集','merge'],['交集','intersection'],['差集','minus'],['平滑融合','sparkles']].map(([label,icon]) => tool(`添加${label}`,icon))),
     group('节点操作', [tool('独立变换','move'),tool('复制实体','copy'),tool('撤销编辑','undo'),tool('重做编辑','redo')]),
   ]},
@@ -29,10 +31,12 @@ const categories = [
 ];
 
 export function createWorkbench(showInspector) {
+  const palette = createPrimitivePalette();
   let mode = 'nodes', active = 'model';
   const panels = new Map(), tabs = new Map();
   const shown = () => categories.filter(category => !category.modes || category.modes.includes(mode));
   const enablePanel = id => {
+    palette.close();
     active = id;
     $('ribbon-panel').hidden = false;
     $('ribbon-collapse').setAttribute('aria-expanded','true'); $('ribbon-collapse').textContent = '收起工具栏';
@@ -65,9 +69,9 @@ export function createWorkbench(showInspector) {
       for (const definition of category.modeGroups?.[mode] || category.groups) {
         const section = document.createElement('section'); section.className = 'ribbon-group'; section.setAttribute('aria-label',definition.label);
         const tools = document.createElement('div'); tools.className = 'ribbon-tools';
-        for (const item of definition.tools) {
+        for (const item of definition.tools.filter(item => !definition.palette || COMMON_PRIMITIVES.includes(item.primitive))) {
           const button = document.createElement('button'); button.className = 'ribbon-tool'; button.setAttribute('aria-label',item.label);
-          button.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#i-${item.icon}"/></svg><span>${item.label}</span>`;
+          button.innerHTML = `${item.primitive ? primitiveIcon(item.primitive,32) : `<svg class="icon" aria-hidden="true"><use href="#i-${item.icon}"/></svg>`}<span>${item.label}</span>`;
           if (item.action) button.dataset.action = item.action;
           if (item.view) button.dataset.view = item.view;
           if (item.pressed !== undefined) button.setAttribute('aria-pressed',String(item.pressed));
@@ -78,7 +82,12 @@ export function createWorkbench(showInspector) {
           } else { button.disabled = true; button.title = desktopHint; }
           tools.append(button);
         }
-        const label = document.createElement('h3'); label.textContent = definition.label;
+        const label = document.createElement(definition.palette?'button':'h3'); label.textContent = definition.label;
+        if (definition.palette) {
+          label.className='ribbon-palette-trigger';label.type='button';label.setAttribute('aria-label','展开基本体选项');label.setAttribute('aria-expanded','false');label.setAttribute('aria-controls','basic-body-palette');
+          label.insertAdjacentHTML('beforeend','<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>');
+          label.onclick=()=>palette.open(label);
+        }
         section.append(tools,label); panel.append(section);
       }
       panels.set(category.id,panel); $('ribbon-panel').append(panel);
@@ -86,6 +95,7 @@ export function createWorkbench(showInspector) {
     enablePanel(active);
   }
   function switchMode(next) {
+    palette.close();
     mode = next; active = next === 'nodes' ? 'model' : 'tpms';
     for (const value of ['nodes','tpms']) { $(`mode-${value}`).classList.toggle('selected',value === mode); $(`mode-${value}`).setAttribute('aria-pressed',String(value === mode)); }
     $('node-project').hidden = mode !== 'nodes'; $('tpms-project').hidden = mode !== 'tpms';

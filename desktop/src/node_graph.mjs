@@ -1,8 +1,11 @@
 // The scene is a DAG: card order is presentation, inputs determine computation.
+import { PRIMITIVES } from './primitive_catalog.mjs';
 export const NODE_KINDS = { sphere: '球体', box: '长方体', cylinder: '圆柱', torus: '圆环', tpms: 'TPMS',
   union: '并集', intersection: '交集', difference: '差集 A−B', smooth_union: '平滑融合', transform: '变换' };
 export const ARITY = { union: 2, intersection: 2, difference: 2, smooth_union: 2, transform: 1 };
+export const APPROXIMATE_PRIMITIVES = new Set(['cone','frustum','ellipsoid']);
 export const DIMENSIONS = { sphere: [8], box: [16, 16, 16], cylinder: [6, 24], torus: [10, 3], tpms: [] };
+for (const item of PRIMITIVES) { NODE_KINDS[item.kind] = item.name; DIMENSIONS[item.kind] = item.dimensions; }
 
 export function ancestors(nodes, id, seen = new Set()) {
   if (seen.has(id)) return seen;
@@ -26,6 +29,7 @@ export function graphErrors(scene) {
     else if (arity === 2 && n.inputs[0] === n.inputs[1]) errors[n.id] = '输入 A 与 B 必须是不同节点';
     else if (n.inputs.some(i => ancestors(scene.nodes, i).has(n.id))) errors[n.id] = '输入会形成循环引用';
     else if (n.kind === 'smooth_union' && [...ancestors(scene.nodes, n.id)].some(i => scene.nodes.find(c => c.id === i)?.kind === 'tpms')) errors[n.id] = 'TPMS 不支持平滑融合，请使用普通布尔运算';
+    else if (n.kind === 'smooth_union' && [...ancestors(scene.nodes, n.id)].some(i => APPROXIMATE_PRIMITIVES.has(scene.nodes.find(c => c.id === i)?.kind))) errors[n.id] = '圆锥、圆台、椭球体暂不支持平滑融合，请使用普通布尔运算';
   }
   return errors;
 }

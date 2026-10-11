@@ -500,3 +500,17 @@ table { width:100%; border-collapse:collapse; font-size:13px; }td,th { text-alig
 .layout-legend button { pointer-events:auto; padding:4px 9px; background:var(--panel); border:1px solid var(--border); font-size:13px; }
 .layout-legend button[aria-pressed=true] { border-color:var(--accent); background:var(--selected); }
 .layout-note { position:absolute; left:16px; right:70px; bottom:50px; max-height:100px; overflow:auto; padding:6px 10px; background:var(--panel); border:1px solid var(--border); color:var(--muted); font-size:13px; }
+
+.ribbon-palette-trigger { width:100%; min-height:24px; margin-top:3px; padding:2px 8px; border-radius:2px; font-size:13px; line-height:18px; color:var(--muted); background:var(--raised); }
+.ribbon-palette-trigger:hover,.ribbon-palette-trigger[aria-expanded=true] { background:var(--selected); color:var(--accent); border-color:var(--border); }
+.ribbon-group[aria-label="基本体"] .ribbon-tool { min-width:78px; }
+.ribbon-group[aria-label="基本体"] .ribbon-tool svg { width:32px; height:32px; }
+.ribbon-palette { position:fixed; width:330px; max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--border); border-radius:4px; color:var(--text); box-shadow:0 10px 30px #0006; z-index:50; }
+.ribbon-palette header { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; background:var(--raised); border-bottom:1px solid var(--border); }
+.ribbon-palette header h3 { font-size:15px; font-weight:500; }
+.ribbon-palette header .icon-button { width:30px; height:30px; min-height:30px; padding:4px; }
+.palette-items { min-height:0; overflow:auto; padding:6px; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+.palette-item { width:100%; min-height:38px; padding:6px 10px; gap:12px; justify-content:flex-start; border-radius:3px; font-size:16px; text-align:left; }
+.palette-item:hover:not(:disabled),.palette-item:focus-visible { background:var(--selected); border-color:var(--border); }
+.ribbon-palette footer { padding:9px 12px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); }
+:root[data-theme=light] { --primitive-light:#f8fafc; --primitive-mid:#b8c8d4; --primitive-shade:#8299aa; --primitive-outline:#5b7486; }

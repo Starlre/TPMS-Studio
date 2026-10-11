@@ -7,8 +7,9 @@ import { valueConsumers } from './node_graph.mjs';
 import { Plus, Box, Move3D, Trash2, Undo2, Redo2, ArrowDownToLine, Eye, ChevronRight, ChevronsDownUp, Hash } from 'lucide-react';
 import { NODE_KINDS, ARITY, inputOptions, graphErrors, createNode } from './node_graph.mjs';
 import { WorkflowDrag, SortHeading, SortHandle, SortButtons, ReferenceOutput, ReferenceInput, DragSource } from './WorkflowDrag';
+import { PRIMITIVES } from './primitive_catalog.mjs';
 
-const LABELS = { sphere: ['半径'], box: ['X 长度', 'Y 长度', 'Z 长度'], cylinder: ['半径', '高度'], torus: ['主半径', '管半径'] };
+const LABELS = Object.fromEntries(PRIMITIVES.map(item => [item.kind,item.labels]));
 const Values = createContext([]);
 const Navigate = createContext(() => {});
 function Choice({ label, value, options, onChange }) {
@@ -167,6 +168,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
         })}
         {node.kind === 'difference' && <p className="hint">A 为保留实体，B 为要减去的实体。</p>}
         {LABELS[node.kind]?.map((label, i) => field(`dimensions.${i}`, label, node.dimensions[i]))}
+        {PRIMITIVES.find(item => item.kind === node.kind)?.hint && <p className="hint">{PRIMITIVES.find(item => item.kind === node.kind).hint}</p>}
         {node.kind === 'tpms' && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} />}
         {node.kind === 'smooth_union' && field('blend', '融合宽度', node.blend)}
       </section>

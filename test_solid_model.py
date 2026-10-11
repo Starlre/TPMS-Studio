@@ -17,6 +17,16 @@ native = pytest.mark.skipif(not backend_status()[0], reason="libfive native libr
     ("box", (8, 10, 12), 960),
     ("cylinder", (4, 10), 160 * math.pi),
     ("torus", (7, 2), 2 * math.pi ** 2 * 7 * 4),
+    ("cube", (8,), 512),
+    ("capsule", (3, 14), math.pi * 9 * 8 + 4 / 3 * math.pi * 27),
+    ("cone", (5, 12), math.pi * 25 * 12 / 3),
+    ("frustum", (5, 2, 12), math.pi * 12 / 3 * (25 + 10 + 4)),
+    ("frustum", (2, 5, 12), math.pi * 12 / 3 * (25 + 10 + 4)),
+    ("frustum", (4, 4, 10), 160 * math.pi),
+    ("capsule", (3, 6), 4 / 3 * math.pi * 27),
+    ("ellipsoid", (7, 4, 5), 4 / 3 * math.pi * 7 * 4 * 5),
+    ("rounded_box", (12, 16, 10, 2), 8*12*6 + 2*(8*12+8*6+12*6)*2 + math.pi*(8+12+6)*2**2 + 4/3*math.pi*2**3),
+    ("rounded_cylinder", (5, 14, 1), math.pi*25*12 + 2*math.pi*(4**2 + math.pi*4/2 + 2/3)),
 ])
 def test_primitive_closed_mesh_and_volume(kind, dimensions, expected):
     scene = SolidScene(cell_size=0.3)
@@ -38,6 +48,55 @@ def test_transform_box_and_cylinder_orientation():
     scene.add("cylinder", dimensions=(2, 12), rotation=(0, 90, 0))
     mesh = generate_solid(scene).mesh
     assert np.allclose(mesh.extents, [12, 4, 4], atol=0.03)
+
+
+@pytest.mark.parametrize('kind,dimensions,message', [
+    ('rounded_box',(10,12,14,5),'圆角'),
+    ('rounded_cylinder',(4,10,4),'圆角'),
+    ('capsule',(5,9),'总高度'),
+    ('cone',(0,10),'正数'),
+    ('frustum',(4,-1,12),'正数'),
+])
+def test_new_primitive_invalid_dimensions(kind,dimensions,message):
+    scene = SolidScene()
+    scene.add(kind,dimensions=dimensions)
+    with pytest.raises(ValueError,match=message):
+        scene.validate()
+
+
+def test_rounded_box_fourth_dimension_binding_and_project_roundtrip(tmp_path):
+    scene = SolidScene(parameters={'fillet':1.5})
+    node = scene.add('rounded_box',expressions={'dimensions.3':'fillet * 2'})
+    scene.validate()
+    assert scene.resolved().nodes[0].dimensions == (16,20,12,3)
+    scene.save(tmp_path/'rounded.json')
+    restored = SolidScene.load(tmp_path/'rounded.json')
+    assert restored.to_dict() == scene.to_dict()
+    assert restored.bounds().tolist() == [[-8,-10,-6],[8,10,6]]
+
+
+@pytest.mark.parametrize('kind',['cone','frustum','ellipsoid'])
+def test_approximate_primitives_reject_smooth_union(kind):
+    scene = SolidScene()
+    a = scene.add(kind)
+    b = scene.add('sphere')
+    scene.add('smooth_union',inputs=(a.id,b.id))
+    with pytest.raises(ValueError,match='距离近似'):
+        scene.validate()
+
+
+@native
+def test_new_primitive_transform_boolean_export(tmp_path):
+    scene = SolidScene(cell_size=0.3)
+    a = scene.add('rounded_box',dimensions=(12,16,10,2),position=(20,0,0),rotation=(0,0,90))
+    b = scene.add('capsule',dimensions=(2,16),position=(20,0,0))
+    scene.add('difference',inputs=(a.id,b.id))
+    mesh = generate_solid(scene).mesh
+    assert mesh.is_watertight and mesh.is_winding_consistent and mesh.volume > 0
+    assert np.allclose(mesh.bounds,[[12,-6,-5],[28,6,5]],atol=0.04)
+    mesh.export(tmp_path/'new-boolean.stl')
+    loaded = trimesh.load(tmp_path/'new-boolean.stl',force='mesh')
+    assert loaded.is_watertight and len(loaded.faces) == len(mesh.faces)
 
 
 @native

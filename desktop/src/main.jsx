@@ -4,12 +4,14 @@ import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, Rotat
 import Viewport from './Viewport';
 import NodeWorkflow from './NodeWorkflow';
 import Ribbon from './Ribbon';
+import PrimitiveIcon from './PrimitiveIcon';
+import { PRIMITIVES, COMMON_PRIMITIVES } from './primitive_catalog.mjs';
 import { createValueBlock } from './ValueBlocks';
 import { Circle, Cylinder, CircleDot, Move3D, Hash, Variable, Undo2, Redo2, Eye, Scissors, Ruler, SlidersHorizontal, Waves, Grid3X3, GitMerge, GitCompare, Minus, Sparkles } from 'lucide-react';
 import InspectionPanel from './InspectionPanel';
 import { DEFAULT_SECTION } from './inspection_math.mjs';
 import { supportsImplicitPreview } from './display_geometry.mjs';
-import { graphErrors, affectedNodes, createNode, ancestors } from './node_graph.mjs';
+import { graphErrors, affectedNodes, createNode, ancestors, APPROXIMATE_PRIMITIVES } from './node_graph.mjs';
 import { notebookOrder, onlyOrderChanged, sceneSignature as computationalSignature } from './workflow_drag.mjs';
 import './style.css';
 
@@ -338,10 +340,11 @@ function App() {
   const noParameter = busy || !info || (scene.value_nodes || []).length >= 32;
   const combination = createNode(scene, 'smooth_union', p, selected);
   const smoothHasTpms = combination.inputs.some(id => scene.nodes.some(n => n.kind === 'tpms' && (n.id === id || ancestors(scene.nodes, id).has(n.id))));
+  const smoothHasApproximate = combination.inputs.some(id => scene.nodes.some(n => APPROXIMATE_PRIMITIVES.has(n.kind) && ancestors(scene.nodes,id).has(n.id)));
   const ribbonCategories = [
     { id: 'model', label: '建模', workspaces: ['nodes'], groups: [
-      { label: '基本实体 · libfive', tools: [['sphere','球体',Circle],['box','长方体',Box],['cylinder','圆柱',Cylinder],['torus','圆环',CircleDot]].map(([kind,label,icon]) => ({ label: `创建${label}`, icon, disabled:noEntity, onClick:() => ribbonNode(kind), hint:'添加节点并展开属性；使用 libfive 内核' })) },
-      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || (kind === 'smooth_union' && smoothHasTpms), onClick:() => ribbonNode(kind), hint:kind === 'smooth_union' && smoothHasTpms ? '平滑融合不支持包含 TPMS 的上游实体' : '选中实体作为 A，在节点内编辑 A/B 引用' })) },
+      { label: '基本体', palette:true, common:COMMON_PRIMITIVES, tools:PRIMITIVES.map(item => ({ id:item.kind, label:`创建${item.name}`, icon:props => <PrimitiveIcon {...props} kind={item.kind}/>, disabled:noEntity, onClick:() => ribbonNode(item.kind), hint:item.hint })) },
+      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || (kind === 'smooth_union' && (smoothHasTpms || smoothHasApproximate)), onClick:() => ribbonNode(kind), hint:kind === 'smooth_union' && (smoothHasTpms || smoothHasApproximate) ? 'TPMS、圆锥、圆台、椭球体暂不支持平滑融合；请使用普通布尔运算' : '选中实体作为 A，在节点内编辑 A/B 引用' })) },
       { label: '节点操作', tools: [
         {label:'独立变换',icon:Move3D,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('transform')},
         {label:'复制实体',icon:Copy,disabled:noEntity || !node,onClick:() => { duplicateNode(); setMode('nodes'); setInspectorTab('model'); }},

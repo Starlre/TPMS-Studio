@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QPushButton, QComboBox, QDoubleSpinBox, QLineEdit,
     QListWidget, QListWidgetItem, QScrollArea, QFileDialog, QSizePolicy)
 
-from solid_model import KINDS, OPERATIONS, SolidScene, demo_scene
+from solid_model import KINDS, OPERATIONS, SolidScene, demo_scene, PRIMITIVE_DIMENSIONS, PRIMITIVE_LABELS
 
 
 class SolidPanel(QWidget):
@@ -34,7 +34,7 @@ class SolidPanel(QWidget):
         object_layout = QVBoxLayout(object_group)
         add_row = QHBoxLayout()
         self.kind_combo = QComboBox()
-        for kind in ("sphere", "box", "cylinder", "torus", "tpms"):
+        for kind in ("sphere", "box", "cylinder", "torus", "tpms", "cube", "rounded_box", "rounded_cylinder", "capsule", "cone", "frustum", "ellipsoid"):
             self.kind_combo.addItem(KINDS[kind], kind)
         self.kind_combo.setAccessibleName("新增实体类型")
         add_row.addWidget(self.kind_combo, 1)
@@ -70,7 +70,7 @@ class SolidPanel(QWidget):
         self.name_edit.setAccessibleName("对象名称")
         self.form.addRow("名称", self.name_edit)
         self.dimension_fields = []
-        for index in range(3):
+        for index in range(4):
             spin = self._spin(0.01, 2000, 10, " mm")
             self.dimension_fields.append(spin)
             self.form.addRow(f"尺寸 {index + 1}", spin)
@@ -231,8 +231,7 @@ class SolidPanel(QWidget):
         if node is None:
             return
         self.name_edit.setText(node.name)
-        labels = {"sphere": ("半径",), "box": ("X 长度", "Y 长度", "Z 长度"),
-                  "cylinder": ("半径", "高度（局部 Z）"), "torus": ("主半径", "管半径")}.get(node.kind, ())
+        labels = PRIMITIVE_LABELS.get(node.kind, ())
         for i, spin in enumerate(self.dimension_fields):
             spin.setVisible(i < len(labels))
             self.form.labelForField(spin).setVisible(i < len(labels))
@@ -264,7 +263,7 @@ class SolidPanel(QWidget):
     def add_object(self):
         def action():
             kind = self.kind_combo.currentData()
-            defaults = {"sphere": (8,), "box": (16, 16, 16), "cylinder": (6, 20), "torus": (10, 3)}
+            defaults = PRIMITIVE_DIMENSIONS
             args = {"tpms": self.parameters_provider()} if kind == "tpms" else {"dimensions": defaults[kind]}
             node = self.scene.add(kind, **args)
             self.refresh(node.id)

@@ -18,9 +18,20 @@ from parametric import TPMS_FIELDS, evaluate_expression, validate_parameters
 from workflow_values import resolve_values, copy_value_nodes
 
 KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
+         "cube": "立方体", "rounded_box": "圆角方盒", "rounded_cylinder": "圆角圆柱",
+         "capsule": "胶囊体", "cone": "圆锥", "frustum": "圆台", "ellipsoid": "椭球体",
          "tpms": "TPMS", "union": "并集", "intersection": "交集",
          "difference": "差集 A−B", "smooth_union": "平滑融合", "transform": "变换"}
 OPERATIONS = {"union", "intersection", "difference", "smooth_union"}
+PRIMITIVE_DIMENSIONS = {"sphere": (8,), "box": (16, 16, 16), "cylinder": (6, 24), "torus": (10, 3),
+                        "cube": (16,), "rounded_box": (16, 20, 12, 2), "rounded_cylinder": (6, 24, 2),
+                        "capsule": (6, 24), "cone": (8, 20), "frustum": (8, 4, 20), "ellipsoid": (10, 6, 8)}
+PRIMITIVE_LABELS = {"sphere": ("半径",), "box": ("X 长度", "Y 长度", "Z 长度"),
+                   "cylinder": ("半径", "高度"), "torus": ("主半径", "管半径"), "cube": ("边长",),
+                   "rounded_box": ("X 长度", "Y 长度", "Z 长度", "圆角半径"),
+                   "rounded_cylinder": ("半径", "高度", "圆角半径"), "capsule": ("半径", "总高度"),
+                   "cone": ("底面半径", "高度"), "frustum": ("底面半径", "顶面半径", "高度"),
+                   "ellipsoid": ("X 半轴", "Y 半轴", "Z 半轴")}
 
 
 @dataclass(frozen=True)
@@ -77,7 +88,7 @@ class SolidScene:
                     parts = target.split(".")
                     if target == "blend" and node.kind == "smooth_union":
                         args["blend"] = value
-                    elif len(parts) == 2 and parts[0] in {"dimensions", "position", "rotation"} and parts[1] in {"0", "1", "2"}:
+                    elif len(parts) == 2 and parts[0] in {"dimensions", "position", "rotation"} and parts[1] in {str(i) for i in range(len(args[parts[0]]))}:
                         args[parts[0]][int(parts[1])] = value
                     elif len(parts) == 2 and parts[0] == "tpms" and parts[1] in TPMS_FIELDS and node.tpms is not None:
                         if parts[1] in {"cells_x", "cells_y", "cells_z", "samples_per_cell"}:
@@ -106,6 +117,8 @@ class SolidScene:
         identifiers = {node.id for node in self.nodes}
         while f"n{index}" in identifiers:
             index += 1
+        if kind in PRIMITIVE_DIMENSIONS:
+            kwargs.setdefault("dimensions", PRIMITIVE_DIMENSIONS[kind])
         node = SolidNode(id=f"n{index}", name=f"{KINDS[kind]} {index}", kind=kind, **kwargs)
         self.nodes.append(node)
         self.root = node.id
@@ -161,12 +174,18 @@ class SolidScene:
                 if node.tpms.tubular_enabled:
                     raise ValueError("实体组合暂不支持管状卷绕 TPMS")
             elif node.kind not in OPERATIONS and node.kind != "transform":
-                counts = {"sphere": 1, "box": 3, "cylinder": 2, "torus": 2}
+                counts = {kind: len(values) for kind, values in PRIMITIVE_DIMENSIONS.items()}
                 if len(node.dimensions) != counts[node.kind] or not all(
                     math.isfinite(value) and 0 < value <= 2000 for value in node.dimensions):
                     raise ValueError(f"{node.name} 的尺寸必须为 0–2000 mm 内的正数")
                 if node.kind == "torus" and node.dimensions[0] <= node.dimensions[1]:
                     raise ValueError("圆环主半径必须大于管半径")
+                if node.kind == "rounded_box" and node.dimensions[3] >= min(node.dimensions[:3]) / 2:
+                    raise ValueError("圆角方盒的圆角半径必须小于最小边长的一半")
+                if node.kind == "rounded_cylinder" and node.dimensions[2] >= min(node.dimensions[0], node.dimensions[1] / 2):
+                    raise ValueError("圆角圆柱的圆角半径必须小于半径和高度的一半")
+                if node.kind == "capsule" and node.dimensions[1] < 2 * node.dimensions[0]:
+                    raise ValueError("胶囊体总高度必须不小于直径（高度含两端半球）")
         visiting, visited = set(), set()
         def visit(identifier):
             if identifier in visiting:
@@ -183,6 +202,21 @@ class SolidScene:
         for node in self.nodes:
             if node.kind == "smooth_union" and self.contains_tpms(node.id):
                 raise ValueError("TPMS 场不是精确距离场；平滑融合目前仅支持基本实体组合")
+            if node.kind == "smooth_union" and self.contains_approximate_primitive(node.id):
+                raise ValueError("圆锥、圆台、椭球体当前使用距离近似，暂不支持平滑融合；请使用普通布尔运算")
+
+    def contains_approximate_primitive(self, identifier: str) -> bool:
+        pending, seen = [identifier], set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            node = self.by_id(current)
+            if node.kind in {"cone", "frustum", "ellipsoid"}:
+                return True
+            pending.extend(node.inputs)
+        return False
 
     def contains_tpms(self, identifier: str) -> bool:
         pending, seen = [identifier], set()
@@ -223,7 +257,14 @@ class SolidScene:
             d = node.dimensions
             half = {"sphere": lambda: [d[0]] * 3,
                     "box": lambda: np.array(d) / 2,
+                    "cube": lambda: [d[0] / 2] * 3,
+                    "rounded_box": lambda: np.array(d[:3]) / 2,
                     "cylinder": lambda: [d[0], d[0], d[1] / 2],
+                    "rounded_cylinder": lambda: [d[0], d[0], d[1] / 2],
+                    "capsule": lambda: [d[0], d[0], d[1] / 2],
+                    "cone": lambda: [d[0], d[0], d[1] / 2],
+                    "frustum": lambda: [max(d[:2]), max(d[:2]), d[2] / 2],
+                    "ellipsoid": lambda: d,
                     "torus": lambda: [d[0] + d[1], d[0] + d[1], d[1]],
                     "tpms": lambda: np.array([node.tpms.size_x, node.tpms.size_y, node.tpms.size_z]) / 2}[node.kind]()
             bounds = np.array([-np.array(half), half])
@@ -304,12 +345,26 @@ def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict,
     d = node.dimensions
     if node.kind == "sphere":
         tree = length(x, y, z) - d[0]
-    elif node.kind == "box":
-        q = [op("abs", coord) - size / 2 for coord, size in zip(coords, d)]
-        tree = length(*(op("max", value, 0) for value in q)) + op("min", op("max", q[0], op("max", q[1], q[2])), 0)
-    elif node.kind == "cylinder":
-        radial, axial = length(x, y) - d[0], op("abs", z) - d[1] / 2
-        tree = length(op("max", radial, 0), op("max", axial, 0)) + op("min", op("max", radial, axial), 0)
+    elif node.kind in {"box", "cube", "rounded_box"}:
+        sizes = [d[0]] * 3 if node.kind == "cube" else d[:3]
+        radius = d[3] if node.kind == "rounded_box" else 0
+        q = [op("abs", coord) - (size / 2 - radius) for coord, size in zip(coords, sizes)]
+        tree = length(*(op("max", value, 0) for value in q)) + op("min", op("max", q[0], op("max", q[1], q[2])), 0) - radius
+    elif node.kind in {"cylinder", "rounded_cylinder"}:
+        radius = d[2] if node.kind == "rounded_cylinder" else 0
+        radial, axial = length(x, y) - (d[0] - radius), op("abs", z) - (d[1] / 2 - radius)
+        tree = length(op("max", radial, 0), op("max", axial, 0)) + op("min", op("max", radial, axial), 0) - radius
+    elif node.kind == "capsule":
+        axial = op("max", op("abs", z) - (d[1] / 2 - d[0]), 0)
+        tree = length(x, y, axial) - d[0]
+    elif node.kind in {"cone", "frustum"}:
+        bottom, top, height = (d[0], 0, d[1]) if node.kind == "cone" else d
+        slope = (top - bottom) / height
+        side = (length(x, y) - (bottom + top) / 2 - slope * z) / math.sqrt(1 + slope ** 2)
+        tree = op("max", side, op("abs", z) - height / 2)
+    elif node.kind == "ellipsoid":
+        # Correct zero surface; this is a scaled implicit field, not an exact SDF.
+        tree = (length(*(coord / radius for coord, radius in zip(coords, d))) - 1) * min(d)
     elif node.kind == "torus":
         tree = length(length(x, y) - d[0], z) - d[1]
     elif node.kind == "tpms":
