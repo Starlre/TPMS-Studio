@@ -2,6 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { planeNormal, planeRange, distanceBetween } from '../desktop/src/inspection_math.mjs';
+import { createWorkbench } from './workbench.js';
 
 const $ = id => document.getElementById(id);
 const number = (value, digits = 2) => Number(value).toLocaleString('zh-CN', { maximumFractionDigits: digits });
@@ -19,7 +20,7 @@ document.querySelectorAll('#inspection-info input,#inspection-info select').forE
 
 function showInspector(inspection = false) {
   $('model-info').hidden = inspection; $('inspection-info').hidden = !inspection;
-  for (const [id, active] of [['info-model-tab', !inspection], ['model-tab', !inspection], ['info-inspection-tab', inspection], ['inspection-tab', inspection]]) {
+  for (const [id, active] of [['info-model-tab', !inspection], ['info-inspection-tab', inspection]]) {
     $(id).classList.toggle('selected', active); $(id).setAttribute('aria-pressed', String(active));
   }
   if (matchMedia('(max-width:700px)').matches) {
@@ -27,8 +28,13 @@ function showInspector(inspection = false) {
     $('node-panel').classList.remove('mobile-open'); $('nodes-toggle').setAttribute('aria-expanded', 'false');
   }
 }
-$('model-tab').onclick = () => { showInspector(false); if (matchMedia('(max-width:700px)').matches) { $('info-panel').classList.remove('mobile-open'); $('info-toggle').setAttribute('aria-expanded','false'); } };
-$('inspection-tab').onclick = () => showInspector(true);
+const workbench = createWorkbench(showInspector);
+const rotateButton = document.createElement('button'); rotateButton.id = 'auto-rotate';
+rotateButton.className = 'model-control view-option-button'; rotateButton.disabled = true;
+rotateButton.setAttribute('aria-pressed','false'); rotateButton.innerHTML = `${icon('rotate')}<span>自动旋转</span>`;
+document.querySelector('.view-options').append(rotateButton);
+$('help-toggle').onclick = () => $('help-dialog').showModal();
+$('help-close').onclick = () => $('help-dialog').close();
 $('info-model-tab').onclick = () => showInspector(false);
 $('info-inspection-tab').onclick = () => showInspector(true);
 for (const [button, panel, other] of [['nodes-toggle','node-panel','info-panel'], ['info-toggle','info-panel','node-panel']]) {
@@ -49,6 +55,23 @@ $('retry').onclick = () => location.reload();
 
 function showProject(project) {
   const scene = project.scene, names = new Map(scene.nodes.map(node => [node.id, node.name]));
+  const tpmsNode = scene.nodes.find(node => node.kind === 'tpms');
+  const p = tpmsNode?.tpms || project.parameters;
+  const addField = (host,label,value) => {
+    const field = document.createElement('label'); field.className = 'field'; field.textContent = label;
+    const input = document.createElement('input'); input.value = value; input.readOnly = true; input.title = '界面展示模式：参数修改请使用桌面 App';
+    field.append(input); $(host).append(field);
+  };
+  addField('tpms-geometry-fields','曲面类型',p.surface);
+  for (const axis of ['x','y','z']) {
+    addField('tpms-geometry-fields',`${axis.toUpperCase()} 尺寸 / mm`,p[`size_${axis}`]);
+    addField('tpms-geometry-fields',`${axis.toUpperCase()} 周期数`,p[`cells_${axis}`]);
+  }
+  addField('tpms-structure-fields','结构模式',p.mode === 'sheet' ? '片层结构' : '实体结构');
+  const wall = scene.value_nodes.find(node => node.symbol === 'wall');
+  addField('tpms-structure-fields','壁厚 / mm',wall?.value ?? p.thickness);
+  addField('tpms-structure-fields','等值面偏移',p.iso_level);
+  addField('tpms-structure-fields','生成精度 / mm',scene.cell_size);
   $('design-parameters').replaceChildren(...scene.value_nodes.map(parameter => row(parameter.name.replace(' / mm',''), `${parameter.value} mm`)));
   $('root-name').textContent = names.get(scene.root);
   const kindNames = { tpms:'TPMS', cylinder:'圆柱', box:'盒体', sphere:'球体', torus:'圆环',
@@ -301,13 +324,18 @@ async function start() {
   for (const id of ['wireframe','grid-toggle','section-toggle']) $(id).disabled = false;
   document.querySelectorAll('#inspection-info input,#inspection-info select').forEach(input => { input.disabled = false; });
   status(`模型已加载 · ${number(result.faces,0)} 个三角面 · 原始精度 0.4 mm`);
+  function bindWorkbench() {
   document.querySelectorAll('[data-action]').forEach(button => { button.onclick = () => {
     if (button.dataset.action === 'fit') viewer.fit();
     else if (button.dataset.action === 'wire') viewer.setWire(!viewer.mesh.material.wireframe);
-    else if (button.dataset.action === 'section') { showInspector(true); viewer.setSection({...viewer.section,enabled:!viewer.section.enabled}); }
+    else if (button.dataset.action === 'section') { showInspector(true); viewer.setSection({...viewer.section,enabled:true}); }
     else if (button.dataset.action === 'measure') { showInspector(true); viewer.clearMeasurement(); viewer.armMeasurement(true); }
+    else if (button.dataset.action === 'info') showInspector(false);
   }; });
   document.querySelectorAll('[data-view]').forEach(button => { button.onclick = () => viewer.fit(button.dataset.view); });
+  document.querySelector('[data-action=wire]').setAttribute('aria-pressed',String(viewer.mesh.material.wireframe));
+  }
+  bindWorkbench(); document.addEventListener('workbenchchange',bindWorkbench);
   document.querySelectorAll('[data-zoom]').forEach(button => { button.onclick = () => { viewer.camera.position.sub(viewer.controls.target).multiplyScalar(Number(button.dataset.zoom)).add(viewer.controls.target); viewer.controls.update(); viewer.schedule(); }; });
   $('auto-rotate').onclick = () => { const enabled = !viewer.controls.autoRotate; viewer.controls.autoRotate = enabled; $('auto-rotate').setAttribute('aria-pressed',String(enabled)); $('auto-rotate').querySelector('span').textContent = enabled ? '停止旋转' : '自动旋转'; viewer.schedule(); };
   $('theme-toggle').onclick = () => viewer.setTheme(!viewer.light);

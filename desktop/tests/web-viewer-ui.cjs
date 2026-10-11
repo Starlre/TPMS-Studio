@@ -50,6 +50,31 @@ async function main() {
     assert.match(await page.locator('#file-size').innerText(),/17\.34/);
     await page.locator('.node-card').first().locator('summary').click();
     assert.match(await page.locator('.node-card').first().innerText(),/1\.4 mm/);
+    assert.deepEqual(await page.getByRole('tab').allTextContents(),['建模','TPMS 节点','参数与公式','检查与测量']);
+    for (const label of ['创建球体','创建长方体','创建圆柱','创建圆环','添加并集','添加交集','添加差集','添加平滑融合','独立变换','复制实体','撤销编辑','重做编辑']) {
+      assert.ok(await page.getByRole('button',{name:label,exact:true}).isVisible());
+      assert.ok(await page.getByRole('button',{name:label,exact:true}).isDisabled());
+    }
+    await page.getByRole('tab',{name:'TPMS 节点',exact:true}).click();
+    assert.ok(await page.getByRole('button',{name:'添加 TPMS',exact:true}).isVisible());
+    await page.getByRole('tab',{name:'参数与公式',exact:true}).click();
+    assert.ok(await page.getByRole('button',{name:'新建公式参数',exact:true}).isDisabled());
+    await page.getByRole('button',{name:'TPMS 建模',exact:true}).click();
+    assert.deepEqual(await page.getByRole('tab').allTextContents(),['TPMS','检查与测量','仿真与网格']);
+    assert.ok(await page.locator('#tpms-project').isVisible());
+    assert.equal(await page.locator('#tpms-structure-fields input').first().inputValue(),'片层结构');
+    assert.equal(await page.locator('#tpms-structure-fields input').nth(1).inputValue(),'1.4');
+    await page.getByRole('tab',{name:'仿真与网格',exact:true}).click();
+    assert.ok(await page.getByRole('button',{name:'显示仿真边界',exact:true}).isDisabled());
+    await page.getByRole('button',{name:'实体建模',exact:true}).click();
+    assert.equal(await page.locator('.node-card').count(),19);
+    await page.getByRole('tab',{name:'建模',exact:true}).focus(); await page.keyboard.press('End');
+    assert.equal(await page.getByRole('tab',{name:'检查与测量',exact:true}).getAttribute('aria-selected'),'true');
+    await page.keyboard.press('Home');
+    await page.getByRole('button',{name:'操作说明',exact:true}).click();
+    assert.ok(await page.locator('#help-dialog').isVisible()); await page.keyboard.press('Escape');
+    await page.locator('#info-model-tab').click();
+    await page.locator('.viewport-toolbar strong').click();
     await capture('web-flanged-dark.png');
     await page.getByRole('button',{name:'切换亮色主题',exact:true}).click(); assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
@@ -62,7 +87,8 @@ async function main() {
     const beforeAxes = await page.locator('#orientation-gizmo').evaluate(canvas => canvas.toDataURL());
     await page.getByRole('button',{name:'重置视角',exact:true}).first().click(); await page.waitForTimeout(400);
     assert.notEqual(await page.locator('#orientation-gizmo').evaluate(canvas => canvas.toDataURL()),beforeAxes);
-    await page.getByRole('button',{name:'平面剖切',exact:true}).click(); await cutReady();
+    await page.getByRole('tab',{name:'检查与测量',exact:true}).click();
+    await page.getByRole('button',{name:'打开剖切工具',exact:true}).click(); await cutReady();
     assert.match(await page.locator('#section-statistics').innerText(),/mm²/);
     await page.getByLabel('平面方向',{exact:true}).selectOption('custom'); await cutReady();
     await page.getByRole('button',{name:'居中',exact:true}).click(); await cutReady();
@@ -81,9 +107,11 @@ async function main() {
     assert.match(await page.locator('#measurement').innerText(),/A 点.*B 点/s);
     await page.getByRole('button',{name:'恢复完整模型并清除测量',exact:true}).click();
     await page.getByRole('button',{name:'重置视角',exact:true}).first().click();
+    await page.locator('#export-menu>summary').click();
     const downloadPromise = page.waitForEvent('download'); await page.locator('#download-stl').click();
     const download = await downloadPromise; assert.equal(download.suggestedFilename(),'gyroid-flanged-core.stl');
     const downloaded = await fs.readFile(await download.path()); assert.deepEqual(downloaded,localSTL);
+    await page.locator('#export-menu').evaluate(el => {el.open=false;});
     await page.getByRole('button',{name:'收起工具栏',exact:true}).click(); assert.ok(await page.locator('#ribbon-panel').isHidden());
     await page.getByRole('button',{name:'展开工具栏',exact:true}).click();
     await page.setViewportSize({width:1120,height:760}); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth));
