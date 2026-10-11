@@ -126,7 +126,7 @@ python scripts/create_showcase.py --output examples/showcase
 node desktop/tests/capture-showcase.cjs
 ```
 
-截图脚本打开三个可编辑项目、生成最终实体、导出 STL、比较剖切前后文件，并截取明暗、布局与剖切画面。运行需可用的 libfive 和桌面图形环境；可通过 `TPMS_PYTHON` 指定已安装依赖的解释器，`--output` 指定图片目录。输出报告包含本次临时导出位置，不作为公开文档提交。
+截图脚本打开双法兰与球壳两个可编辑项目、生成最终实体、导出 STL、比较剖切前后文件，并截取四张暗色的最终输出、布局与剖切画面。截图前切换暗色并检查主题，画廊不包含花瓣图。运行需可用的 libfive 和桌面图形环境；可通过 `TPMS_PYTHON` 指定已安装依赖的解释器，`--output` 指定图片目录。输出报告包含本次临时导出位置，不作为公开文档提交。
 
 当前 JavaScript 基础测试为 12 项；窗口验收覆盖卡片、引用排序、多实体、工作区、CFD、质量与导出隔离。历史与每次具体结果见 [开发记录](../DEVELOPMENT_LOG.md)，画廊实际几何数据见 [模型画廊](model-gallery.md)。COMSOL 实机导入、制造验证和大模型性能基准仍需独立验收。
 

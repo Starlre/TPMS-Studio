@@ -16,25 +16,15 @@ TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模�
 
 用圆柱裁剪三周期 Gyroid，将点阵芯与两个环形法兰合并，再减去四个安装孔和轴向贯穿流道。19 个几何节点与 3 个数值参数展示 TPMS、基本体、交集、并集、差集及共享变换的组合。
 
-![亮色工作台：Gyroid 点阵芯、双法兰和安装孔](docs/showcase-gyroid-light.png)
-
 [打开示例项目](examples/showcase/gyroid-flanged-core.json) · [节点关系与参数说明](docs/model-gallery.md#gyroid-双法兰结构)
 
 ### 三向开孔球壳与加强环
 
 外球减去内球得到空心壳，加入赤道圆环，再减去 X/Y/Z 三条正交流道。11 个几何节点与 3 个参数展示参数壁厚、加强实体及多方向开孔。
 
-![三向开孔球壳：共享壁厚、赤道加强环与正交流道](docs/showcase-sphere-light.png)
+![暗色工作台：三向开孔球壳、共享壁厚与赤道加强环](docs/showcase-sphere-dark.png)
 
 [打开示例项目](examples/showcase/perforated-ring-sphere.json) · [建模说明](docs/model-gallery.md#三向开孔球壳与加强环)
-
-### 参数化八瓣花
-
-椭球公式定义花瓣和叶片，变换节点复用母体，组合八片花瓣、花心、花茎和叶片。25 个几何节点与 4 个参数展示非 TPMS 的公式建模和上游复用。
-
-![参数化八瓣花：公式母体、旋转复制和最终组合](docs/showcase-flower-dark.png)
-
-[打开花朵项目](examples/parametric-flower/eight-petal-flower.json) · [公式与设计参数](examples/parametric-flower/README.md)
 
 示例用于介绍建模方法，未进行承载、流动、制造或打印验收。网格尺寸是提取尺度，实际几何细节需要结合模型检查与精度收敛判断。
 

@@ -9,6 +9,7 @@ const root = path.resolve(argument('--project', path.resolve(__dirname, '../..')
 const output = path.resolve(argument('--output', path.join(root, 'docs')));
 const examples = path.resolve(argument('--examples', path.join(root, 'examples/showcase')));
 const only = argument('--only', 'all');
+assert.ok(['all', 'gyroid', 'sphere'].includes(only), 'Choose all, gyroid or sphere.');
 const { _electron: electron } = createRequire(path.join(root, 'desktop/package.json'))('playwright');
 
 async function main() {
@@ -31,8 +32,9 @@ async function main() {
       await page.getByRole('button', { name: name === 'light' ? '切换亮色主题' : '切换暗色主题', exact: true }).click();
     }
   }
-  async function capture(name, mode) {
-    await theme(mode); await page.mouse.move(10, 10); await page.waitForTimeout(800);
+  async function capture(name) {
+    await theme('dark'); await page.mouse.move(10, 10); await page.waitForTimeout(800);
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
     assert.equal(await page.locator('.error-banner').count(), 0);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(output, name), scale: 'css', style: '.statusbar [role="status"] { visibility:hidden; }' });
@@ -63,8 +65,7 @@ async function main() {
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1680, 1040));
     if (only === 'all' || only === 'gyroid') {
     await open(path.join(examples, 'gyroid-flanged-core.json'));
-    await capture('showcase-gyroid-dark.png', 'dark');
-    await capture('showcase-gyroid-light.png', 'light');
+    await capture('showcase-gyroid-dark.png');
     await exportMesh('gyroid-flanged-core');
 
     await page.getByRole('button', { name: '剖切与测量', exact: true }).click();
@@ -76,7 +77,7 @@ async function main() {
     await page.waitForFunction(() => { const s = document.querySelector('.section-statistics'); return s && s.querySelector('.metric') && !s.textContent.includes('计算中'); });
     assert.equal(await panel.locator('.inspection-warning').count(), 0);
     await page.locator('.inspection-scroll').evaluate(el => { el.scrollTop = 0; });
-    await capture('showcase-gyroid-section.png', 'light');
+    await capture('showcase-gyroid-section.png');
     const firstExport = await fs.readFile(reports[0].stl);
     await exportMesh('gyroid-after-section');
     assert.deepEqual(await fs.readFile(reports[1].stl), firstExport);
@@ -86,7 +87,7 @@ async function main() {
 
     if (only === 'all' || only === 'sphere') {
     await open(path.join(examples, 'perforated-ring-sphere.json'));
-    await capture('showcase-sphere-light.png', 'light');
+    await capture('showcase-sphere-dark.png');
     await exportMesh('perforated-ring-sphere');
     await page.getByRole('checkbox', { name: '全部实体', exact: true }).check();
     await page.waitForFunction(() => document.querySelector('.canvas-host')?.dataset.objectCount === '11' && !document.querySelector('.layout-note')?.textContent.includes('正在更新'));
@@ -98,15 +99,9 @@ async function main() {
     await page.getByRole('checkbox', { name: '半透明', exact: true }).check();
     await page.locator('.layout-legend').getByRole('button', { name: 'X 向贯穿流道', exact: true }).click();
     await page.getByRole('button', { name: '重置视角', exact: true }).click();
-    await capture('showcase-layout-dark.png', 'dark');
+    await capture('showcase-layout-dark.png');
     }
 
-    if (only === 'all' || only === 'flower') {
-    await open(path.join(root, 'examples/parametric-flower/eight-petal-flower.json'));
-    await page.getByRole('button', { name: 'Y 轴正交方向观察', exact: true }).click();
-    await capture('showcase-flower-dark.png', 'dark');
-    await exportMesh('eight-petal-flower');
-    }
     assert.deepEqual(errors, []);
     await fs.writeFile(path.join(temporary, 'capture-report.json'), JSON.stringify({ exports: reports, errors }, null, 2));
     console.log(JSON.stringify({ result: 'passed', screenshots: captures, exportedModels: reports.map(r => r.name), sectionExportUnchanged, errors, temporary }, null, 2));

@@ -8,7 +8,7 @@
 | [三向开孔球壳](perforated-ring-sphere.json) | 11 / 3 | 空心球壳、赤道加强环和 XYZ 正交流道 |
 | [参数化八瓣花](../parametric-flower/eight-petal-flower.json) | 25 / 4 | 椭球母体、旋转复制、花茎与叶片组合 |
 
-![实际生成的双法兰模型](../../docs/showcase-gyroid-light.png)
+![暗色工作台中实际生成的双法兰模型](../../docs/showcase-gyroid-dark.png)
 
 在 TPMS Studio 顶部“打开”选择 JSON，再点击“生成工作流”。运行这些实体项目需要 libfive 原生库；修改节点、参数或输出精度后重新生成，再导出 STL / OBJ / PLY。
 
