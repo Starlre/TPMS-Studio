@@ -21,19 +21,23 @@ export function primitiveIcon(kind,size = 30) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 40 42" fill="none" stroke="var(--primitive-outline, #91a9ba)" stroke-width=".8" aria-hidden="true"><defs><linearGradient id="${id}-front" x1="0" x2="1" y2=".25"><stop stop-color="var(--primitive-light, #d7e0e7)"/><stop offset="1" stop-color="var(--primitive-shade, #647b8d)"/></linearGradient><linearGradient id="${id}-top" x1="0" y1="0" x2=".4" y2="1"><stop stop-color="var(--primitive-light, #d7e0e7)"/><stop offset="1" stop-color="var(--primitive-mid, #a9bbc9)"/></linearGradient></defs>${shape}</svg>`;
 }
 
-export function createPrimitivePalette() {
-  const panel = document.createElement('section'); panel.id = 'basic-body-palette'; panel.className = 'ribbon-palette';
-  panel.setAttribute('aria-label','基本体选项'); panel.hidden = true;
-  panel.innerHTML = '<header><h3>基本体</h3><button type="button" class="icon-button" aria-label="关闭基本体选项"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header><div class="palette-items"></div><footer>界面展示模式 · 创建实体请使用桌面 App</footer>';
+export function createPrimitivePalette({
+  id = 'basic-body-palette', label = '基本体',
+  items = PRIMITIVES.map(item => ({...item,label:`创建${item.name}`})),
+  footer = '界面展示模式 · 创建实体请使用桌面 App'
+} = {}) {
+  const panel = document.createElement('section'); panel.id = id; panel.className = 'ribbon-palette';
+  panel.setAttribute('aria-label',`${label}选项`); panel.hidden = true;
+  panel.innerHTML = `<header><h3>${label}</h3><button type="button" class="icon-button" aria-label="关闭${label}选项"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header><div class="palette-items"></div><footer>${footer}</footer>`;
   let anchor;
   const close = (focus = false) => {
     panel.hidden = true; anchor?.setAttribute('aria-expanded','false');
     if (focus && anchor?.isConnected) anchor.focus({preventScroll:true});
   };
-  for (const item of PRIMITIVES) {
-    const button = document.createElement('button'); button.className = 'palette-item'; button.setAttribute('aria-label',`创建${item.name}`);
+  for (const item of items) {
+    const button = document.createElement('button'); button.className = 'palette-item'; button.setAttribute('aria-label',item.label);
     button.setAttribute('aria-disabled','true'); button.title = `${item.hint}；创建请使用桌面 App`;
-    button.innerHTML = `${primitiveIcon(item.kind,26)}<span>${item.name}</span>`;
+    button.innerHTML = `${item.icon ? `<svg class="icon" aria-hidden="true"><use href="#i-${item.icon}"/></svg>` : primitiveIcon(item.kind,26)}<span>${item.name}</span>`;
     // Focus remains available to inspect the options. Never mutate the scene.
     button.onclick = () => { document.getElementById('status').textContent = `${item.name} · 界面展示选项，创建与计算请使用桌面 App。`; };
     panel.querySelector('.palette-items').append(button);
@@ -53,6 +57,7 @@ export function createPrimitivePalette() {
   window.addEventListener('resize',()=>close());
   const open = button => {
     if (!panel.hidden && anchor === button) {close();return;}
+    document.dispatchEvent(new Event('workbenchpaletteclose'));
     anchor = button; panel.hidden = false; anchor.setAttribute('aria-expanded','true');
     const target = anchor.getBoundingClientRect(), rect = panel.getBoundingClientRect();
     panel.style.left = `${Math.max(8,Math.min(target.left,innerWidth-rect.width-8))}px`;

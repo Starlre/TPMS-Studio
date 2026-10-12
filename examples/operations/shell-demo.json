@@ -1,0 +1,105 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "sheet",
+    "size_x": 40,
+    "size_y": 40,
+    "size_z": 40,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.2,
+    "iso_level": 0,
+    "samples_per_cell": 64,
+    "target_porosity": null,
+    "formula": "sin(x)*cos(y) + sin(y)*cos(z) + sin(z)*cos(x)",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1,
+    "gradient_thickness_end": 5,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10
+  },
+  "scene": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "长方体 1",
+        "kind": "box",
+        "dimensions": [
+          30,
+          24,
+          18
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {}
+      },
+      {
+        "id": "n2",
+        "name": "抽壳 2",
+        "kind": "shell",
+        "dimensions": [
+          1.5
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "inputs": [
+          "n1"
+        ],
+        "blend": 2,
+        "tpms": null,
+        "expressions": {},
+        "operation": {
+          "opening": "+Z"
+        }
+      }
+    ],
+    "root": "n2",
+    "cell_size": 0.3,
+    "parameters": {},
+    "value_nodes": [],
+    "notebook_order": [
+      "n1",
+      "n2"
+    ]
+  },
+  "cfd": {
+    "flow_axis": "X",
+    "element_size": 1.5,
+    "surface_samples_per_cell": 32,
+    "boundary_layer_enabled": false,
+    "boundary_layer_layers": 3,
+    "boundary_layer_first_height": 0.05,
+    "boundary_layer_growth": 1.2,
+    "end_refinement_enabled": true,
+    "end_refinement_distance": 2,
+    "end_refinement_size_factor": 0.5,
+    "curvature_refinement_enabled": true,
+    "curvature_points": 18,
+    "low_quality_threshold": 0.2
+  }
+}

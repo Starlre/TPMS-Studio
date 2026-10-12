@@ -171,6 +171,11 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
         {PRIMITIVES.find(item => item.kind === node.kind)?.hint && <p className="hint">{PRIMITIVES.find(item => item.kind === node.kind).hint}</p>}
         {node.kind === 'tpms' && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} />}
         {node.kind === 'smooth_union' && field('blend', '融合宽度', node.blend)}
+        {node.kind === 'shell' && <>
+          {field('dimensions.0', '壳体壁厚', node.dimensions[0])}
+          <Choice label="开口方向" value={node.operation?.opening || 'closed'} options={[["closed","封闭壳体"], ...['+X','-X','+Y','-Y','+Z','-Z'].map(axis => [axis, `${axis} 方向开口`])]} onChange={opening => patch(node.id, {operation: {...node.operation, opening}})} />
+          <p className="hint">向内抽壳，保持外表面。支持距离函数基本体及其变换；先抽壳，再组合或填充。开口按输入世界坐标包围盒端部截去一个壁厚，曲面开口为平面截口。网格尺寸不超过壁厚的一半。</p>
+        </>}
       </section>
       <details key={node.id} className="editor-section editor-transforms" open={node.kind === 'transform' || undefined}><summary>位置与旋转</summary>{vectorSelector('position', '位置')}<div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`position.${i}`, `${axis} 位置`, node.position[i]))}</div>{vectorSelector('rotation', '旋转')}<div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`rotation.${i}`, `${axis} 旋转`, node.rotation[i], '°'))}</div></details>
     </article></fieldset>;

@@ -341,7 +341,8 @@ def remove_tiny_components(
     relative_volume_limit: float = 1e-4,
 ) -> tuple[trimesh.Trimesh, int, int]:
     """Remove disconnected debris only when both relative limits are met."""
-    components = list(mesh.split(only_watertight=False))
+    # Preserve signed inner boundaries. split(repair=True) reorients cavities.
+    components = list(mesh.split(only_watertight=False, repair=False))
     if len(components) <= 1:
         return mesh, 0, 0
 
@@ -362,6 +363,7 @@ def remove_tiny_components(
     for index, (component, volume) in enumerate(zip(components, component_volumes)):
         is_tiny = (
             index != largest_index
+            and component.volume >= 0  # Negative closed surfaces bound voids.
             and len(component.faces) < face_limit
             and volume < volume_limit
         )
@@ -374,7 +376,7 @@ def remove_tiny_components(
     if removed_components == 0:
         return mesh, 0, 0
     cleaned = kept[0].copy() if len(kept) == 1 else trimesh.util.concatenate(kept)
-    cleaned.fix_normals()
+    cleaned.fix_normals(multibody=False)
     return cleaned, removed_components, removed_faces
 
 
@@ -709,7 +711,7 @@ def _cluster_simplify_trimesh(mesh: trimesh.Trimesh, target_faces: int) -> trime
             pass
         # 将 PreviewMesh 转为 Trimesh
         simplified = trimesh.Trimesh(vertices=np.asarray(preview.vertices, dtype=np.float64), faces=np.asarray(preview.faces, dtype=np.int64), process=False)
-        simplified.fix_normals()
+        simplified.fix_normals(multibody=False)
         if len(simplified.faces) == 0 or len(simplified.vertices) == 0:
             return None
         # 尽量保持可导出性：移除退化面
@@ -735,7 +737,7 @@ def simplify_mesh_for_export(mesh: trimesh.Trimesh, target_faces: int) -> tuple[
                 if simplified is not None and len(simplified.faces) > 0 and len(simplified.faces) <= len(mesh.faces):
                     # 基本质量检查
                     if len(simplified.vertices) > 0 and len(simplified.faces) > 0:
-                        simplified.fix_normals()
+                        simplified.fix_normals(multibody=False)
                         # 接受面数在目标附近的简化结果
                         if simplified.is_watertight is False:
                             # 仍可导出，但提示
@@ -750,7 +752,7 @@ def simplify_mesh_for_export(mesh: trimesh.Trimesh, target_faces: int) -> tuple[
             if hasattr(_simp, "quadratic_decimation"):
                 simplified = _simp.quadratic_decimation(mesh, target_faces)
                 if simplified is not None and len(simplified.faces) > 0:
-                    simplified.fix_normals()
+                    simplified.fix_normals(multibody=False)
                     return simplified, False, f"quadratic_decimation 简化至 {len(simplified.faces):,} 面"
         except Exception:
             pass
@@ -792,7 +794,7 @@ def export_mesh_with_quality(result: MeshResult, destination: str | Path, qualit
     mesh, actual_faces, fallback, msg = prepare_export_mesh(result, quality, target_faces)
     # 确保法向
     try:
-        mesh.fix_normals()
+        mesh.fix_normals(multibody=False)
     except Exception:
         pass
     mesh.export(path)

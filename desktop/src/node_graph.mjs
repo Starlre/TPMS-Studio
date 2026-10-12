@@ -1,10 +1,10 @@
 // The scene is a DAG: card order is presentation, inputs determine computation.
 import { PRIMITIVES } from './primitive_catalog.mjs';
 export const NODE_KINDS = { sphere: '球体', box: '长方体', cylinder: '圆柱', torus: '圆环', tpms: 'TPMS',
-  union: '并集', intersection: '交集', difference: '差集 A−B', smooth_union: '平滑融合', transform: '变换' };
-export const ARITY = { union: 2, intersection: 2, difference: 2, smooth_union: 2, transform: 1 };
+  union: '并集', intersection: '交集', difference: '差集 A−B', smooth_union: '平滑融合', transform: '变换', shell: '抽壳' };
+export const ARITY = { union: 2, intersection: 2, difference: 2, smooth_union: 2, transform: 1, shell: 1 };
 export const APPROXIMATE_PRIMITIVES = new Set(['cone','frustum','ellipsoid']);
-export const DIMENSIONS = { sphere: [8], box: [16, 16, 16], cylinder: [6, 24], torus: [10, 3], tpms: [] };
+export const DIMENSIONS = { sphere: [8], box: [16, 16, 16], cylinder: [6, 24], torus: [10, 3], tpms: [], shell: [1] };
 for (const item of PRIMITIVES) { NODE_KINDS[item.kind] = item.name; DIMENSIONS[item.kind] = item.dimensions; }
 
 export function ancestors(nodes, id, seen = new Set()) {
@@ -23,13 +23,21 @@ export function graphErrors(scene) {
   const ids = new Set(scene.nodes.map(n => n.id));
   for (const n of scene.nodes) {
     const arity = ARITY[n.kind] || 0;
-    if (!(n.kind in NODE_KINDS)) errors[n.id] = '不支持的节点类型';
+    if (['extrude','extrude_cut'].includes(n.kind)) errors[n.id] = '拉伸和切除操作已移除，请使用基本体和布尔差集重新建模';
+    else if (!(n.kind in NODE_KINDS)) errors[n.id] = '不支持的节点类型';
     else if (!n.name.trim()) errors[n.id] = '请输入节点名称';
     else if (n.inputs.length !== arity || n.inputs.some(i => !ids.has(i))) errors[n.id] = '请选择完整的上游输入';
     else if (arity === 2 && n.inputs[0] === n.inputs[1]) errors[n.id] = '输入 A 与 B 必须是不同节点';
     else if (n.inputs.some(i => ancestors(scene.nodes, i).has(n.id))) errors[n.id] = '输入会形成循环引用';
     else if (n.kind === 'smooth_union' && [...ancestors(scene.nodes, n.id)].some(i => scene.nodes.find(c => c.id === i)?.kind === 'tpms')) errors[n.id] = 'TPMS 不支持平滑融合，请使用普通布尔运算';
     else if (n.kind === 'smooth_union' && [...ancestors(scene.nodes, n.id)].some(i => APPROXIMATE_PRIMITIVES.has(scene.nodes.find(c => c.id === i)?.kind))) errors[n.id] = '圆锥、圆台、椭球体暂不支持平滑融合，请使用普通布尔运算';
+    else if (n.kind === 'smooth_union' && [...ancestors(scene.nodes, n.id)].some(i => scene.nodes.find(c => c.id === i)?.kind === 'shell')) errors[n.id] = '操作结果暂不支持平滑融合，请使用普通布尔运算';
+    else if (n.kind === 'shell') {
+      let source = scene.nodes.find(c => c.id === n.inputs[0]);
+      const seen = new Set();
+      while (source?.kind === 'transform' && !seen.has(source.id)) { seen.add(source.id); source = scene.nodes.find(c => c.id === source.inputs[0]); }
+      if (!['sphere','box','cube','rounded_box','cylinder','rounded_cylinder','capsule','torus'].includes(source?.kind)) errors[n.id] = '先对距离函数基本体抽壳，再做布尔或 TPMS 填充；复杂组合、TPMS、圆锥、圆台、椭球体暂不支持抽壳';
+    }
   }
   return errors;
 }
@@ -47,6 +55,7 @@ export function orderedNodes(nodes) {
 }
 
 export function createNode(scene, kind, parameters, selected) {
+  if (!(kind in NODE_KINDS)) throw new Error('不支持的节点类型');
   let index = 1;
   while (scene.nodes.some(n => n.id === `n${index}`)) index++;
   const first = scene.nodes.find(n => n.id === selected) || scene.nodes.find(n => n.id === scene.root) || scene.nodes.at(-1);
@@ -54,7 +63,8 @@ export function createNode(scene, kind, parameters, selected) {
   return { id: `n${index}`, name: `${NODE_KINDS[kind]} ${index}`, kind,
     dimensions: [...(DIMENSIONS[kind] || [8])], position: [0, 0, 0], rotation: [0, 0, 0],
     inputs: ARITY[kind] === 2 ? [first?.id || '', other?.id || ''] : ARITY[kind] === 1 ? [first?.id || ''] : [],
-    blend: 2, tpms: kind === 'tpms' ? { ...parameters, tubular_enabled: false } : null, expressions: {} };
+    blend: 2, tpms: kind === 'tpms' ? { ...parameters, tubular_enabled: false } : null, expressions: {},
+    ...(kind === 'shell' ? { operation: { opening: 'closed' } } : {}) };
 }
 
 export const expressionNames = text => String(text).match(/[A-Za-z_][A-Za-z_0-9]*/g) || [];

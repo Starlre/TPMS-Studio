@@ -25,9 +25,9 @@ export default function RibbonPalette({group, anchor, onClose}) {
     event.preventDefault(); const index = buttons.indexOf(document.activeElement);
     buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length-1 : (index+(event.key === 'ArrowUp' ? -1 : 1)+buttons.length)%buttons.length].focus();
   };
-  return createPortal(<section id="basic-body-palette" className="ribbon-palette" aria-label="基本体选项" style={point} ref={ref} onKeyDown={keyboard}>
-    <header><h3>基本体</h3><button type="button" className="icon-button" aria-label="关闭基本体选项" onClick={() => {onClose();anchor.focus();}}><X size={17} aria-hidden="true"/></button></header>
+  return createPortal(<section id={group.paletteId || 'basic-body-palette'} className="ribbon-palette" aria-label={`${group.label}选项`} style={point} ref={ref} onKeyDown={keyboard}>
+    <header><h3>{group.label}</h3><button type="button" className="icon-button" aria-label={`关闭${group.label}选项`} onClick={() => {onClose();anchor.focus();}}><X size={17} aria-hidden="true"/></button></header>
     <div className="palette-items">{group.tools.map(({id,label,icon:Icon,onClick,disabled,hint}) => <button type="button" className="palette-item" key={id || label} disabled={disabled} title={hint || label} aria-label={label} onClick={() => {onClick();onClose();}}><Icon size={26} aria-hidden="true"/><span>{label.replace(/^创建/,'')}</span></button>)}</div>
-    <footer>选择基本体，创建可编辑的参数节点</footer>
+    <footer>{group.footer || '选择基本体，创建可编辑的参数节点'}</footer>
   </section>,document.body);
 }

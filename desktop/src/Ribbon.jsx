@@ -41,7 +41,7 @@ export default function Ribbon({ categories }) {
             aria-label={label} aria-pressed={pressed} title={hint || label}>
             <Icon size={23} strokeWidth={1.6} aria-hidden="true" /><span>{label}</span>
           </button>)}</div>
-        {group.palette ? <button type="button" className="ribbon-palette-trigger" aria-label="展开基本体选项" aria-expanded={!!palette} aria-controls="basic-body-palette" onClick={event => setPalette(palette ? null : {group,anchor:event.currentTarget})}>基本体<ChevronDown size={14} aria-hidden="true"/></button> : <h3>{group.label}</h3>}
+        {group.palette ? <button type="button" className="ribbon-palette-trigger" aria-label={`展开${group.label}选项`} aria-expanded={palette?.group.label === group.label} aria-controls={group.paletteId || 'basic-body-palette'} onClick={event => setPalette(palette?.group.label === group.label ? null : {group,anchor:event.currentTarget})}>{group.label}<ChevronDown size={14} aria-hidden="true"/></button> : <h3>{group.label}</h3>}
       </section>)}
     </div>)}
     {palette && <RibbonPalette group={current.groups.find(group => group.label === palette.group.label)} anchor={palette.anchor} onClose={() => setPalette(null)}/>}

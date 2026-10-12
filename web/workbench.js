@@ -12,6 +12,9 @@ const categories = [
     group('布尔与融合', [['并集','merge'],['交集','intersection'],['差集','minus'],['平滑融合','sparkles']].map(([label,icon]) => tool(`添加${label}`,icon))),
     group('节点操作', [tool('独立变换','move'),tool('复制实体','copy'),tool('撤销编辑','undo'),tool('重做编辑','redo')]),
   ]},
+  { id:'operations', label:'操作', modes:['nodes'], groups:[
+    {...group('操作',[tool('抽壳','box')]),palette:true,paletteId:'solid-operation-palette'},
+  ]},
   { id:'tpms', label:'TPMS', groups:[], modeGroups:{
     nodes:[group('加入实体工作流',[tool('添加 TPMS','wave'),tool('添加隐式公式','formula')])],
     tpms:[group('TPMS 参数编辑',[tool('曲面与尺寸','layers',{navigate:'geometry'}),tool('壁厚与孔隙率','sliders',{navigate:'structure'}),tool('自定义曲面','formula')])],
@@ -32,11 +35,17 @@ const categories = [
 
 export function createWorkbench(showInspector) {
   const palette = createPrimitivePalette();
+  const operationPalette = createPrimitivePalette({
+    id:'solid-operation-palette', label:'操作',
+    items:[{name:'抽壳',label:'抽壳',icon:'box',hint:'向内壁厚与开口方向；先抽壳，再布尔或填充'}],
+    footer:'界面展示模式 · 抽壳创建与计算请使用桌面 App',
+  });
+  const closePalettes = () => {palette.close();operationPalette.close();};
   let mode = 'nodes', active = 'model';
   const panels = new Map(), tabs = new Map();
   const shown = () => categories.filter(category => !category.modes || category.modes.includes(mode));
   const enablePanel = id => {
-    palette.close();
+    closePalettes();
     active = id;
     $('ribbon-panel').hidden = false;
     $('ribbon-collapse').setAttribute('aria-expanded','true'); $('ribbon-collapse').textContent = '收起工具栏';
@@ -69,7 +78,7 @@ export function createWorkbench(showInspector) {
       for (const definition of category.modeGroups?.[mode] || category.groups) {
         const section = document.createElement('section'); section.className = 'ribbon-group'; section.setAttribute('aria-label',definition.label);
         const tools = document.createElement('div'); tools.className = 'ribbon-tools';
-        for (const item of definition.tools.filter(item => !definition.palette || COMMON_PRIMITIVES.includes(item.primitive))) {
+        for (const item of definition.tools.filter(item => !definition.palette || definition.paletteId || COMMON_PRIMITIVES.includes(item.primitive))) {
           const button = document.createElement('button'); button.className = 'ribbon-tool'; button.setAttribute('aria-label',item.label);
           button.innerHTML = `${item.primitive ? primitiveIcon(item.primitive,32) : `<svg class="icon" aria-hidden="true"><use href="#i-${item.icon}"/></svg>`}<span>${item.label}</span>`;
           if (item.action) button.dataset.action = item.action;
@@ -84,9 +93,9 @@ export function createWorkbench(showInspector) {
         }
         const label = document.createElement(definition.palette?'button':'h3'); label.textContent = definition.label;
         if (definition.palette) {
-          label.className='ribbon-palette-trigger';label.type='button';label.setAttribute('aria-label','展开基本体选项');label.setAttribute('aria-expanded','false');label.setAttribute('aria-controls','basic-body-palette');
+          label.className='ribbon-palette-trigger';label.type='button';label.setAttribute('aria-label',`展开${definition.label}选项`);label.setAttribute('aria-expanded','false');label.setAttribute('aria-controls',definition.paletteId || 'basic-body-palette');
           label.insertAdjacentHTML('beforeend','<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>');
-          label.onclick=()=>palette.open(label);
+          label.onclick=()=>(definition.paletteId ? operationPalette : palette).open(label);
         }
         section.append(tools,label); panel.append(section);
       }
@@ -95,7 +104,7 @@ export function createWorkbench(showInspector) {
     enablePanel(active);
   }
   function switchMode(next) {
-    palette.close();
+    closePalettes();
     mode = next; active = next === 'nodes' ? 'model' : 'tpms';
     for (const value of ['nodes','tpms']) { $(`mode-${value}`).classList.toggle('selected',value === mode); $(`mode-${value}`).setAttribute('aria-pressed',String(value === mode)); }
     $('node-project').hidden = mode !== 'nodes'; $('tpms-project').hidden = mode !== 'tpms';

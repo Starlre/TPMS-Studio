@@ -16,12 +16,16 @@ from libfive_backend import (NativeKernel, _TreeArena, _field_tree, _Region,
 from tpms_core import TPMSParameters, _material_scalar_field
 from parametric import TPMS_FIELDS, evaluate_expression, validate_parameters
 from workflow_values import resolve_values, copy_value_nodes
+from solid_operations import OP_DEFAULTS, validate_operation, operation_bounds, operation_tree
 
 KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
          "cube": "立方体", "rounded_box": "圆角方盒", "rounded_cylinder": "圆角圆柱",
          "capsule": "胶囊体", "cone": "圆锥", "frustum": "圆台", "ellipsoid": "椭球体",
          "tpms": "TPMS", "union": "并集", "intersection": "交集",
          "difference": "差集 A−B", "smooth_union": "平滑融合", "transform": "变换"}
+KINDS.update({"shell": "抽壳"})
+REMOVED_OPERATIONS = {"extrude", "extrude_cut"}
+REMOVED_MESSAGE = "拉伸和切除操作已移除，当前保留抽壳；含这类节点的旧项目不再支持，请使用基本体和布尔差集重新建模"
 OPERATIONS = {"union", "intersection", "difference", "smooth_union"}
 PRIMITIVE_DIMENSIONS = {"sphere": (8,), "box": (16, 16, 16), "cylinder": (6, 24), "torus": (10, 3),
                         "cube": (16,), "rounded_box": (16, 20, 12, 2), "rounded_cylinder": (6, 24, 2),
@@ -47,6 +51,7 @@ class SolidNode:
     tpms: TPMSParameters | None = None
     expressions: dict[str, str] = field(default_factory=dict)
     vector_inputs: dict[str, str] = field(default_factory=dict)
+    operation: dict = field(default_factory=dict)
 
 
 def rotation_matrix(angles) -> np.ndarray:
@@ -111,6 +116,10 @@ class SolidScene:
         raise ValueError(f"对象不存在：{identifier}")
 
     def add(self, kind: str, **kwargs) -> SolidNode:
+        if kind in REMOVED_OPERATIONS:
+            raise ValueError(REMOVED_MESSAGE)
+        if kind not in KINDS:
+            raise ValueError("不支持的对象类型")
         if len(self.nodes) >= 64:
             raise ValueError("当前最多支持 64 个对象")
         index = 1
@@ -119,6 +128,8 @@ class SolidScene:
             index += 1
         if kind in PRIMITIVE_DIMENSIONS:
             kwargs.setdefault("dimensions", PRIMITIVE_DIMENSIONS[kind])
+        if kind in OP_DEFAULTS:
+            kwargs.setdefault("dimensions", OP_DEFAULTS[kind])
         node = SolidNode(id=f"n{index}", name=f"{KINDS[kind]} {index}", kind=kind, **kwargs)
         self.nodes.append(node)
         self.root = node.id
@@ -148,6 +159,8 @@ class SolidScene:
             raise ValueError("对象 ID 重复")
         self.by_id(self.root)
         for node in self.nodes:
+            if node.kind in REMOVED_OPERATIONS:
+                raise ValueError(REMOVED_MESSAGE)
             if node.kind not in KINDS or not node.name.strip():
                 raise ValueError("对象类型或名称无效")
             if len(node.position) != 3 or len(node.rotation) != 3:
@@ -161,10 +174,12 @@ class SolidScene:
                     self.by_id(child)
                 if node.kind == "smooth_union" and (not math.isfinite(node.blend) or not 0.001 <= node.blend <= 100):
                     raise ValueError("融合宽度须在 0.001–100 mm 之间")
-            elif node.kind == "transform":
+            elif node.kind in {"transform", "shell"}:
                 if len(node.inputs) != 1:
-                    raise ValueError("变换节点需要一个上游实体")
+                    raise ValueError(f"{KINDS[node.kind]}节点需要一个上游实体")
                 self.by_id(node.inputs[0])
+                if node.kind in OP_DEFAULTS:
+                    validate_operation(self, node)
             elif node.inputs:
                 raise ValueError("基本实体不能引用其他对象")
             if node.kind == "tpms":
@@ -173,7 +188,7 @@ class SolidScene:
                 node.tpms.validate()
                 if node.tpms.tubular_enabled:
                     raise ValueError("实体组合暂不支持管状卷绕 TPMS")
-            elif node.kind not in OPERATIONS and node.kind != "transform":
+            elif node.kind not in OPERATIONS and node.kind not in {"transform", "shell"}:
                 counts = {kind: len(values) for kind, values in PRIMITIVE_DIMENSIONS.items()}
                 if len(node.dimensions) != counts[node.kind] or not all(
                     math.isfinite(value) and 0 < value <= 2000 for value in node.dimensions):
@@ -204,6 +219,21 @@ class SolidScene:
                 raise ValueError("TPMS 场不是精确距离场；平滑融合目前仅支持基本实体组合")
             if node.kind == "smooth_union" and self.contains_approximate_primitive(node.id):
                 raise ValueError("圆锥、圆台、椭球体当前使用距离近似，暂不支持平滑融合；请使用普通布尔运算")
+            if node.kind == "smooth_union" and self.contains_operation(node.id):
+                raise ValueError("抽壳结果暂不参与平滑融合，请使用普通布尔运算")
+
+    def contains_operation(self, identifier):
+        pending, seen = [identifier], set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            node = self.by_id(current)
+            if node.kind in OP_DEFAULTS:
+                return True
+            pending.extend(node.inputs)
+        return False
 
     def contains_approximate_primitive(self, identifier: str) -> bool:
         pending, seen = [identifier], set()
@@ -239,7 +269,9 @@ class SolidScene:
         node = self.by_id(identifier or self.root)
         if node.id in _cache:
             return _cache[node.id].copy()
-        if node.kind == "transform":
+        if node.kind in OP_DEFAULTS:
+            bounds = operation_bounds(self, node, _cache, rotation_matrix)
+        elif node.kind == "transform":
             bounds = self.bounds(node.inputs[0], _cache)
         elif node.kind in OPERATIONS:
             a, b = [self.bounds(child, _cache) for child in node.inputs]
@@ -289,6 +321,8 @@ class SolidScene:
             nodes = []
             for raw in data["nodes"]:
                 args = dict(raw)
+                if args.get("kind") in REMOVED_OPERATIONS:
+                    raise ValueError(REMOVED_MESSAGE)
                 for key in ("dimensions", "position", "rotation", "inputs"):
                     args[key] = tuple(args[key])
                 if args.get("tpms") is not None:
@@ -373,6 +407,9 @@ def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict,
             p = _material_scalar_field(p)[0]
         validate_libfive_parameters(p, scene.cell_size)
         tree = _field_tree(arena, p)
+    elif node.kind in OP_DEFAULTS:
+        source = _scene_tree(arena, scene, node.inputs[0], cache, reuse, keys, report)
+        tree = operation_tree(arena, scene, node, source, coords, rotation_matrix)
     elif node.kind == "transform":
         tree = _scene_tree(arena, scene, node.inputs[0], cache, reuse, keys, report)
     else:

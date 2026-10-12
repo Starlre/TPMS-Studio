@@ -72,7 +72,7 @@ async function main() {
     await click('曲面与尺寸'); assert.equal(await page.getByLabel('曲面类型',{exact:true}).count(),1);
     await choose('仿真与网格'); await click('收起功能工具栏');
     await modes.getByRole('button',{name:'实体建模',exact:true}).click();
-    assert.deepEqual(await tabs.allTextContents(),['建模','TPMS 节点','参数与公式','检查与测量']);
+    assert.deepEqual(await tabs.allTextContents(),['建模','操作','TPMS 节点','参数与公式','检查与测量']);
     assert.equal(await tabs.first().getAttribute('aria-selected'),'true');
     assert.equal(await ribbon.getByRole('tabpanel').count(),1);
     assert.equal(await page.locator('#ribbon-tab-cfd,#ribbon-panel-cfd').count(),0);

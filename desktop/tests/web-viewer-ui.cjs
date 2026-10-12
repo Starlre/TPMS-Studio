@@ -50,11 +50,23 @@ async function main() {
     assert.match(await page.locator('#file-size').innerText(),/17\.34/);
     await page.locator('.node-card').first().locator('summary').click();
     assert.match(await page.locator('.node-card').first().innerText(),/1\.4 mm/);
-    assert.deepEqual(await page.getByRole('tab').allTextContents(),['建模','TPMS 节点','参数与公式','检查与测量']);
+    assert.deepEqual(await page.getByRole('tab').allTextContents(),['建模','操作','TPMS 节点','参数与公式','检查与测量']);
     for (const label of ['创建球体','创建长方体','创建圆柱','创建圆环','添加并集','添加交集','添加差集','添加平滑融合','独立变换','复制实体','撤销编辑','重做编辑']) {
       assert.ok(await page.getByRole('button',{name:label,exact:true}).isVisible());
       assert.ok(await page.getByRole('button',{name:label,exact:true}).isDisabled());
     }
+    await page.getByRole('tab',{name:'操作',exact:true}).click();
+    assert.ok(await page.getByRole('button',{name:'抽壳',exact:true}).isDisabled());
+    assert.equal(await page.getByRole('button',{name:'拉伸',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'切除',exact:true}).count(),0);
+    const operations = page.getByRole('region',{name:'操作选项',exact:true});
+    await page.getByRole('button',{name:'展开操作选项',exact:true}).click();
+    assert.equal(await operations.locator('.palette-item').count(),1);
+    assert.equal(await operations.getByRole('button',{name:'抽壳',exact:true}).getAttribute('aria-disabled'),'true');
+    await page.keyboard.press('End');assert.equal(await page.locator(':focus').getAttribute('aria-label'),'抽壳');
+    await capture('web-operations-palette-dark.png');
+    await page.keyboard.press('Escape');assert.ok(await operations.isHidden());
+    assert.equal(await page.locator(':focus').getAttribute('aria-label'),'展开操作选项');
     await page.getByRole('tab',{name:'TPMS 节点',exact:true}).click();
     assert.ok(await page.getByRole('button',{name:'添加 TPMS',exact:true}).isVisible());
     await page.getByRole('tab',{name:'参数与公式',exact:true}).click();
@@ -97,6 +109,10 @@ async function main() {
     await page.getByRole('tab',{name:'建模',exact:true}).click();
     await page.getByRole('button',{name:'切换亮色主题',exact:true}).click(); assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     await openPalette(); assert.equal(await palette.locator('.palette-item').count(),11); await page.keyboard.press('Escape');
+    await page.getByRole('tab',{name:'操作',exact:true}).click();
+    await page.getByRole('button',{name:'展开操作选项',exact:true}).click();
+    assert.equal(await operations.locator('.palette-item').count(),1);await page.keyboard.press('Escape');
+    await page.getByRole('tab',{name:'建模',exact:true}).click();
     await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
     await page.getByLabel('线框',{exact:true}).check(); await page.getByLabel('线框',{exact:true}).uncheck();
     await page.getByLabel('网格地面',{exact:true}).uncheck(); await page.getByLabel('网格地面',{exact:true}).check();
@@ -139,6 +155,12 @@ async function main() {
     await page.getByRole('tab',{name:'建模',exact:true}).click(); await openPalette();
     const paletteRect = await palette.boundingBox(); assert.ok(paletteRect.x>=0 && paletteRect.y>=0 && paletteRect.x+paletteRect.width<=375 && paletteRect.y+paletteRect.height<=812);
     await page.getByRole('button',{name:'关闭基本体选项',exact:true}).click();
+    await page.getByRole('tab',{name:'操作',exact:true}).click();
+    await page.getByRole('button',{name:'展开操作选项',exact:true}).click();
+    const operationRect=await operations.boundingBox();
+    assert.ok(operationRect.x>=0 && operationRect.y>=0 && operationRect.x+operationRect.width<=375 && operationRect.y+operationRect.height<=812);
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab',{name:'建模',exact:true}).click();
     await page.getByRole('button',{name:'建模步骤',exact:true}).click(); assert.ok(await page.locator('#node-panel').isVisible());
     await page.getByRole('button',{name:'关闭建模步骤',exact:true}).click();
     await page.getByRole('button',{name:'模型信息',exact:true}).first().click(); assert.ok(await page.locator('#info-panel').isVisible());

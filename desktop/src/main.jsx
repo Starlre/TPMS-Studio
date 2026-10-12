@@ -341,15 +341,21 @@ function App() {
   const combination = createNode(scene, 'smooth_union', p, selected);
   const smoothHasTpms = combination.inputs.some(id => scene.nodes.some(n => n.kind === 'tpms' && (n.id === id || ancestors(scene.nodes, id).has(n.id))));
   const smoothHasApproximate = combination.inputs.some(id => scene.nodes.some(n => APPROXIMATE_PRIMITIVES.has(n.kind) && ancestors(scene.nodes,id).has(n.id)));
+  const smoothHasOperation = combination.inputs.some(id => scene.nodes.some(n => n.kind === 'shell' && ancestors(scene.nodes,id).has(n.id)));
   const ribbonCategories = [
     { id: 'model', label: '建模', workspaces: ['nodes'], groups: [
       { label: '基本体', palette:true, common:COMMON_PRIMITIVES, tools:PRIMITIVES.map(item => ({ id:item.kind, label:`创建${item.name}`, icon:props => <PrimitiveIcon {...props} kind={item.kind}/>, disabled:noEntity, onClick:() => ribbonNode(item.kind), hint:item.hint })) },
-      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || (kind === 'smooth_union' && (smoothHasTpms || smoothHasApproximate)), onClick:() => ribbonNode(kind), hint:kind === 'smooth_union' && (smoothHasTpms || smoothHasApproximate) ? 'TPMS、圆锥、圆台、椭球体暂不支持平滑融合；请使用普通布尔运算' : '选中实体作为 A，在节点内编辑 A/B 引用' })) },
+      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || (kind === 'smooth_union' && (smoothHasTpms || smoothHasApproximate || smoothHasOperation)), onClick:() => ribbonNode(kind), hint:kind === 'smooth_union' && (smoothHasTpms || smoothHasApproximate || smoothHasOperation) ? 'TPMS、距离近似基本体与操作结果暂不支持平滑融合；请使用普通布尔运算' : '选中实体作为 A，在节点内编辑 A/B 引用' })) },
       { label: '节点操作', tools: [
         {label:'独立变换',icon:Move3D,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('transform')},
         {label:'复制实体',icon:Copy,disabled:noEntity || !node,onClick:() => { duplicateNode(); setMode('nodes'); setInspectorTab('model'); }},
         {label:'撤销编辑',icon:Undo2,disabled:busy || !sceneHistory.current.undo.length,onClick:() => travelHistory('undo')},
         {label:'重做编辑',icon:Redo2,disabled:busy || !sceneHistory.current.redo.length,onClick:() => travelHistory('redo')}
+      ] }
+    ] },
+    { id: 'operations', label: '操作', workspaces: ['nodes'], groups: [
+      { label: '操作', palette: true, paletteId: 'solid-operation-palette', common: ['shell'], footer: '先创建并选中距离函数基本体，再添加抽壳', tools: [
+        { id: 'shell', label: '抽壳', icon: Box, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('shell'), hint: scene.nodes.length ? '向内壁厚与开口方向；先抽壳，再布尔或填充' : '先在建模选项卡创建距离函数基本体' }
       ] }
     ] },
     { id: 'tpms', label: mode === 'nodes' ? 'TPMS 节点' : 'TPMS', groups: [

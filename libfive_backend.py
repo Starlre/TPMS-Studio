@@ -356,7 +356,9 @@ def render_tree_mesh(kernel: NativeKernel, tree: _Tree, region: _Region,
         raise ValueError("libfive 返回了无效网格，未导出文件。")
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
     mesh.remove_unreferenced_vertices()
-    mesh.fix_normals()
+    # Inner cavity boundaries have negative signed volume; do not flip each
+    # disconnected surface outward, which would turn voids into solid bodies.
+    mesh.fix_normals(multibody=False)
     mesh, _components, _removed = remove_tiny_components(mesh)
     if not mesh.is_watertight or not mesh.is_winding_consistent or mesh.volume <= 0:
         raise ValueError("libfive 网格未通过封闭性检查；请减小网格尺寸，或使用现有网格内核导出。")
