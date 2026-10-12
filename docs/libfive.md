@@ -32,7 +32,7 @@ libfive 提供数学表达式树与自适应 Dual Contouring 表面网格生成�
 | 管状卷绕 | 本阶段明确拒绝，继续选择“现有网格”导出 |
 | GPU 预览、CFD/COMSOL 体网格 | 预览与表面内核独立；CFD 沿用已有 Gmsh 实现，组合实体暂不支持 CFD |
 
-[统一实体建模工作区](solid-modeling.md) 提供基本体、变换与布尔组合，不需要编写公式也能建模。同一工作区采用 [Notebook 节点树](node-modeling.md)，支持节点内编辑、数值/公式/向量参数、上游引用定位和中间预览。自由连线画布、STEP/B-Rep 或新体网格算法尚未包含。
+[统一实体建模工作区](solid-modeling.md) 提供基本体、变换与布尔组合，不需要编写公式也能建模。同一工作区采用 [Notebook 节点树](node-modeling.md)，支持节点内编辑、数值/公式/向量参数、上游引用定位和中间预览。自由连线画布、STEP/B-Rep 转隐式节点与新体网格算法尚未包含。独立的 [STEP 参考导入](step-import.md) 使用 OpenCascade，支持显示、变换、剖切测量和网格导出。
 
 ## 数学定义与实现
 

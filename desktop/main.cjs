@@ -13,6 +13,7 @@ const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_nod
 const layoutBridge = new PythonBridge(root);
 let layoutBusy = false;
 let busy = false;
+let importedSource = null;
 ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
   if (method === 'cancel') { bridge.cancel(); layoutBridge.cancel(); return {}; }
   if (method === 'preview_scene') {
@@ -28,6 +29,17 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
       // Diagnostic files stay in the worker-owned temp directory. Exports require a native dialog.
       const { destination, ...safePayload } = payload;
       return await bridge.call(method, safePayload);
+    }
+    if (method === 'import_step') {
+      const result = await dialog.showOpenDialog(window, {title:'导入 STEP 模型', filters:[{name:'STEP CAD 模型',extensions:['step','stp']}],properties:['openFile']});
+      if (result.canceled) return {canceled:true};
+      const answer = await bridge.call('import_step', {cad:{source:result.filePaths[0],deflection:.1,angular_deflection:20,position:[0,0,0],rotation:[0,0,0]}});
+      importedSource = answer.cad.source;
+      return answer;
+    }
+    if (method === 'generate_cad') {
+      if (!importedSource || payload.cad?.source !== importedSource) throw new Error('请先导入 STEP 模型或打开导入项目');
+      return await bridge.call('import_step', {cad:payload.cad});
     }
     if (method === 'export' || method === 'cfd') {
       const filters = method === 'cfd' ? [{ name: 'COMSOL 流体网格', extensions: ['msh'] }] : [
@@ -55,7 +67,12 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
       const file = result.filePaths[0];
       if ((await fs.stat(file)).size > 2_000_000) throw new Error('项目超过 2 MB');
       const project = JSON.parse(await fs.readFile(file, 'utf8'));
-      return await bridge.call('validate_project', { project });
+      const validated = await bridge.call('validate_project', { project });
+      if (validated.project.mode === 'cad') {
+        validated.imported = await bridge.call('import_step', {cad:validated.project.cad});
+        importedSource = validated.imported.cad.source;
+      }
+      return validated;
     }
     throw new Error('不支持的操作');
   } finally { busy = false; }

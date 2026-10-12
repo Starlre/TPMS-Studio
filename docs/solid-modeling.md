@@ -94,6 +94,8 @@
 
 拉伸、切除及其自由轮廓/选面草图入口已移除。包含 `extrude` 或 `extrude_cut` 节点的旧项目会明确拒绝加载，保留当前打开的项目；可使用基本体与布尔差集重新组织建模。
 
+STEP / STP 文件可从顶部导入为独立参考模型，支持显示、变换、剖切、测量与网格导出，不进入实体节点图。操作见 [STEP 导入](step-import.md)。
+
 ## 保存、生成与限制
 
 同一“实体建模”工作区支持独立变换、类型化参数、引用定位、中间预览及工作流撤销重做，见 [节点式参数化建模](node-modeling.md)。简单实体直接填写尺寸，需要联动时再加入参数和公式。
@@ -106,6 +108,6 @@
 - 组合结果的 CFD/COMSOL 网格、仿真区域和质量操作暂时禁用。切回 TPMS 工作区并生成普通 TPMS 后恢复；本阶段只交付实体表面网格。
 - TPMS GPU Ray Marching 用于内置 TPMS 工作区。实体组合使用 Three.js 网格视口，支持旋转、平移、缩放、右下角 XYZ 方向标、轴向视角和明暗主题。
 - 平移后模型预览自动居中便于观察，导出文件保持原始世界坐标。
-- 管状卷绕、网格导入变隐式实体、节点图自由布线、任意 CAD/复杂组合自动抽壳、STEP/B-Rep 尚未包含；解析距离函数基本体已支持向内抽壳。
+- 管状卷绕、网格导入变隐式实体、节点图自由布线、任意 CAD/复杂组合自动抽壳、STEP/B-Rep 转隐式节点及编辑尚未包含；解析距离函数基本体已支持向内抽壳。
 
 实现文件：`solid_model.py`、`libfive_backend.py`、`electron_backend.py`、`desktop/src/main.jsx`、`desktop/src/Viewport.jsx`。核心测试：`test_solid_model.py`；Electron IPC 与实机验收：在 `desktop/` 执行 `npm test`、`npm run verify-ui`。`solid_panel.py`、`app.py` 及 `scripts/verify_solid_ui.py` 仍用于 Qt 兼容版本。

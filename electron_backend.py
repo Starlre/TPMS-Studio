@@ -24,6 +24,7 @@ from tpms_core import (TPMSParameters, MeshResult, generate_tpms,
 from libfive_backend import backend_status, generate_libfive_mesh, suggested_cell_size
 from solid_model import SolidScene, generate_solid, demo_scene
 from workflow_engine import WorkflowEngine
+from cad_import import StepImporter, import_status, validate_settings
 from workflow_values import resolve_values
 from gpu_preview import IMPLICIT_FRAGMENT_SOURCE
 
@@ -51,6 +52,7 @@ class Workbench:
         self.cfd = None
         self.region = None
         self.progress = progress or (lambda message: None)
+        self.step_importer = StepImporter()
         self.workflow = WorkflowEngine()
         self.layout_workflow = WorkflowEngine(max_mesh_bytes=64 * 1024 * 1024, max_meshes=64)
 
@@ -71,9 +73,12 @@ class Workbench:
             self.current, self.cfd, self.region = result, None, None
         mesh = result.mesh
         stats = {"faces": len(mesh.faces), "vertices": len(mesh.vertices),
-                 "volume": abs(float(mesh.volume)), "area": float(mesh.area),
+                 "volume": abs(float(mesh.volume)) if mesh.is_watertight else None, "area": float(mesh.area),
                  "watertight": bool(mesh.is_watertight), "bounds": mesh.bounds.tolist()}
         answer = {"geometry": self.geometry(mesh.vertices, mesh.faces), "stats": stats, "mode": mode}
+        if mode == 'cad':
+            answer['cad'] = result.settings
+            answer['cad_metadata'] = result.metadata
         if mode == 'tpms':
             stats.update(porosity=result.porosity, removed_components=result.removed_components)
             answer['parameters'] = asdict(result.parameters)
@@ -133,12 +138,15 @@ class Workbench:
         return replace(self.current.parameters, target_porosity=None)
 
     def dispatch(self, method: str, payload: dict) -> dict:
+        if method == 'import_step':
+            imported = self.step_importer.load(payload['cad'], self.progress)
+            return self.generated(imported, 'cad')
         if method == 'preview_scene':
             return self.preview_scene(payload['scene'])
         if method == 'init':
             available, detail = backend_status()
             return {"libfive": available, "detail": detail, "python": sys.executable,
-                    "shader": IMPLICIT_FRAGMENT_SOURCE.replace('#version 330 core', '')}
+                    "step": import_status(), "shader": IMPLICIT_FRAGMENT_SOURCE.replace('#version 330 core', '')}
         if method == 'generate_tpms':
             p = parameters(payload['parameters'])
             self.progress('正在计算隐式场并生成封闭曲面…')
@@ -173,6 +181,12 @@ class Workbench:
                 return {"project": {"version": 1, "type": "tpms-electron", "mode": "nodes",
                                     "scene": SolidScene.from_dict(project).to_dict()}}
             parameters(project['parameters'])
+            if project.get('mode') == 'cad':
+                settings = validate_settings(project.get('cad'))
+                # Only references/settings are persisted, never display buffers.
+                if not Path(settings['source']).is_file():
+                    raise ValueError('STEP 源文件不存在，请重新导入；项目只保存文件引用')
+                return {"project": {**project, "cad": settings}}
             if project.get('scene', {}).get('nodes'):
                 SolidScene.from_dict(project['scene'])
             else:
