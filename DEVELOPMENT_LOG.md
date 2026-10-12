@@ -142,6 +142,8 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-090 | 删除拉伸和切除，保留抽壳 | 2026-10-12 22:57:17：清理节点、草图与选面入口，更新抽壳示例、暗色截图和验证 | 已完成 |
 | R-091 | 同步 Git、GitHub 与抽壳网页展示 | 2026-10-12 23:02:42：网页操作页与抽壳下拉、暗色截图、文档、构建验收和版本同步 | 已完成 |
 | R-092 | 增加 STEP 参考模型导入 | 2026-10-12 23:29:44：OpenCascade 实体/曲面读取、独立工作区、精度变换、剖切测量和项目恢复 | 已完成 |
+| R-093 | 清理无引用旧图片与临时产物 | 2026-10-12 23:50:12：删除 16 张无当前引用的旧截图及缓存、测试输出和同步临时文件，保留运行与发布资源 | 已完成 |
+| R-094 | 更新 GitHub 语言识别规则 | 2026-10-13 00:09:51：显式指定源码语言，排除依赖与编译产物，保留前端和测试源码的真实统计 | 本地配置完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -487,6 +489,24 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 验证：最终 Python 回归 181 项通过、1 项跳过；桌面/IPC 21 项通过，生产构建与真实窗口验收通过。覆盖毫米/米单位、开放曲面、多实体、封闭内腔、精度变换、中文文件名、保存恢复、剖切与拾点测量、STL 回读、无效文件保留快照、缺失/内容改变提示及网格面数保护；明暗主题和窄窗口检查通过，页面异常为空。
 - 已知限制：同时显示文件中各形体但不保留名称/颜色/装配层级；多实体 CAD 体积为分量总和，重叠未求并。项目只保存引用需保留源文件，纯曲线/点暂不支持。128 MiB 文件和200万显示面数上限；面数检查发生在原生离散之后，峰值内存可能更高。不参与隐式节点或 CFD，不导出原 CAD STEP。
 - 状态：本地实现、文档和验收完成；本轮未提交 Git 或推送网页。
+
+### R-093：2026-10-12 23:50:12（Asia/Shanghai），清理无引用旧图片与临时产物
+
+- 需求与原因：检查项目文件用途，清理已确认不参与当前运行和文档展示的旧截图、缓存及临时输出。
+- 实现：删除根目录 image.png、image-cfd.png，以及 docs/ 下的 electron-node-intermediate.png、electron-node-parameters-dark.png、electron-node-parameters-light.png、electron-nodes-dark.png、electron-nodes-editor.png、electron-nodes-light.png、electron-notebook-tpms.png、electron-workflow-navigation.png、electron-workflow-parameters.png、electron-workflow-preview.png、electron-workflow-steps-dark.png、electron-workflow-steps-light.png、solid-modeling-panel.png、solid-modeling-ui.png，共 16 张旧图片；清理 Python、绘图与测试缓存、测试输出、同步临时副本及空探测目录。
+- 涉及文件：上述图片、__pycache__/、.mplconfig/、.pytest_cache/、pytest-of-*/、test-output/、.sync-libfive-backend-check.tmp、.tmp-probe/、CHANGELOG.md、DEVELOPMENT_LOG.md。
+- 验证：删除前逐项核对当前说明文档和源码的文件名引用，并校验目标均在项目目录内且不是链接；删除后确认全部 23 个目标不存在。共移除 96 个文件、18,445,501 字节（约 17.59 MiB）。本次仅清理资源，未修改建模代码。
+- 已知限制：部分旧图片名称在开发日志中作为历史记录保留；Git 已跟踪的图片可从版本历史恢复，缓存可重新生成。旧导出模型、参考仓库、原生 DLL、依赖、桌面备用压缩包和网页部署产物保留。
+- 状态：本地清理完成并记录；未提交 Git 或推送 GitHub。
+
+### R-094：2026-10-13 00:09:51（Asia/Shanghai），更新 GitHub 语言识别规则
+
+- 需求与原因：GitHub 默认分支已包含 Electron/React 与网页源码，但语言接口仍显示旧的 Python 统计；明确仓库级识别规则，等待 GitHub 重新计算。
+- 实现：在 .gitattributes 中指定 Python、JavaScript（含 JSX/MJS/CJS）、CSS、HTML、PowerShell、Batchfile 与 CMake；手写前端和测试源码不作为生成或第三方代码。依赖、参考仓库、桌面构建和 docs 网页编译结果不参与语言统计。原有换行和二进制规则保持有效。
+- 涉及文件：.gitattributes、CHANGELOG.md、DEVELOPMENT_LOG.md。
+- 验证：使用 git check-attr 核对代表性源文件、依赖和编译文件的有效属性，运行 git diff --check；远程统计结果以 GitHub 后台重新计算为准，不手工指定占比。
+- 已知限制：嵌入 Python 字符串的 GLSL 不单独计数，外部 C++ DLL 不作为仓库源码；GitHub 统计异步刷新，不能保证推送后立即变化。
+- 状态：本地配置完成；配置提交与远程统计结果以 Git 历史及 GitHub 为准。
 
 ## 5. 技术约定
 

@@ -13,5 +13,30 @@
 *.msh binary
 *.bdf binary
 
+# Explicit source languages for GitHub Linguist (statistics use source bytes).
+*.py linguist-language=Python linguist-detectable=true
+*.js linguist-language=JavaScript linguist-detectable=true
+*.jsx linguist-language=JavaScript linguist-detectable=true
+*.mjs linguist-language=JavaScript linguist-detectable=true
+*.cjs linguist-language=JavaScript linguist-detectable=true
+*.css linguist-language=CSS linguist-detectable=true
+*.html linguist-language=HTML linguist-detectable=true
+*.ps1 linguist-language=PowerShell linguist-detectable=true
+*.bat linguist-language=Batchfile linguist-detectable=true
+*.cmd linguist-language=Batchfile linguist-detectable=true
+**/CMakeLists.txt linguist-language=CMake linguist-detectable=true
+
+# Application and test sources are authored code, not bundled dependencies.
+desktop/src/** linguist-generated=false linguist-vendored=false
+desktop/tests/** linguist-generated=false linguist-vendored=false
+web/** linguist-generated=false linguist-vendored=false
+
+# Dependencies and build outputs must not inflate language percentages.
+**/node_modules/** linguist-vendored=true linguist-detectable=false
+desktop/dist/** linguist-generated=true linguist-detectable=false
+native/libfive/** linguist-vendored=true linguist-detectable=false
+.refs/** linguist-vendored=true linguist-detectable=false
+docs/index.html linguist-generated=true linguist-detectable=false
+
 # Bundled WebGL shaders contain intentional whitespace inside string literals.
-docs/viewer-assets/** -text -whitespace linguist-generated=true
+docs/viewer-assets/** -text -whitespace linguist-generated=true linguist-detectable=false
