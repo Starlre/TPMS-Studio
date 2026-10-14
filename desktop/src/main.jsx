@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, RotateCcw, Scan, ZoomIn, ZoomOut, Copy, CircleHelp, X, Check, LoaderCircle, Activity, Triangle, Workflow } from 'lucide-react';
+import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, RotateCcw, Scan, ZoomIn, ZoomOut, Copy, CircleHelp, X, Check, LoaderCircle, Activity, Triangle, Workflow, ChevronRight } from 'lucide-react';
 import Viewport from './Viewport';
 import NodeWorkflow from './NodeWorkflow';
 import Ribbon from './Ribbon';
@@ -14,6 +14,7 @@ import { supportsImplicitPreview } from './display_geometry.mjs';
 import { graphErrors, affectedNodes, createNode, ancestors, APPROXIMATE_PRIMITIVES } from './node_graph.mjs';
 import { notebookOrder, onlyOrderChanged, sceneSignature as computationalSignature } from './workflow_drag.mjs';
 import './style.css';
+import './native.css';
 
 const DEFAULT = { surface: 'Gyroid', mode: 'sheet', size_x: 40, size_y: 40, size_z: 40,
   cells_x: 2, cells_y: 2, cells_z: 2, thickness: 1.2, iso_level: 0, samples_per_cell: 64,
@@ -84,7 +85,7 @@ function App() {
   const [display, setDisplay] = useState('model');
   const [quality, setQuality] = useState(null); const [qualityDialog, setQualityDialog] = useState(false);
   const [help, setHelp] = useState(false);
-  const [theme, setTheme] = useState(localStorage.getItem('tpms-theme') || 'dark');
+  const [theme, setTheme] = useState(localStorage.getItem('tpms-theme') || 'light');
   const [implicit, setImplicit] = useState(true); const [wireframe, setWireframe] = useState(false);
   const [renderer, setRenderer] = useState('网格预览');
   const [exportQuality, setExportQuality] = useState('original');
@@ -431,17 +432,31 @@ function App() {
 
   return <div className="app-shell">
     <header className="app-header">
-      <div className="brand"><Box size={27} aria-hidden="true" /><div><strong>TPMS <span>Studio</span></strong><small>隐式建模工作台</small></div></div>
-      <nav className="mode-switch" aria-label="建模工作区"><button className={mode === 'tpms' ? 'selected' : ''} aria-pressed={mode === 'tpms'} disabled={busy} onClick={() => switchMode('tpms')}><Layers3 size={19} aria-hidden="true" />TPMS 建模</button><button className={mode === 'nodes' ? 'selected' : ''} aria-pressed={mode === 'nodes'} disabled={busy} onClick={() => switchMode('nodes')}><Workflow size={19} aria-hidden="true" />实体建模</button>{cad && <button className={mode === 'cad' ? 'selected' : ''} aria-pressed={mode === 'cad'} disabled={busy} onClick={() => switchMode('cad')}><FolderOpen size={19} aria-hidden="true" />导入模型</button>}</nav>
+      <div className="brand"><Box size={25} aria-hidden="true" /><div><strong>TPMS <span>Studio</span></strong></div></div>
+      <div className="workspace-breadcrumb" aria-label="当前位置"><span>{inspectorTab === 'inspection' ? '分析' : '模型'}</span><ChevronRight size={15} aria-hidden="true" /><strong>{inspectorTab === 'inspection' ? '剖切测量' : mode === 'cad' ? '导入模型' : mode === 'nodes' ? '实体建模' : 'TPMS 建模'}</strong></div>
       <div className="file-actions"><Tool icon={FolderOpen} disabled={busy} onClick={openProject}>打开</Tool><Tool icon={FolderOpen} disabled={busy || !info} title={info?.step ? '导入 STEP / STP 曲面或实体' : '导入前请安装 requirements-step.txt 依赖并重启'} onClick={importSTEP}>导入 STEP</Tool><Tool icon={Save} disabled={busy} onClick={saveProject}>保存项目</Tool>
         <details className="export-menu" ref={exportMenu}><summary aria-label="展开导出设置"><Download size={18} aria-hidden="true" />导出<ChevronDown size={15} aria-hidden="true" /></summary><div className="dropdown"><h3>表面模型导出</h3><Select label="导出质量 / 面数" value={exportQuality} onChange={setExportQuality} options={[
           ['original', '原始精度'], ['high', '高质量 · 约 70% 面数'], ['medium', '标准 · 约 40% 面数'], ['low', '轻量 · 约 20% 面数'], ['custom', '自定义目标面数'], ...(info?.libfive && result?.mode === 'tpms' && !result?.parameters?.tubular_enabled ? [['libfive', 'libfive · 重算网格精度']] : [])]} />
           {exportQuality === 'custom' && <Num label="目标三角面数" value={targetFaces} onChange={setTargetFaces} min={1} max={result?.stats.faces} step={1000} />}
           {exportQuality === 'libfive' && <Num label="网格尺寸" value={exportCell} onChange={setExportCell} min={0.001} step={0.05} unit="mm" />}
           <p className="hint">导出使用已生成模型。简化后的实际面数与封闭性会显示在状态栏。</p><button className="primary" disabled={!canModel} onClick={exportModel}><Download size={18} aria-hidden="true" />导出 STL / OBJ / PLY</button><button className="secondary" disabled={!canCFD} onClick={() => { exportMenu.current.open = false; inspectQuality(true); }}>导出 COMSOL 体网格</button></div></details>
-        <button className="icon-button" aria-label={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'} title="切换明暗主题" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button><button className="icon-button" aria-label="操作说明" onClick={() => setHelp(true)}><CircleHelp size={20} /></button>
+        <button className="icon-button" aria-label={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'} title="切换明暗主题" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button>
+        <button className="icon-button" aria-label="操作说明" title="操作说明" onClick={() => setHelp(true)}><CircleHelp size={19} aria-hidden="true" /></button>
       </div>
     </header>
+    <div className="workspace-navigation">
+        <nav className="mode-switch" aria-label="建模工作区">
+          <button className={mode === 'tpms' ? 'selected' : ''} aria-label="TPMS 建模" aria-pressed={mode === 'tpms'} title="TPMS 建模" disabled={busy} onClick={() => switchMode('tpms')}><Layers3 size={19} aria-hidden="true" /><span className="nav-label">TPMS 建模</span></button>
+          <button className={mode === 'nodes' ? 'selected' : ''} aria-label="实体建模" aria-pressed={mode === 'nodes'} title="实体建模" disabled={busy} onClick={() => switchMode('nodes')}><Workflow size={19} aria-hidden="true" /><span className="nav-label">实体建模</span></button>
+          {cad && <button className={mode === 'cad' ? 'selected' : ''} aria-label="导入模型" aria-pressed={mode === 'cad'} title="导入模型" disabled={busy} onClick={() => switchMode('cad')}><FolderOpen size={19} aria-hidden="true" /><span className="nav-label">导入模型</span></button>}
+        </nav>
+        <nav className="analysis-links" aria-label="分析工具">
+          <button className={inspectorTab === 'model' ? 'selected' : ''} aria-label="模型统计" aria-pressed={inspectorTab === 'model'} title="模型统计" onClick={() => setInspectorTab('model')}><Activity size={19} aria-hidden="true" /><span className="nav-label">模型统计</span></button>
+          <button className={inspectorTab === 'inspection' ? 'selected' : ''} aria-label="剖切测量工具" aria-pressed={inspectorTab === 'inspection'} title="剖切测量工具" disabled={!hasView || layoutActive} onClick={() => setInspectorTab('inspection')}><Scissors size={19} aria-hidden="true" /><span className="nav-label">剖切测量工具</span></button>
+          <button aria-label="CFD 设置" title="CFD 设置" disabled={busy || mode !== 'tpms'} onClick={() => setTab('cfd')}><Waves size={19} aria-hidden="true" /><span className="nav-label">CFD 设置</span></button>
+        </nav>
+      <span className="workspace-state"><span className={`connection ${info ? 'connected' : ''}`} />{busy ? '正在计算' : dirty ? '参数待更新' : info ? '本地内核已连接' : '正在连接内核'}</span>
+    </div>
     <Ribbon key={mode} categories={ribbonCategories} />
     <div className={`workspace ${mode === 'nodes' ? 'node-workspace' : ''} ${inspectorTab === 'inspection' ? 'inspection-workspace' : ''}`}>
       <aside className="parameters" aria-label="建模参数">

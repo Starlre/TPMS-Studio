@@ -1,0 +1,103 @@
+/* Magpie mint theme; values follow the Electron desktop's native.css. */
+:root {
+  --page:#172c2d; --panel:#203b3b; --raised:#294848;
+  --input:#2b4b4b; --viewport:#234443; --text:#eef7f4; --muted:#b4cdca;
+  --border:#7b9b96; --divider:#395956; --accent:#b9b0ff; --accent-fill:#b9b0ff;
+  --accent-hover:#cec6ff; --on-accent:#242044; --selected:#304f4e;
+  --danger:#ffb4ab;
+}
+:root[data-theme=light] {
+  --page:#bedbd8; --panel:#c9e4df; --raised:#c0dcd7;
+  --input:#dbefea; --viewport:#cce6e1; --text:#203535; --muted:#4b6564;
+  --border:#72938b; --divider:#aacdc5; --accent:#5245c4; --accent-fill:#5b4cd4;
+  --accent-hover:#4c3fba; --on-accent:#fff; --selected:#d5ece6;
+}
+input,select { min-height:36px; padding:5px 9px; border-radius:6px; }
+:focus-visible { outline-offset:2px; }
+.app-shell { grid-template-rows:56px 48px auto minmax(0,1fr) 32px; }
+.app-header { padding:0 20px; gap:12px; background:transparent; border:0; }
+.brand { gap:10px; padding-right:20px; border-right:1px solid var(--divider); }
+.brand>.icon { width:25px; height:25px; color:var(--text); }
+.brand strong { font-size:19px; font-weight:600; letter-spacing:-.3px; }
+.workspace-breadcrumb { display:flex; align-items:center; gap:10px; font-size:16px; white-space:nowrap; }
+.workspace-breadcrumb>span,.workspace-breadcrumb>.icon { color:var(--muted); }
+.workspace-breadcrumb>.icon { width:15px; height:15px; }
+.workspace-breadcrumb strong { font-weight:600; }
+.workspace-navigation { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 20px 8px; min-width:0; }
+.mode-switch { display:flex; padding:0; gap:5px; border:0; background:transparent; }
+.mode-switch button { font-size:15px; font-weight:400; min-height:38px; padding:7px 12px; border-radius:9px; }
+.mode-switch .selected { color:var(--text); background:var(--selected); border-color:var(--divider); }
+.mode-switch .icon { color:var(--muted); }
+.workspace-state { font-size:12px; color:var(--muted); white-space:nowrap; }
+.file-actions { gap:5px; }
+.file-actions .tool { min-height:34px; padding:5px 9px; font-size:14px; border-radius:7px; }
+.icon-button { width:36px; height:36px; min-height:36px; border-radius:8px; }
+.export-menu>summary { min-height:34px; padding:5px 12px; font-size:14px; border-radius:18px; color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 35%,transparent); }
+.dropdown,.help-dialog,.ribbon-palette { border-radius:12px; }
+.primary { color:var(--on-accent); border-color:transparent; min-height:38px; border-radius:8px; }
+.primary:hover { background:var(--accent-hover); }
+.secondary { background:var(--input); border-radius:6px; }
+.ribbon { margin:0 18px 12px; border:1px solid var(--divider); border-radius:12px; }
+.ribbon-heading { padding:3px 12px; gap:10px; border-bottom:1px solid var(--divider); }
+.ribbon-tabs { gap:4px; }
+.ribbon-tabs [role=tab] { min-height:32px; padding:5px 12px; border:1px solid transparent; border-radius:6px; font-size:14px; font-weight:500; color:var(--muted); }
+.ribbon-tabs [aria-selected=true] { color:var(--text); background:var(--selected); border-color:var(--divider); }
+.ribbon-collapse { min-height:30px; padding:3px 8px; }
+.ribbon-panel { padding:9px 12px 7px; gap:12px; min-height:68px; }
+.ribbon-group { border-color:var(--divider); padding-right:12px; }
+.ribbon-tools { gap:3px; }
+.ribbon-tool,.ribbon-group[aria-label="基本体"] .ribbon-tool { flex-direction:row; min-width:0; min-height:34px; gap:7px; padding:6px 8px; }
+.ribbon-tool .icon { width:20px; height:20px; color:var(--muted); }
+.ribbon-tool span { font-size:14px; }
+.ribbon-group h3 { text-align:left; padding-left:8px; font-size:12px; }
+.ribbon-palette-trigger { background:transparent; border-radius:6px; }
+.workspace { margin:0 18px; gap:12px; grid-template-columns:360px minmax(260px,1fr) 270px; }
+.node-panel,.info-panel,.model-area { border:1px solid var(--divider); border-radius:12px; overflow:hidden; min-width:0; }
+.panel-heading { padding:16px 14px 12px; }
+.panel-heading h2 { font-size:18px; }
+.panel-scroll { padding:0 14px 14px; }
+.badge { background:var(--raised); border-color:var(--divider); border-radius:16px; }
+.parameter-card,.node-card { border-color:var(--divider); border-radius:8px; }
+.node-card summary { min-height:42px; padding:6px 10px; font-size:14px; }
+.node-fields,.panel-footer,.metrics,.result-name,.inspection-section { border-color:var(--divider); }
+.node-fields { padding:8px 10px; }
+.node-fields div { grid-template-columns:90px minmax(0,1fr); }
+.node-fields dd { border-radius:6px; }
+.viewport-toolbar { min-height:46px; padding:6px 12px; border-color:var(--divider); }
+.viewport-toolbar strong { font-size:15px; }
+#renderer-label { color:var(--muted); }
+.view-controls { top:12px; right:12px; border-color:var(--divider); border-radius:9px; }
+.view-options { min-height:42px; padding:4px 12px; border-color:var(--divider); }
+.inspector-tabs { padding:8px 8px 6px; gap:4px; min-height:56px; border-color:var(--divider); }
+.inspector-tabs button { border:1px solid transparent; border-radius:6px; }
+.inspector-tabs .selected { color:var(--text); background:var(--selected); border-color:var(--divider); }
+.result-name { padding:18px 0; }
+.result-name>.icon { color:var(--muted); }
+.metrics,.inspection-section { padding:16px 0; }
+.value-list>div { margin:10px 0; }
+.statusbar { border:0; background:transparent; }
+@media(max-width:1200px) {
+  .workspace { grid-template-columns:310px minmax(240px,1fr) 250px; }
+  .workspace-breadcrumb { font-size:14px; }
+}
+@media(max-width:980px) {
+  .app-header { flex-wrap:nowrap; padding:0 12px; }
+  .app-shell { grid-template-rows:56px 48px auto minmax(0,1fr) 32px; }
+  .workspace { grid-template-columns:minmax(0,1fr) 250px; }
+  .workspace-breadcrumb { display:none; }
+  .workspace-navigation { padding:0 12px 8px; }
+}
+@media(max-width:700px) {
+  .app-shell { grid-template-rows:56px 48px auto minmax(0,1fr) 30px; }
+  .brand { padding-right:0; border:0; }
+  .workspace-state { display:none; }
+  .workspace { grid-template-columns:minmax(0,1fr); margin:0 8px; }
+  .ribbon { margin:0 8px 8px; }
+  .ribbon-heading { padding:3px 8px; gap:0 4px; }
+  .ribbon-tabs { gap:0; }
+  .ribbon-tabs [role=tab] { min-height:40px; padding:7px 10px; }
+  .ribbon-panel { padding:6px 8px; }
+  .viewport-toolbar { min-height:40px; }
+  .view-options { min-height:40px; }
+  .node-panel.mobile-open,.info-panel.mobile-open { max-width:calc(100vw - 32px); }
+}

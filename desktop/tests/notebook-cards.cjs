@@ -28,6 +28,7 @@ async function main() {
   async function capture(file) { await page.screenshot({ path: path.join(root, 'docs', file), scale: 'css', style: '.statusbar [role="status"] { visibility:hidden; }' }); }
   try {
     await done('模型已生成');
+    await page.getByRole('button', { name: '切换暗色主题', exact: true }).click();
     await page.getByRole('button', { name: '实体建模', exact: true }).click();
     assert.deepEqual(await page.locator('.card-workflow button').allTextContents(), ['新节点']);
     assert.equal(await page.locator('.generate-footer').count(), 0);

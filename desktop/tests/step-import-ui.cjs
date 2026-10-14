@@ -23,6 +23,7 @@ async function main() {
   const update=()=>page.locator('.generate').click();
   try {
     await done('模型已生成');
+    await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
     await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1680,1040));
     await openFile(source);await importButton().click();await done('STEP 已导入');
     assert.deepEqual(await page.getByRole('tab').allTextContents(),['导入模型','检查与测量']);

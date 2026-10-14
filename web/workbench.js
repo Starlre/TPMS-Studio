@@ -109,6 +109,7 @@ export function createWorkbench(showInspector) {
     for (const value of ['nodes','tpms']) { $(`mode-${value}`).classList.toggle('selected',value === mode); $(`mode-${value}`).setAttribute('aria-pressed',String(value === mode)); }
     $('node-project').hidden = mode !== 'nodes'; $('tpms-project').hidden = mode !== 'tpms';
     $('node-panel-title').textContent = mode === 'nodes' ? '实体节点' : 'TPMS 参数';
+    $('workspace-name').textContent = mode === 'nodes' ? '实体建模' : 'TPMS 建模';
     $('node-panel-badge').textContent = mode === 'nodes' ? 'libfive' : 'Gyroid';
     render();
     // Inform renderer listeners that the toolbar DOM has changed.

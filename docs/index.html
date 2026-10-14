@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="TPMS Studio 在线工程工作台：交互查看 Gyroid 双法兰结构、建模节点、剖切与测量，下载原始 STL 和可编辑项目。">
-  <meta name="theme-color" content="#1b222c">
+  <meta name="theme-color" content="#bedbd8">
   <title>Gyroid 双法兰结构 | TPMS Studio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2379bce1' stroke-width='2'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5M12 22V12'/%3E%3C/svg%3E">
-  <script type="module" crossorigin src="./viewer-assets/index-CutU9z8P.js"></script>
-  <link rel="stylesheet" crossorigin href="./viewer-assets/index-DdhPSrnV.css">
+  <script type="module" crossorigin src="./viewer-assets/index-DhXJB284.js"></script>
+  <link rel="stylesheet" crossorigin href="./viewer-assets/index-_RpsLG0_.css">
 </head>
 <body>
   <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -50,16 +50,20 @@
   </svg>
   <div class="app-shell">
     <header class="app-header">
-      <a class="brand" href="https://github.com/Starlre/TPMS-Studio" target="_blank" rel="noopener noreferrer" aria-label="TPMS Studio 项目主页"><svg class="icon"><use href="#i-box"/></svg><span><strong>TPMS <span>Studio</span></strong><small>隐式建模工作台</small></span></a>
-      <nav class="mode-switch" aria-label="建模工作区"><button id="mode-tpms" aria-pressed="false"><svg class="icon"><use href="#i-layers"/></svg>TPMS 建模</button><button id="mode-nodes" class="selected" aria-pressed="true"><svg class="icon"><use href="#i-workflow"/></svg>实体建模</button></nav>
+      <a class="brand" href="https://github.com/Starlre/TPMS-Studio" target="_blank" rel="noopener noreferrer" aria-label="TPMS Studio 项目主页"><svg class="icon"><use href="#i-box"/></svg><span><strong>TPMS <span>Studio</span></strong></span></a>
+      <div class="workspace-breadcrumb" aria-label="当前位置"><span>模型</span><svg class="icon"><use href="#i-chevron"/></svg><strong id="workspace-name">实体建模</strong></div>
       <nav class="file-actions" aria-label="文件与主题">
         <button class="tool desktop-only" disabled title="界面展示模式：打开和重新建模请使用桌面 App"><svg class="icon"><use href="#i-folder"/></svg>打开</button>
         <a id="download-project" class="tool project-link" href="models/gyroid-flanged-core.json" download="gyroid-flanged-core.json" title="下载可编辑项目"><svg class="icon"><use href="#i-save"/></svg>保存项目</a>
         <details id="export-menu" class="export-menu"><summary aria-label="展开导出设置"><svg class="icon"><use href="#i-download"/></svg>导出<svg class="icon dropdown-chevron"><use href="#i-chevron"/></svg></summary><div class="dropdown"><h3>表面模型导出</h3><label class="field">导出质量 / 面数<select disabled title="网页展示原始模型；质量重算请使用桌面 App"><option>原始精度</option><option>高质量 · 约 70% 面数</option><option>标准 · 约 40% 面数</option><option>轻量 · 约 20% 面数</option><option>自定义目标面数</option></select></label><p class="hint">下载保持完整原始模型。导出质量重算请使用桌面 App。</p><a id="download-stl" class="primary full" href="gyroid_tpms.stl" download="gyroid-flanged-core.stl"><svg class="icon"><use href="#i-download"/></svg>下载 STL</a><button class="secondary full" disabled>导出 COMSOL 体网格</button></div></details>
-        <button id="theme-toggle" class="icon-button" aria-label="切换亮色主题" title="切换亮色主题" aria-pressed="false"><svg class="icon"><use href="#i-sun"/></svg></button>
+        <button id="theme-toggle" class="icon-button" aria-label="切换暗色主题" title="切换暗色主题" aria-pressed="true"><svg class="icon"><use href="#i-sun"/></svg></button>
         <button id="help-toggle" class="icon-button" aria-label="操作说明"><svg class="icon"><use href="#i-help"/></svg></button>
       </nav>
     </header>
+    <div class="workspace-navigation">
+      <nav class="mode-switch" aria-label="建模工作区"><button id="mode-tpms" aria-pressed="false"><svg class="icon"><use href="#i-layers"/></svg>TPMS 建模</button><button id="mode-nodes" class="selected" aria-pressed="true"><svg class="icon"><use href="#i-workflow"/></svg>实体建模</button></nav>
+      <span class="workspace-state">在线模型预览</span>
+    </div>
     <section class="ribbon" aria-label="顶部功能工具栏">
       <div class="ribbon-heading"><nav id="ribbon-tabs" class="ribbon-tabs" role="tablist" aria-label="功能选项卡"></nav><button id="nodes-toggle" class="mobile-toggle" aria-expanded="false">建模步骤</button><button id="info-toggle" class="mobile-toggle" aria-expanded="false">模型信息</button><button id="ribbon-collapse" class="ribbon-collapse" aria-expanded="true">收起工具栏</button></div>
       <div id="ribbon-panel"></div>

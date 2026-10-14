@@ -4,7 +4,7 @@
 
 TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模的桌面软件。它将曲面参数、基本实体、数学公式、布尔运算、三维检查和网格导出放在同一个工程工作台中；普通 TPMS 还可以生成用于流体仿真的带边界分组体网格。
 
-![TPMS Studio：19 节点 Gyroid 双法兰与贯穿流道，实际生成的最终实体](docs/showcase-gyroid-dark.png)
+![TPMS Studio：Magpie 青绿色风格的 Electron 建模工作台](docs/electron-tpms-light.png)
 
 [快速开始](#快速开始) · [复杂模型画廊](docs/model-gallery.md) · [节点建模](docs/node-modeling.md) · [版本更新](CHANGELOG.md) · [开发记录](DEVELOPMENT_LOG.md)
 
@@ -49,6 +49,8 @@ TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模�
 普通 TPMS 可用连续场 Marching Cubes 或可选 libfive 自适应提取；实体节点工作流使用 libfive。Electron + React 提供界面，Three.js/WebGL2 处理预览，独立 Python 进程负责计算。原 Qt 界面保留为兼容入口。
 
 ## 工程工作台
+
+桌面采用 Magpie 青绿色风格：浅青背景、圆角面板、紫色主操作，深色主题使用墨绿色表面。文件栏、工作区切换和分析入口均放在顶部，功能工具栏按工作区显示。参数排列紧凑，中央提供大幅模型预览。新用户默认亮色，已有主题选择继续保留；详见 [界面说明](docs/native-ui.md) 与 [App 界面复现指南](docs/Magpie青绿色App界面设计指南.md)。
 
 顶部在 **TPMS 建模 / 实体建模** 之间切换。功能选项卡按当前工作区显示：TPMS 侧集中曲面与仿真；实体侧提供建模、操作、TPMS 节点、参数与公式。两个工作区均提供检查与测量，工具栏可收起。
 
@@ -190,7 +192,7 @@ python launch_desktop.py
 
 [![在线工作台：Gyroid 双法兰结构、节点说明与三维预览](docs/model-preview.png)](https://starlre.github.io/TPMS-Studio/)
 
-打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 查看 Gyroid 双法兰结构。界面沿用桌面软件的暗色工具栏、左侧节点卡片、三维视口与右侧模型检查器；支持旋转缩放、XYZ 视角、暗亮主题、线框、任意法向剖切、截面统计和两点测量，并可下载原始 STL 与可编辑项目。
+打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 查看 Gyroid 双法兰结构。界面沿用桌面软件的 Magpie 青绿色风格、顶部工作区切换、左侧节点卡片、三维视口与右侧模型检查器，默认亮色并以中性灰显示模型；支持旋转缩放、XYZ 视角、暗亮主题、线框、任意法向剖切、截面统计和两点测量，并可下载原始 STL 与可编辑项目。
 
 网页保留“TPMS 建模 / 实体建模”切换、按模块显示的功能选项卡、实体创建/布尔/抽壳/节点/参数分组及文件导出菜单，可用于展示桌面 App 界面。建模工具明确禁用、参数只读；工作区切换不改变预置模型。
 
