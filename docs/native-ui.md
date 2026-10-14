@@ -2,7 +2,7 @@
 
 希望在其他 App 中复现这套风格，可以阅读 [圆角 App 界面设计指南](Magpie青绿色App界面设计指南.md)，并使用 [深灰蓝配色](blue-gray-palette.md) 的当前色值。原指南中的青绿版本保留为历史配色参考。
 
-TPMS Studio 桌面保持 Electron + React + Three.js，Python 进程继续负责建模与网格计算。保留 Magpie 的圆角卡片和轻量顶部栏，按新参考图使用深灰底、浅色文字、蓝色强调和蓝色模型；导航按桌面建模习惯放在顶部。
+TPMS Studio 桌面保持 Electron + React + Three.js，Python 进程继续负责建模与网格计算。保留 Magpie 的圆角卡片和轻量顶部栏，按新参考图使用深灰底、浅色文字和蓝色强调，普通模型使用高对比度的亮浅灰；导航按桌面建模习惯放在顶部。
 
 ![亮色 TPMS 工作台](electron-tpms-light.png)
 

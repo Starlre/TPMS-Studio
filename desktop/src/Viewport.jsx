@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_SECTION, planeNormal, distanceBetween } from './inspection_math.mjs';
 import { createDisplayGeometry, IMPLICIT_SURFACES, supportsImplicitPreview } from './display_geometry.mjs';
 
-const MODEL_COLOR = { light: '#24708f', dark: '#24708f' };
+const MODEL_COLOR = { light: '#a8a8a8', dark: '#c8c8c8' };
 
 function typed(bytes, Type) {
   const buffer = Uint8Array.from(bytes).buffer;
@@ -350,6 +350,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           rayMaterial = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3,
             vertexShader: 'precision highp float; in vec3 position; void main() { gl_Position = vec4(position, 1.0); }',
             fragmentShader: 'precision highp float; precision highp int;\n' + source
+              .replaceAll('vec3 dark_base = vec3(0.09, 0.46, 0.62); vec3 light_base = vec3(0.018, 0.22, 0.34);', 'vec3 dark_base = vec3(0.784314); vec3 light_base = vec3(0.658824);')
+              .replaceAll('vec3(0.24, 0.72, 0.82) * rim * rim_scale', 'vec3(0.65) * rim * rim_scale')
               .replaceAll('mix(vec3(0.035,0.055,0.07), vec3(0.975,0.982,0.978), u_lightBg)', 'mix(vec3(0.090,0.118,0.153), vec3(0.910,0.933,0.957), u_lightBg)')
               .replaceAll('frag_color = vec4(bg, 1.0);', 'discard;'),
             uniforms: {

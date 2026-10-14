@@ -164,7 +164,7 @@ class ModelViewer {
       if (data.error) { this.failure(data.error); return; }
       const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position',new THREE.BufferAttribute(data.positions,3));
       geometry.setAttribute('normal',new THREE.BufferAttribute(data.normals,3)); geometry.setIndex(new THREE.BufferAttribute(data.indices,1));
-      this.mesh = new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x24708f,roughness:0.72,metalness:0.02,side:THREE.DoubleSide}));
+      this.mesh = new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:this.light ? 0xa8a8a8 : 0xc8c8c8,roughness:0.72,metalness:0.02,side:THREE.DoubleSide}));
       this.scene.add(this.mesh); this.bounds = new THREE.Box3(new THREE.Vector3(...data.bounds[0]),new THREE.Vector3(...data.bounds[1]));
       this.diagonal = this.bounds.getSize(new THREE.Vector3()).length();
       const extent = Math.max(...this.bounds.getSize(new THREE.Vector3()).toArray()), center = this.bounds.getCenter(new THREE.Vector3());
@@ -194,7 +194,7 @@ class ModelViewer {
   setTheme(light) {
     this.light = light; document.documentElement.dataset.theme = light ? 'light' : 'dark';
     this.scene.background = new THREE.Color(light ? '#e8eef4' : '#171e27');
-    if (this.mesh) this.mesh.material.color.set('#24708f');
+    if (this.mesh) this.mesh.material.color.set(light ? '#a8a8a8' : '#c8c8c8');
     document.querySelector('meta[name="theme-color"]').content = light ? '#eef2f6' : '#1b222c';
     if (this.grid) this.grid.material.opacity = light ? 0.24 : 0.16;
     if (this.cutCap) this.cutCap.material.color.set(light ? '#b96b2c' : '#ffb65f');
