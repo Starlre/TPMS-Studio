@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { planeNormal, planeRange, distanceBetween } from '../desktop/src/inspection_math.mjs';
 import { createWorkbench } from './workbench.js';
+import { MODEL_COLOR, MODEL_MATERIAL, MODEL_LIGHTING } from '../desktop/src/model_appearance.mjs';
 
 const $ = id => document.getElementById(id);
 const number = (value, digits = 2) => Number(value).toLocaleString('zh-CN', { maximumFractionDigits: digits });
@@ -123,9 +124,12 @@ class ModelViewer {
     canvas.setAttribute('aria-label','Gyroid 双法兰三维预览：拖动旋转，滚轮缩放，右键或方向键平移'); this.host.append(canvas);
     this.controls = new OrbitControls(this.camera, canvas); this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.15; this.controls.listenToKeyEvents(canvas); this.controls.autoRotateSpeed = 1;
-    this.scene.add(new THREE.HemisphereLight(0xeeeeee,0x333333,1.6));
-    const key = new THREE.DirectionalLight(0xffffff,2.8); key.position.set(30,-50,70); this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff,0.9); fill.position.set(-50,15,35); this.scene.add(fill);
+    const lighting = MODEL_LIGHTING;
+    this.scene.add(new THREE.HemisphereLight(lighting.hemisphere.sky,lighting.hemisphere.ground,lighting.hemisphere.intensity));
+    for (const settings of [lighting.key,lighting.fill,lighting.rim]) {
+      const light = new THREE.DirectionalLight(settings.color,settings.intensity);
+      light.position.set(...settings.position); this.scene.add(light);
+    }
     this.section = { enabled:false, axis:'Y', normal:[1,0,1], offset:0, positive:false, only:false, fill:true };
     this.sectionId = 0; this.pickId = 0; this.points = []; this.measuring = false; this.requestId = 0;
     this.markers = new THREE.Group(); this.scene.add(this.markers);
@@ -164,7 +168,7 @@ class ModelViewer {
       if (data.error) { this.failure(data.error); return; }
       const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position',new THREE.BufferAttribute(data.positions,3));
       geometry.setAttribute('normal',new THREE.BufferAttribute(data.normals,3)); geometry.setIndex(new THREE.BufferAttribute(data.indices,1));
-      this.mesh = new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:this.light ? 0xa8a8a8 : 0xc8c8c8,roughness:0.72,metalness:0.02,side:THREE.DoubleSide}));
+      this.mesh = new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:this.light ? MODEL_COLOR.light : MODEL_COLOR.dark,...MODEL_MATERIAL,side:THREE.DoubleSide}));
       this.scene.add(this.mesh); this.bounds = new THREE.Box3(new THREE.Vector3(...data.bounds[0]),new THREE.Vector3(...data.bounds[1]));
       this.diagonal = this.bounds.getSize(new THREE.Vector3()).length();
       const extent = Math.max(...this.bounds.getSize(new THREE.Vector3()).toArray()), center = this.bounds.getCenter(new THREE.Vector3());
@@ -194,7 +198,7 @@ class ModelViewer {
   setTheme(light) {
     this.light = light; document.documentElement.dataset.theme = light ? 'light' : 'dark';
     this.scene.background = new THREE.Color(light ? '#e8eef4' : '#171e27');
-    if (this.mesh) this.mesh.material.color.set(light ? '#a8a8a8' : '#c8c8c8');
+    if (this.mesh) this.mesh.material.color.set(light ? MODEL_COLOR.light : MODEL_COLOR.dark);
     document.querySelector('meta[name="theme-color"]').content = light ? '#eef2f6' : '#1b222c';
     if (this.grid) this.grid.material.opacity = light ? 0.24 : 0.16;
     if (this.cutCap) this.cutCap.material.color.set(light ? '#b96b2c' : '#ffb65f');

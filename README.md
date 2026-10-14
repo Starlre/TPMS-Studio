@@ -4,7 +4,7 @@
 
 TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模的桌面软件。它将曲面参数、基本实体、数学公式、布尔运算、三维检查和网格导出放在同一个工程工作台中；普通 TPMS 还可以生成用于流体仿真的带边界分组体网格。
 
-![TPMS Studio：深灰蓝圆角工作台与亮浅灰 Gyroid 模型](docs/electron-tpms-dark.png)
+![TPMS Studio：深灰蓝圆角工作台与亮天蓝 Gyroid 模型](docs/electron-tpms-dark.png)
 
 [快速开始](#快速开始) · [复杂模型画廊](docs/model-gallery.md) · [节点建模](docs/node-modeling.md) · [版本更新](CHANGELOG.md) · [开发记录](DEVELOPMENT_LOG.md)
 
@@ -50,7 +50,7 @@ TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模�
 
 ## 工程工作台
 
-桌面保留 Magpie 圆角面板与顶部导航，配色按参考图调整为深灰底、浅色文字和蓝色主操作，普通模型使用高对比度的亮浅灰。文件栏、工作区切换和分析入口均放在顶部，功能工具栏按工作区显示。参数排列紧凑，中央提供大幅模型预览。新用户及本次配色升级首次进入深色，后续保存主题选择；详见 [界面说明](docs/native-ui.md)、[App 界面复现指南](docs/Magpie青绿色App界面设计指南.md) 与 [当前配色](docs/blue-gray-palette.md)。
+桌面保留 Magpie 圆角面板与顶部导航，配色按参考图调整为深灰底、浅色文字和蓝色主操作，普通模型使用亮天蓝、柔和高光和淡蓝轮廓光，与界面拉开亮度差。文件栏、工作区切换和分析入口均放在顶部，功能工具栏按工作区显示。参数排列紧凑，中央提供大幅模型预览。新用户及本次配色升级首次进入深色，后续保存主题选择；详见 [界面说明](docs/native-ui.md)、[App 界面复现指南](docs/Magpie青绿色App界面设计指南.md) 与 [当前配色](docs/blue-gray-palette.md)。
 
 顶部在 **TPMS 建模 / 实体建模** 之间切换。功能选项卡按当前工作区显示：TPMS 侧集中曲面与仿真；实体侧提供建模、操作、TPMS 节点、参数与公式。两个工作区均提供检查与测量，工具栏可收起。
 
@@ -190,9 +190,9 @@ python launch_desktop.py
 
 ## 在线预览
 
-[![在线工作台：亮浅灰 Gyroid 双法兰结构、节点说明与三维预览](docs/model-preview.png)](https://starlre.github.io/TPMS-Studio/)
+[![在线工作台：蓝色 Gyroid 双法兰结构、节点说明与三维预览](docs/model-preview.png)](https://starlre.github.io/TPMS-Studio/)
 
-打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 查看 Gyroid 双法兰结构。网页源码与桌面同步圆角面板、深灰蓝配色、顶部工作区切换、左侧节点卡片、三维视口与右侧模型检查器，默认深色并以亮浅灰显示模型；支持旋转缩放、XYZ 视角、暗亮主题、线框、任意法向剖切、截面统计和两点测量，并可下载原始 STL 与可编辑项目。
+打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 查看 Gyroid 双法兰结构。网页源码与桌面同步圆角面板、深灰蓝配色、顶部工作区切换、左侧节点卡片、三维视口与右侧模型检查器，默认深色并以带柔和高光的亮天蓝显示模型；支持旋转缩放、XYZ 视角、暗亮主题、线框、任意法向剖切、截面统计和两点测量，并可下载原始 STL 与可编辑项目。
 
 网页保留“TPMS 建模 / 实体建模”切换、按模块显示的功能选项卡、实体创建/布尔/抽壳/节点/参数分组及文件导出菜单，可用于展示桌面 App 界面。建模工具明确禁用、参数只读；工作区切换不改变预置模型。
 

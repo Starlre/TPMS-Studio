@@ -2,7 +2,7 @@
 
 TPMS Studio 的默认桌面界面使用 Electron、React 和 Three.js。界面负责交互和视图，独立 Python 计算进程复用 TPMS、libfive 和 Gmsh 内核。本文描述当前版本；原 Qt 界面保留为兼容入口。
 
-![当前 Electron 工作台：深灰蓝圆角面板与亮浅灰模型](electron-tpms-dark.png)
+![当前 Electron 工作台：深灰蓝圆角面板与亮天蓝模型](electron-tpms-dark.png)
 
 桌面使用深灰背景、圆角面板、蓝色操作和紧凑参数行，保持 Electron + React + Three.js 架构。工作区及分析导航位于顶部。新用户及本次配色升级首次进入深色，后续保存主题选择。布局与截图见 [圆角界面说明](native-ui.md)，当前色值见 [深灰蓝配色](blue-gray-palette.md)。
 

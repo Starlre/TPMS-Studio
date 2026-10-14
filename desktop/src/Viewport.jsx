@@ -3,8 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_SECTION, planeNormal, distanceBetween } from './inspection_math.mjs';
 import { createDisplayGeometry, IMPLICIT_SURFACES, supportsImplicitPreview } from './display_geometry.mjs';
-
-const MODEL_COLOR = { light: '#a8a8a8', dark: '#c8c8c8' };
+import { MODEL_COLOR, MODEL_MATERIAL, MODEL_LIGHTING, styleImplicitSurface } from './model_appearance.mjs';
 
 function typed(bytes, Type) {
   const buffer = Uint8Array.from(bytes).buffer;
@@ -55,13 +54,16 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     const hemisphere = new THREE.HemisphereLight(0xdcecff, 0x25334c, 2.4); scene.add(hemisphere);
     const key = new THREE.DirectionalLight(0xffffff, 3.5); key.position.set(30, -50, 70); scene.add(key);
     const fill = new THREE.DirectionalLight(0xa3d6ff, 1.7); fill.position.set(-50, 15, 35); scene.add(fill);
-    function setNeutralLighting(neutral) {
-      hemisphere.color.setHex(neutral ? 0xeeeeee : 0xdcecff);
-      hemisphere.groundColor.setHex(neutral ? 0x333333 : 0x25334c);
-      fill.color.setHex(neutral ? 0xffffff : 0xa3d6ff);
-      hemisphere.intensity = neutral ? 1.6 : 2.4;
-      key.intensity = neutral ? 2.8 : 3.5;
-      fill.intensity = neutral ? 0.9 : 1.7;
+    const rim = new THREE.DirectionalLight(MODEL_LIGHTING.rim.color, MODEL_LIGHTING.rim.intensity);
+    rim.position.set(...MODEL_LIGHTING.rim.position); rim.visible = false; scene.add(rim);
+    function setModelLighting(single) {
+      hemisphere.color.setHex(single ? MODEL_LIGHTING.hemisphere.sky : 0xdcecff);
+      hemisphere.groundColor.setHex(single ? MODEL_LIGHTING.hemisphere.ground : 0x25334c);
+      fill.color.setHex(single ? MODEL_LIGHTING.fill.color : 0xa3d6ff);
+      hemisphere.intensity = single ? MODEL_LIGHTING.hemisphere.intensity : 2.4;
+      key.intensity = single ? MODEL_LIGHTING.key.intensity : 3.5;
+      fill.intensity = single ? MODEL_LIGHTING.fill.intensity : 1.7;
+      rim.visible = single;
     }
     let layoutMeshes = [], layoutIds = '', layoutSelection = '', layoutTranslucent = true;
     let mesh, grid, rayMaterial, rayQuad, maskMesh, sectionLines, sectionCap, boxHelper;
@@ -286,7 +288,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           layoutIds = ''; schedule(); return;
         }
         disableRay(); clearObject(mesh); mesh = null; lastGeometry = null;
-        setNeutralLighting(false);
+        setModelLighting(false);
         clearObject(grid); grid = null; clearSection(); clearObject(boxHelper); boxHelper = null;
         worker?.terminate(); worker = null; clearTimeout(sectionTimer); sectionId++; pickId++;
         const previousBounds = bounds.clone(), previousDirection = camera.position.clone().sub(controls.target).toArray();
@@ -318,7 +320,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         clearLayout();
         disableRay();
         const changed = value !== lastGeometry; lastGeometry = value;
-        setNeutralLighting(!value?.colors);
+        setModelLighting(!value?.colors);
         if (changed) { clearObject(mesh); clearObject(grid); clearSection(); clearObject(boxHelper); mesh = null; grid = null; boxHelper = null; worker?.terminate(); worker = null; clearTimeout(sectionTimer); sectionId++; pickId++; }
         if (!value) { inspectionCallbacks.current.onBounds?.(null); for (const child of [...markers.children]) clearObject(child); schedule(); return; }
         let geometry = changed ? new THREE.BufferGeometry() : mesh.geometry;
@@ -329,7 +331,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           const sourceGeometry = geometry;
           if (!params && !value.colors) geometry = createDisplayGeometry(sourceGeometry);
           else { geometry.computeVertexNormals(); geometry.computeBoundingBox(); }
-          mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: value.colors ? '#ffffff' : (light ? MODEL_COLOR.light : MODEL_COLOR.dark), roughness: value.colors ? 0.44 : 0.72, metalness: value.colors ? 0.15 : 0.02, side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
+          mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: value.colors ? '#ffffff' : (light ? MODEL_COLOR.light : MODEL_COLOR.dark), roughness: value.colors ? 0.44 : MODEL_MATERIAL.roughness, metalness: value.colors ? 0.15 : MODEL_MATERIAL.metalness, side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
           scene.add(mesh);
           if (geometry.boundingBox && !geometry.boundingBox.isEmpty()) bounds.copy(geometry.boundingBox);
           const center = bounds.getCenter(new THREE.Vector3());
@@ -349,9 +351,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           const cell = Math.min(params.size_x / params.cells_x, params.size_y / params.cells_y, params.size_z / params.cells_z);
           rayMaterial = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3,
             vertexShader: 'precision highp float; in vec3 position; void main() { gl_Position = vec4(position, 1.0); }',
-            fragmentShader: 'precision highp float; precision highp int;\n' + source
-              .replaceAll('vec3 dark_base = vec3(0.09, 0.46, 0.62); vec3 light_base = vec3(0.018, 0.22, 0.34);', 'vec3 dark_base = vec3(0.784314); vec3 light_base = vec3(0.658824);')
-              .replaceAll('vec3(0.24, 0.72, 0.82) * rim * rim_scale', 'vec3(0.65) * rim * rim_scale')
+            fragmentShader: 'precision highp float; precision highp int;\n' + styleImplicitSurface(source)
               .replaceAll('mix(vec3(0.035,0.055,0.07), vec3(0.975,0.982,0.978), u_lightBg)', 'mix(vec3(0.090,0.118,0.153), vec3(0.910,0.933,0.957), u_lightBg)')
               .replaceAll('frag_color = vec4(bg, 1.0);', 'discard;'),
             uniforms: {
