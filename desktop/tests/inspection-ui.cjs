@@ -22,7 +22,7 @@ async function main() {
   async function layout() { const sizes = await page.evaluate(() => { const p = document.querySelector('.inspection-panel').getBoundingClientRect(); return { width: innerWidth, scroll: document.documentElement.scrollWidth, right: p.right, viewport: document.querySelector('.viewport').getBoundingClientRect().width }; }); assert.ok(sizes.scroll <= sizes.width); assert.ok(sizes.right <= sizes.width); assert.ok(sizes.viewport >= 260); }
   try {
     await done('模型已生成');
-    await page.getByRole('button', { name: '切换暗色主题', exact: true }).click();
+    if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: '切换暗色主题', exact: true }).click();
     await page.getByRole('button', { name: '剖切与测量', exact: true }).click();
     await panel.getByRole('checkbox', { name: '启用剖切', exact: true }).check();
     await panel.getByLabel('剖切位置 / mm', { exact: true }).fill('-2.35'); await settled();

@@ -22,7 +22,7 @@ async function main() {
   let success = false;
   try {
     await done('模型已生成');
-    await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
+    if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
     await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(1680,1040));
     assert.equal(await page.getByRole('tab',{name:'操作',exact:true}).count(),0);
     await page.getByRole('button',{name:'实体建模',exact:true}).click();

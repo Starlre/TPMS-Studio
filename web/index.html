@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="TPMS Studio 在线工程工作台：交互查看 Gyroid 双法兰结构、建模节点、剖切与测量，下载原始 STL 和可编辑项目。">
-  <meta name="theme-color" content="#bedbd8">
+  <meta name="theme-color" content="#1b222c">
   <title>Gyroid 双法兰结构 | TPMS Studio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2379bce1' stroke-width='2'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5M12 22V12'/%3E%3C/svg%3E">
 </head>
@@ -54,7 +54,7 @@
         <button class="tool desktop-only" disabled title="界面展示模式：打开和重新建模请使用桌面 App"><svg class="icon"><use href="#i-folder"/></svg>打开</button>
         <a id="download-project" class="tool project-link" href="models/gyroid-flanged-core.json" download="gyroid-flanged-core.json" title="下载可编辑项目"><svg class="icon"><use href="#i-save"/></svg>保存项目</a>
         <details id="export-menu" class="export-menu"><summary aria-label="展开导出设置"><svg class="icon"><use href="#i-download"/></svg>导出<svg class="icon dropdown-chevron"><use href="#i-chevron"/></svg></summary><div class="dropdown"><h3>表面模型导出</h3><label class="field">导出质量 / 面数<select disabled title="网页展示原始模型；质量重算请使用桌面 App"><option>原始精度</option><option>高质量 · 约 70% 面数</option><option>标准 · 约 40% 面数</option><option>轻量 · 约 20% 面数</option><option>自定义目标面数</option></select></label><p class="hint">下载保持完整原始模型。导出质量重算请使用桌面 App。</p><a id="download-stl" class="primary full" href="gyroid_tpms.stl" download="gyroid-flanged-core.stl"><svg class="icon"><use href="#i-download"/></svg>下载 STL</a><button class="secondary full" disabled>导出 COMSOL 体网格</button></div></details>
-        <button id="theme-toggle" class="icon-button" aria-label="切换暗色主题" title="切换暗色主题" aria-pressed="true"><svg class="icon"><use href="#i-sun"/></svg></button>
+        <button id="theme-toggle" class="icon-button" aria-label="切换亮色主题" title="切换亮色主题" aria-pressed="false"><svg class="icon"><use href="#i-sun"/></svg></button>
         <button id="help-toggle" class="icon-button" aria-label="操作说明"><svg class="icon"><use href="#i-help"/></svg></button>
       </nav>
     </header>

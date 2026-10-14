@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_SECTION, planeNormal, distanceBetween } from './inspection_math.mjs';
 import { createDisplayGeometry, IMPLICIT_SURFACES, supportsImplicitPreview } from './display_geometry.mjs';
 
-const MODEL_GRAY = { light: '#777777', dark: '#999999' };
+const MODEL_COLOR = { light: '#24708f', dark: '#24708f' };
 
 function typed(bytes, Type) {
   const buffer = Uint8Array.from(bytes).buffer;
@@ -59,6 +59,9 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
       hemisphere.color.setHex(neutral ? 0xeeeeee : 0xdcecff);
       hemisphere.groundColor.setHex(neutral ? 0x333333 : 0x25334c);
       fill.color.setHex(neutral ? 0xffffff : 0xa3d6ff);
+      hemisphere.intensity = neutral ? 1.6 : 2.4;
+      key.intensity = neutral ? 2.8 : 3.5;
+      fill.intensity = neutral ? 0.9 : 1.7;
     }
     let layoutMeshes = [], layoutIds = '', layoutSelection = '', layoutTranslucent = true;
     let mesh, grid, rayMaterial, rayQuad, maskMesh, sectionLines, sectionCap, boxHelper;
@@ -264,8 +267,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
       setMeasurement(value, armed) { measurePoints = value; picking = armed; updateMarkers(); },
       zoom: factor => { camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target); controls.update(); schedule(); },
       setTheme(value) {
-        light = value === 'light'; scene.background = new THREE.Color(light ? '#cce6e1' : '#234443');
-        if (mesh && !mesh.material.vertexColors) mesh.material.color.set(light ? MODEL_GRAY.light : MODEL_GRAY.dark);
+        light = value === 'light'; scene.background = new THREE.Color(light ? '#e8eef4' : '#171e27');
+        if (mesh && !mesh.material.vertexColors) mesh.material.color.set(light ? MODEL_COLOR.light : MODEL_COLOR.dark);
         if (grid) grid.material.opacity = light ? 0.24 : 0.16;
         if (rayMaterial) rayMaterial.uniforms.u_lightBg.value = light ? 1 : 0;
         if (sectionLines) sectionLines.material.color.set(light ? '#9b460d' : '#ffbe7e');
@@ -326,7 +329,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           const sourceGeometry = geometry;
           if (!params && !value.colors) geometry = createDisplayGeometry(sourceGeometry);
           else { geometry.computeVertexNormals(); geometry.computeBoundingBox(); }
-          mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: value.colors ? '#ffffff' : (light ? MODEL_GRAY.light : MODEL_GRAY.dark), roughness: 0.44, metalness: 0.15, side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
+          mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: value.colors ? '#ffffff' : (light ? MODEL_COLOR.light : MODEL_COLOR.dark), roughness: value.colors ? 0.44 : 0.72, metalness: value.colors ? 0.15 : 0.02, side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
           scene.add(mesh);
           if (geometry.boundingBox && !geometry.boundingBox.isEmpty()) bounds.copy(geometry.boundingBox);
           const center = bounds.getCenter(new THREE.Vector3());
@@ -347,8 +350,6 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           rayMaterial = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3,
             vertexShader: 'precision highp float; in vec3 position; void main() { gl_Position = vec4(position, 1.0); }',
             fragmentShader: 'precision highp float; precision highp int;\n' + source
-              .replaceAll('vec3 dark_base = vec3(0.09, 0.46, 0.62); vec3 light_base = vec3(0.018, 0.22, 0.34);', 'vec3 dark_base = vec3(0.58); vec3 light_base = vec3(0.44);')
-              .replaceAll('vec3(0.24, 0.72, 0.82) * rim * rim_scale', 'vec3(0.75) * rim * rim_scale')
               .replaceAll('mix(vec3(0.035,0.055,0.07), vec3(0.975,0.982,0.978), u_lightBg)', 'mix(vec3(0.090,0.118,0.153), vec3(0.910,0.933,0.957), u_lightBg)')
               .replaceAll('frag_color = vec4(bg, 1.0);', 'discard;'),
             uniforms: {

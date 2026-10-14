@@ -20,7 +20,7 @@ async function main() {
   const capture = async name => {await page.mouse.move(500,85);await page.waitForTimeout(250);assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');await page.screenshot({path:path.join(output,name),scale:'css',style:'.statusbar [role="status"] {visibility:hidden;}'});};
   try {
     await done('模型已生成');
-    await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
+    if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
     await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(1680,1040));
     await page.getByRole('button',{name:'实体建模',exact:true}).click();
     const all = page.getByRole('checkbox',{name:'全部实体',exact:true}); if (await all.isChecked()) await all.uncheck();

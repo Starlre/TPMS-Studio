@@ -34,7 +34,7 @@ async function main() {
   }
   try {
     await done('模型已生成');
-    await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
+    if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1680, 1040));
     if (!baseline) {
       const implicit = page.getByRole('checkbox', { name: 'GPU 隐式曲面', exact: true });

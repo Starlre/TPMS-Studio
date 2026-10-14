@@ -21,7 +21,7 @@ async function main() {
     await page.getByRole('button', { name: '导出 STL / OBJ / PLY', exact: true }).click(); await done('已导出'); return fs.readFile(file);
   }
   try {
-    await done('模型已生成'); await page.getByRole('button', { name: '切换暗色主题', exact: true }).click(); await page.getByRole('button', { name: '实体建模', exact: true }).click();
+    await done('模型已生成'); if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: '切换暗色主题', exact: true }).click(); await page.getByRole('button', { name: '实体建模', exact: true }).click();
     await add('球体'); await add('长方体'); await objects(2);
     assert.ok(await page.getByRole('checkbox', { name: '全部实体', exact: true }).isChecked());
     assert.ok(await page.getByRole('checkbox', { name: '半透明', exact: true }).isChecked());

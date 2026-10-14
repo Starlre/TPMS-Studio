@@ -123,9 +123,9 @@ class ModelViewer {
     canvas.setAttribute('aria-label','Gyroid 双法兰三维预览：拖动旋转，滚轮缩放，右键或方向键平移'); this.host.append(canvas);
     this.controls = new OrbitControls(this.camera, canvas); this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.15; this.controls.listenToKeyEvents(canvas); this.controls.autoRotateSpeed = 1;
-    this.scene.add(new THREE.HemisphereLight(0xeeeeee,0x333333,2.4));
-    const key = new THREE.DirectionalLight(0xffffff,3.5); key.position.set(30,-50,70); this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff,1.7); fill.position.set(-50,15,35); this.scene.add(fill);
+    this.scene.add(new THREE.HemisphereLight(0xeeeeee,0x333333,1.6));
+    const key = new THREE.DirectionalLight(0xffffff,2.8); key.position.set(30,-50,70); this.scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff,0.9); fill.position.set(-50,15,35); this.scene.add(fill);
     this.section = { enabled:false, axis:'Y', normal:[1,0,1], offset:0, positive:false, only:false, fill:true };
     this.sectionId = 0; this.pickId = 0; this.points = []; this.measuring = false; this.requestId = 0;
     this.markers = new THREE.Group(); this.scene.add(this.markers);
@@ -147,7 +147,7 @@ class ModelViewer {
     this.worker = new Worker(new URL('./model.worker.js',import.meta.url),{type:'module'});
     this.worker.onmessage = ({data}) => this.message(data);
     this.worker.onerror = () => this.failure('模型处理失败，请重新加载页面。');
-    this.setTheme(true); this.resize();
+    this.setTheme(false); this.resize();
   }
   clearObject(object) { if (object) { object.removeFromParent(); object.geometry.dispose(); object.material.dispose(); } }
   failure(message) {
@@ -164,7 +164,7 @@ class ModelViewer {
       if (data.error) { this.failure(data.error); return; }
       const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position',new THREE.BufferAttribute(data.positions,3));
       geometry.setAttribute('normal',new THREE.BufferAttribute(data.normals,3)); geometry.setIndex(new THREE.BufferAttribute(data.indices,1));
-      this.mesh = new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:this.light ? 0x777777 : 0x999999,roughness:0.44,metalness:0.15,side:THREE.DoubleSide}));
+      this.mesh = new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x24708f,roughness:0.72,metalness:0.02,side:THREE.DoubleSide}));
       this.scene.add(this.mesh); this.bounds = new THREE.Box3(new THREE.Vector3(...data.bounds[0]),new THREE.Vector3(...data.bounds[1]));
       this.diagonal = this.bounds.getSize(new THREE.Vector3()).length();
       const extent = Math.max(...this.bounds.getSize(new THREE.Vector3()).toArray()), center = this.bounds.getCenter(new THREE.Vector3());
@@ -193,9 +193,9 @@ class ModelViewer {
   }
   setTheme(light) {
     this.light = light; document.documentElement.dataset.theme = light ? 'light' : 'dark';
-    this.scene.background = new THREE.Color(light ? '#cce6e1' : '#234443');
-    if (this.mesh) this.mesh.material.color.set(light ? '#777777' : '#999999');
-    document.querySelector('meta[name="theme-color"]').content = light ? '#bedbd8' : '#172c2d';
+    this.scene.background = new THREE.Color(light ? '#e8eef4' : '#171e27');
+    if (this.mesh) this.mesh.material.color.set('#24708f');
+    document.querySelector('meta[name="theme-color"]').content = light ? '#eef2f6' : '#1b222c';
     if (this.grid) this.grid.material.opacity = light ? 0.24 : 0.16;
     if (this.cutCap) this.cutCap.material.color.set(light ? '#b96b2c' : '#ffb65f');
     if (this.cutLines) this.cutLines.material.color.set(light ? '#9b460d' : '#ffbe7e');

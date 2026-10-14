@@ -18,6 +18,8 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'), { timeout: 90000 });
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('GPU 隐式曲面'));
     assert.equal(await page.locator('.error-banner').count(), 0);
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await page.getByRole('button', { name: '切换亮色主题', exact: true }).click();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
     assert.equal(await page.locator('.studio-sidebar').count(), 0);
     const navigation = await page.locator('.workspace-navigation').boundingBox();

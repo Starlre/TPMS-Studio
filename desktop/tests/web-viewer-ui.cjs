@@ -43,6 +43,8 @@ async function main() {
   async function capture(name,target = page) { assert.equal(await target.locator('html').getAttribute('data-theme'),'dark'); await target.mouse.move(5,5); await target.waitForTimeout(250); await target.screenshot({path:path.join(output,name),scale:'css'}); }
   try {
     await page.goto(live ? `${base}?v=${metadata.sha256.slice(0,12)}` : base); await ready();
+    assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+    await page.getByRole('button',{name:'切换亮色主题',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     const navigation = await page.locator('.workspace-navigation').boundingBox();
     assert.ok(navigation.y + navigation.height <= (await page.locator('.ribbon').boundingBox()).y);

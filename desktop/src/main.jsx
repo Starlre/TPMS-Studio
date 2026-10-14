@@ -85,7 +85,7 @@ function App() {
   const [display, setDisplay] = useState('model');
   const [quality, setQuality] = useState(null); const [qualityDialog, setQualityDialog] = useState(false);
   const [help, setHelp] = useState(false);
-  const [theme, setTheme] = useState(localStorage.getItem('tpms-theme') || 'light');
+  const [theme, setTheme] = useState(() => localStorage.getItem('tpms-palette') === 'slate-blue-v1' ? (localStorage.getItem('tpms-theme') || 'dark') : 'dark');
   const [implicit, setImplicit] = useState(true); const [wireframe, setWireframe] = useState(false);
   const [renderer, setRenderer] = useState('网格预览');
   const [exportQuality, setExportQuality] = useState('original');
@@ -110,6 +110,7 @@ function App() {
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme; localStorage.setItem('tpms-theme', theme);
+    localStorage.setItem('tpms-palette', 'slate-blue-v1');
   }, [theme]);
   useEffect(() => {
     if (qualityDialog || help) dialogRef.current?.showModal(); else dialogRef.current?.close();
