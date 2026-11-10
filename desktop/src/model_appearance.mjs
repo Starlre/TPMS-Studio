@@ -5,7 +5,30 @@ export const MODEL_LIGHTING = Object.freeze({
   hemisphere: { sky: 0xeff6ff, ground: 0x233449, intensity: 1.15 },
   key: { color: 0xffffff, intensity: 2.6, position: [30, -50, 70] },
   fill: { color: 0x87caff, intensity: 0.65, position: [-50, 15, 35] },
-  rim: { color: 0xb9dfff, intensity: 0.85, position: [-30, 50, 40] },
+  rim: { color: 0xb9dfff, intensity: 0.85, position: [-30, 50, 40], visible: true },
+});
+
+// M5：多实体布局原先在 Viewport.jsx 里硬编码了另一套灯光与材质，导致从单模型切到
+// 多实体布局时色温、强度、表面质感发生无解释的跳变。此处统一收口，只保留「半透明叠加
+// 需要更多补光」这一条真实差异：布局实体默认 opacity 0.42 且多体互相遮挡，若沿用单模型
+// 的强度会整体发暗、层次糊在一起，故环境光/主光/补光按比例提亮；边缘光在半透明层叠时
+// 容易过曝成白边，因此布局模式关闭 rim。色温与光源方向保持一致，切换时不再换"滤镜"。
+export const LAYOUT_LIGHTING = Object.freeze({
+  hemisphere: { sky: 0xeff6ff, ground: 0x233449, intensity: 2.05 },
+  key: { color: 0xffffff, intensity: 3.1, position: [30, -50, 70] },
+  fill: { color: 0x87caff, intensity: 1.35, position: [-50, 15, 35] },
+  rim: { color: 0xb9dfff, intensity: 0.85, position: [-30, 50, 40], visible: false },
+});
+
+// 多实体布局的实体表面：比单模型更粗糙，让多个半透明体叠在一起时仍有可辨的边界明暗
+export const LAYOUT_MATERIAL = Object.freeze({ roughness: 0.55, metalness: 0.1 });
+// 全部实体合并成单个网格并写入顶点色时的材质参数（颜色由顶点提供，故去掉基础色）
+export const LAYOUT_VERTEX_MATERIAL = Object.freeze({ roughness: 0.44, metalness: 0.15 });
+
+// 地面参考网格：单模型与多实体共用，避免 0x7f99af 在 Viewport.jsx 中重复出现两次
+export const SCENE_GRID = Object.freeze({
+  color: 0x7f99af, divisions: 20,
+  opacity: Object.freeze({ dark: 0.16, light: 0.24 }),
 });
 
 // M6：视口叠加物（轴标 / 测量标签 / 底衬）按主题取色，集中在此而非散落在 Viewport.jsx。

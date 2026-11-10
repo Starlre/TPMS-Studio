@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_SECTION, planeNormal, distanceBetween } from './inspection_math.mjs';
 import { createDisplayGeometry, IMPLICIT_SURFACES, supportsImplicitPreview } from './display_geometry.mjs';
-import { MODEL_COLOR, MODEL_MATERIAL, MODEL_LIGHTING, OVERLAY_COLORS, styleImplicitSurface } from './model_appearance.mjs';
+import { MODEL_COLOR, MODEL_MATERIAL, MODEL_LIGHTING, LAYOUT_LIGHTING, LAYOUT_MATERIAL, LAYOUT_VERTEX_MATERIAL, SCENE_GRID, OVERLAY_COLORS, styleImplicitSurface } from './model_appearance.mjs';
 
 function typed(bytes, Type) {
   const buffer = Uint8Array.from(bytes).buffer;
@@ -51,20 +51,23 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     controls.enableDamping = true;
     controls.dampingFactor = 0.15;
     controls.listenToKeyEvents(renderer.domElement);
-    const hemisphere = new THREE.HemisphereLight(0xdcecff, 0x25334c, 2.4); scene.add(hemisphere);
-    const key = new THREE.DirectionalLight(0xffffff, 3.5); key.position.set(30, -50, 70); scene.add(key);
-    const fill = new THREE.DirectionalLight(0xa3d6ff, 1.7); fill.position.set(-50, 15, 35); scene.add(fill);
-    const rim = new THREE.DirectionalLight(MODEL_LIGHTING.rim.color, MODEL_LIGHTING.rim.intensity);
-    rim.position.set(...MODEL_LIGHTING.rim.position); rim.visible = false; scene.add(rim);
-    function setModelLighting(single) {
-      hemisphere.color.setHex(single ? MODEL_LIGHTING.hemisphere.sky : 0xdcecff);
-      hemisphere.groundColor.setHex(single ? MODEL_LIGHTING.hemisphere.ground : 0x25334c);
-      fill.color.setHex(single ? MODEL_LIGHTING.fill.color : 0xa3d6ff);
-      hemisphere.intensity = single ? MODEL_LIGHTING.hemisphere.intensity : 2.4;
-      key.intensity = single ? MODEL_LIGHTING.key.intensity : 3.5;
-      fill.intensity = single ? MODEL_LIGHTING.fill.intensity : 1.7;
-      rim.visible = single;
+    // M5：光源对象只创建一次，具体色温/强度/开关由 applyLighting 按模式切换预设，Viewport 内不再存第二套数值
+    const hemisphere = new THREE.HemisphereLight(LAYOUT_LIGHTING.hemisphere.sky, LAYOUT_LIGHTING.hemisphere.ground, LAYOUT_LIGHTING.hemisphere.intensity); scene.add(hemisphere);
+    const key = new THREE.DirectionalLight(LAYOUT_LIGHTING.key.color, LAYOUT_LIGHTING.key.intensity); key.position.set(...LAYOUT_LIGHTING.key.position); scene.add(key);
+    const fill = new THREE.DirectionalLight(LAYOUT_LIGHTING.fill.color, LAYOUT_LIGHTING.fill.intensity); fill.position.set(...LAYOUT_LIGHTING.fill.position); scene.add(fill);
+    const rim = new THREE.DirectionalLight(LAYOUT_LIGHTING.rim.color, LAYOUT_LIGHTING.rim.intensity);
+    rim.position.set(...LAYOUT_LIGHTING.rim.position); rim.visible = LAYOUT_LIGHTING.rim.visible; scene.add(rim);
+    function applyLighting(preset) {
+      hemisphere.color.setHex(preset.hemisphere.sky);
+      hemisphere.groundColor.setHex(preset.hemisphere.ground);
+      hemisphere.intensity = preset.hemisphere.intensity;
+      key.color.setHex(preset.key.color);
+      key.intensity = preset.key.intensity;
+      fill.color.setHex(preset.fill.color);
+      fill.intensity = preset.fill.intensity;
+      rim.visible = preset.rim.visible;
     }
+    function setModelLighting(single) { applyLighting(single ? MODEL_LIGHTING : LAYOUT_LIGHTING); }
     let layoutMeshes = [], layoutIds = '', layoutSelection = '', layoutTranslucent = true;
     let mesh, grid, rayMaterial, rayQuad, maskMesh, sectionLines, sectionCap, boxHelper;
     const markers = new THREE.Group(); scene.add(markers);
@@ -303,7 +306,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           sourceGeometry.setAttribute('position', new THREE.BufferAttribute(typed(item.geometry.positions, Float32Array), 3));
           sourceGeometry.setIndex(new THREE.BufferAttribute(typed(item.geometry.indices, Uint32Array), 1));
           const geometry = createDisplayGeometry(sourceGeometry); sourceGeometry.dispose();
-          const object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide, wireframe: wires }));
+          const object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ ...LAYOUT_MATERIAL, side: THREE.DoubleSide, wireframe: wires }));
           object.userData.id = item.id;
           const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 30), new THREE.LineBasicMaterial({ transparent: true }));
           object.add(edge); scene.add(object); layoutMeshes.push(object);
@@ -313,8 +316,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         colorLayout();
         if (!bounds.isEmpty()) {
           const center = bounds.getCenter(new THREE.Vector3()), extent = Math.max(1, ...bounds.getSize(new THREE.Vector3()).toArray());
-          grid = new THREE.GridHelper(extent * 2, 20, 0x7f99af, 0x7f99af); grid.rotation.x = Math.PI / 2;
-          grid.position.set(center.x, center.y, bounds.min.z - extent * 0.03); grid.material.transparent = true; grid.material.opacity = light ? 0.24 : 0.16; scene.add(grid);
+          grid = new THREE.GridHelper(extent * 2, SCENE_GRID.divisions, SCENE_GRID.color, SCENE_GRID.color); grid.rotation.x = Math.PI / 2;
+          grid.position.set(center.x, center.y, bounds.min.z - extent * 0.03); grid.material.transparent = true; grid.material.opacity = light ? SCENE_GRID.opacity.light : SCENE_GRID.opacity.dark; scene.add(grid);
           inspectionCallbacks.current.onBounds?.([bounds.min.toArray(), bounds.max.toArray()]);
         }
         const ids = items.map(item => item.id).join('|'), membershipChanged = ids !== layoutIds; layoutIds = ids;
@@ -336,13 +339,13 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           const sourceGeometry = geometry;
           if (!params && !value.colors) geometry = createDisplayGeometry(sourceGeometry);
           else { geometry.computeVertexNormals(); geometry.computeBoundingBox(); }
-          mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: value.colors ? '#ffffff' : (light ? MODEL_COLOR.light : MODEL_COLOR.dark), roughness: value.colors ? 0.44 : MODEL_MATERIAL.roughness, metalness: value.colors ? 0.15 : MODEL_MATERIAL.metalness, side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
+          mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ ...(value.colors ? LAYOUT_VERTEX_MATERIAL : MODEL_MATERIAL), color: value.colors ? '#ffffff' : (light ? MODEL_COLOR.light : MODEL_COLOR.dark), side: THREE.DoubleSide, vertexColors: !!value.colors, wireframe: wires }));
           scene.add(mesh);
           if (geometry.boundingBox && !geometry.boundingBox.isEmpty()) bounds.copy(geometry.boundingBox);
           const center = bounds.getCenter(new THREE.Vector3());
           const extent = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
-          grid = new THREE.GridHelper(extent * 2, 20, 0x7f99af, 0x7f99af); grid.rotation.x = Math.PI / 2;
-          grid.position.set(center.x, center.y, bounds.min.z - extent * 0.03); grid.material.transparent = true; grid.material.opacity = light ? 0.24 : 0.16; scene.add(grid);
+          grid = new THREE.GridHelper(extent * 2, SCENE_GRID.divisions, SCENE_GRID.color, SCENE_GRID.color); grid.rotation.x = Math.PI / 2;
+          grid.position.set(center.x, center.y, bounds.min.z - extent * 0.03); grid.material.transparent = true; grid.material.opacity = light ? SCENE_GRID.opacity.light : SCENE_GRID.opacity.dark; scene.add(grid);
           createWorker(sourceGeometry);
           if (sourceGeometry !== geometry) sourceGeometry.dispose();
           inspectionCallbacks.current.onBounds?.([bounds.min.toArray(), bounds.max.toArray()]);
