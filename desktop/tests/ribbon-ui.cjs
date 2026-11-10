@@ -128,7 +128,8 @@ async function main() {
         dialog.showSaveDialog = async () => ({canceled:false,filePath:target});
       },{source,target:migratedFile});
       await page.getByRole('button',{name:'打开',exact:true}).click(); await done('项目已打开');
-      assert.equal(await modes.getByRole('button',{name:'实体建模',exact:true}).getAttribute('aria-pressed'),'true');
+      // B4②：工作区切换由 aria-pressed 改为互斥单选的 aria-current（与实现同步）
+      assert.equal(await modes.getByRole('button',{name:'实体建模',exact:true}).getAttribute('aria-current'),'page');
       assert.equal(await page.locator('[data-node-id]').count(),saved.scene.nodes.length);
       assert.equal(await page.locator('[data-value-id]').count(),saved.scene.value_nodes.length);
       assert.ok(await page.locator('.export-menu .primary').isDisabled());

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { GripVertical, ArrowUp, ArrowDown, Box, Hash, Move3D } from 'lucide-react';
 import { DRAG_MIME, readDrag, notebookOrder, reorderScene, connectReference } from './workflow_drag.mjs';
 
@@ -7,8 +7,13 @@ const typeName = type => type === 'body' ? '实体' : type === 'vector' ? '向�
 export function WorkflowDrag({ scene, onChange, busy, reportError, children }) {
   const [payload, setPayload] = useState(null), [message, setMessage] = useState('');
   const current = useRef(null), pointer = useRef(null);
-  function end() { current.current = null; pointer.current = null; setPayload(null); }
-  useEffect(() => { if (busy) end(); }, [busy]);
+  // 性能：用 ref 镜像最新 props，使拖拽 API 保持稳定引用。
+  // 原先 context value 每次渲染都重建对象与新函数，节点列表里每个 SortHeading / ReferenceInput
+  // 都会随之重渲染；稳定后，展开/选中/设置面板等局部状态变化不会再波及全部拖拽消费者。
+  const latest = useRef({});
+  latest.current = { scene, onChange, busy, reportError };
+  const end = useCallback(() => { current.current = null; pointer.current = null; setPayload(null); }, []);
+  useEffect(() => { if (busy) end(); }, [busy, end]);
   useEffect(() => {
     if (!payload) return;
     let frame;
@@ -27,30 +32,31 @@ export function WorkflowDrag({ scene, onChange, busy, reportError, children }) {
     window.addEventListener('dragover', over, true); window.addEventListener('dragend', end); window.addEventListener('drop', end);
     frame = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(frame); window.removeEventListener('dragover', over, true); window.removeEventListener('dragend', end); window.removeEventListener('drop', end); };
-  }, [payload]);
-  const value = { scene, busy, payload,
-    start(e, next) {
-      if (busy) { e.preventDefault(); return; }
-      e.stopPropagation(); e.dataTransfer.setData(DRAG_MIME, JSON.stringify(next)); e.dataTransfer.effectAllowed = next.action === 'sort' ? 'move' : 'link';
-      current.current = next; setPayload(next); setMessage(next.action === 'sort' ? '拖到节点标题的上半部或下半部排序' : `将${typeName(next.type)}引用拖到对应输入框`);
-    }, end,
-    dropped(e) {
-      const data = readDrag(e.dataTransfer);
-      return !busy && data && JSON.stringify(data) === JSON.stringify(current.current) ? data : null;
-    },
-    sort(group, id, anchor, side) {
-      if (busy) return;
-      const next = reorderScene(scene, group, id, anchor, side);
-      if (next !== scene) { onChange(next); setMessage('节点显示顺序已更新，引用关系保持不变'); }
-    },
-    connect(data, target) {
-      if (busy) return;
-      const result = connectReference(scene, data, target);
-      if (result.error) { reportError(result.error); setMessage(result.error); }
-      else if (result.scene !== scene) { onChange(result.scene); setMessage('引用已连接，请更新模型'); }
-      else setMessage('此输入已连接该引用');
-    }
-  };
+  }, [payload, end]);
+  const start = useCallback((e, next) => {
+    if (latest.current.busy) { e.preventDefault(); return; }
+    e.stopPropagation(); e.dataTransfer.setData(DRAG_MIME, JSON.stringify(next)); e.dataTransfer.effectAllowed = next.action === 'sort' ? 'move' : 'link';
+    current.current = next; setPayload(next); setMessage(next.action === 'sort' ? '拖到节点标题的上半部或下半部排序' : `将${typeName(next.type)}引用拖到对应输入框`);
+  }, []);
+  const dropped = useCallback(e => {
+    const data = readDrag(e.dataTransfer);
+    return !latest.current.busy && data && JSON.stringify(data) === JSON.stringify(current.current) ? data : null;
+  }, []);
+  const sort = useCallback((group, id, anchor, side) => {
+    const { scene, onChange, busy } = latest.current;
+    if (busy) return;
+    const next = reorderScene(scene, group, id, anchor, side);
+    if (next !== scene) { onChange(next); setMessage('节点显示顺序已更新，引用关系保持不变'); }
+  }, []);
+  const connect = useCallback((data, target) => {
+    const { scene, onChange, busy, reportError } = latest.current;
+    if (busy) return;
+    const result = connectReference(scene, data, target);
+    if (result.error) { reportError(result.error); setMessage(result.error); }
+    else if (result.scene !== scene) { onChange(result.scene); setMessage('引用已连接，请更新模型'); }
+    else setMessage('此输入已连接该引用');
+  }, []);
+  const value = useMemo(() => ({ scene, busy, payload, start, end, dropped, sort, connect }), [scene, busy, payload, start, end, dropped, sort, connect]);
   return <Drag.Provider value={value}>{children}<p className="workflow-drag-status" role="status" aria-live="polite">{message}</p></Drag.Provider>;
 }
 export function DragSource({ id, type, name, children, ...props }) {

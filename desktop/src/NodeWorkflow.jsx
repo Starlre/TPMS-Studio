@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { createValueBlock, ValueEditor } from './ValueBlocks';
 import CardMenu from './CardMenu';
 import { notebookOrder } from './workflow_drag.mjs';
@@ -8,10 +8,29 @@ import { Plus, Box, Move3D, Trash2, Undo2, Redo2, ArrowDownToLine, Eye, ChevronR
 import { NODE_KINDS, ARITY, inputOptions, graphErrors, createNode } from './node_graph.mjs';
 import { WorkflowDrag, SortHeading, SortHandle, SortButtons, ReferenceOutput, ReferenceInput, DragSource } from './WorkflowDrag';
 import { PRIMITIVES } from './primitive_catalog.mjs';
+import { useNodeState } from './ui_status.mjs';
 
 const LABELS = Object.fromEntries(PRIMITIVES.map(item => [item.kind,item.labels]));
 const Values = createContext([]);
 const Navigate = createContext(() => {});
+// B1：节点计算状态徽标文案（与 workflow_engine.py 上报的 state 一一对应）
+const NODE_STATES = { pending: '待更新', evaluating: '计算中', meshing: '计算中', cached: '缓存复用', ready: '已完成', error: '失败' };
+// B1：徽标单独订阅外部状态 store，进度推送只刷新本徽标，不重渲染整个节点列表
+function NodeStateBadge({ id }) {
+  const state = useNodeState(id);
+  const badge = useRef(null);
+  const processing = state === 'evaluating' || state === 'meshing';
+  // 计算中的节点把 aria-busy 同步到所属卡片，读屏可感知该节点正在更新
+  useEffect(() => {
+    const card = badge.current?.closest('.card-node');
+    if (!card) return;
+    if (processing) card.setAttribute('aria-busy', 'true');
+    else card.removeAttribute('aria-busy');
+  }, [processing]);
+  const label = NODE_STATES[state];
+  if (!label) return null;
+  return <span ref={badge} className="node-state-badge" data-state={state}>{processing && <i className="node-state-spinner" aria-hidden="true" />}{label}</span>;
+}
 function Choice({ label, value, options, onChange }) {
   return <label className="field"><span>{label}</span><select aria-label={label} value={value} onChange={e => onChange(e.target.value)}>{options.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>;
 }
@@ -73,15 +92,17 @@ function TPMSFields({ node, patch, currentParameters }) {
   </>;
 }
 
-export default function NodeWorkflow({ scene, onChange, currentParameters, selected, onSelect, dirty, hasResult, busy, available, error, reportError, undo, redo, canUndo, canRedo, loadPreset, nodeStates = {}, valueOutputs = {}, previewNode, evaluateValues, cacheSummary, activePreviewNode, allEntities, hiddenEntities = [], toggleEntity }) {
+export default function NodeWorkflow({ scene, onChange, currentParameters, selected, onSelect, dirty, busy, inputsLocked = false, available, error, reportError, undo, redo, canUndo, canRedo, loadPreset, valueOutputs = {}, previewNode, evaluateValues, cacheSummary, activePreviewNode, allEntities, hiddenEntities = [], toggleEntity }) {
   const [expanded, setExpanded] = useState(() => new Set(selected ? [selected] : []));
   const [nestedOpened, setNestedOpened] = useState(new Set());
   const [adding, setAdding] = useState(false), [query, setQuery] = useState('');
   const [settings, setSettings] = useState(false), [menu, setMenu] = useState(null);
   const entries = useRef(new Map()), addButton = useRef(null);
   const [parameterName, setParameterName] = useState('wall');
-  const issues = graphErrors(scene), params = scene.parameters || {}, blocks = scene.value_nodes || [];
-  const order = notebookOrder(scene);
+  // 性能：节点图错误检查需要递归遍历祖先链，按场景缓存，避免父级重渲染时重复计算
+  const issues = useMemo(() => graphErrors(scene), [scene]);
+  const params = scene.parameters || {}, blocks = scene.value_nodes || [];
+  const order = useMemo(() => notebookOrder(scene), [scene]);
   useEffect(() => {
     if (!selected) return;
     setExpanded(old => new Set([...old, selected]));
@@ -158,7 +179,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
       patch(node.id, { vector_inputs, expressions: Object.fromEntries(Object.entries(node.expressions || {}).filter(([key]) => !id || !key.startsWith(target + '.'))) });
     }} />{reference && <Reference id={reference.id} kind="vector" name={reference.name} onClick={() => select(`value:${reference.id}`)} />}</ReferenceInput>;
   }
-    return <fieldset disabled={busy} className="selected-editor notebook-editor" aria-busy={busy}><article data-editor-node-id={node.id}>
+    return <fieldset disabled={inputsLocked} className="selected-editor notebook-editor" aria-busy={busy}><article data-editor-node-id={node.id}>
       {issue && <p className="node-error" role="alert">{issue}</p>}
       <section className="editor-section"><label className="field"><span>节点名称</span><input aria-label="节点名称" value={node.name} onChange={e => patch(node.id, { name: e.target.value })} /></label>
         {ARITY[node.kind] && Array.from({ length: ARITY[node.kind] }, (_, i) => {
@@ -204,7 +225,8 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     {settings && <section className="card-settings" aria-label="输出设置">
       <ReferenceInput target={{ kind: 'root' }} label="最终输出"><Choice label="输出节点" value={scene.root} options={scene.nodes.length ? scene.nodes.map(n => [n.id, n.name]) : [['', '先添加建模节点']]} onChange={v => onChange({ ...scene, root: v })} /></ReferenceInput>
       <Numeric label="输出网格尺寸" value={scene.cell_size} unit="mm" onChange={v => onChange({ ...scene, cell_size: v })} />
-      <div className="mesh-presets" role="group" aria-label="网格精度预设">{[[0.6, '快速'], [0.3, '标准'], [0.15, '精细']].map(([size, name]) => <button type="button" key={size} disabled={busy} aria-pressed={scene.cell_size === size} onClick={() => onChange({ ...scene, cell_size: size })}>{name}<small>{size} mm</small></button>)}</div>
+      {/* B4②：网格精度是互斥单选，改用 aria-current */}
+      <div className="mesh-presets" role="group" aria-label="网格精度预设">{[[0.6, '快速'], [0.3, '标准'], [0.15, '精细']].map(([size, name]) => <button type="button" key={size} disabled={busy} aria-current={scene.cell_size === size ? 'true' : undefined} onClick={() => onChange({ ...scene, cell_size: size })}>{name}<small>{size} mm</small></button>)}</div>
       <p className="hint">尺寸越小，圆弧和细节越精细，计算量与文件大小增加。修改后重新生成工作流；旧项目保留原精度。全部实体布局使用独立精度，导出使用最终输出。</p>
       {!!blocks.length && <button type="button" className="secondary full evaluate-values" disabled={busy} onClick={evaluateValues}>计算参数值</button>}
       <details className="workflow-inputs"><summary>共享常量 <small>{Object.keys(params).length} 个</small></summary>{Object.entries(params).map(([name, val]) => <div className="parameter-row" key={name}><Numeric label={name} value={val} onChange={v => onChange({ ...scene, parameters: { ...params, [name]: v } })} /><button type="button" aria-label={`删除参数 ${name}`} onClick={() => removeParameter(name)}><Trash2 size={16} aria-hidden="true" /></button></div>)}<div className="add-row"><input aria-label="新共享参数名称" placeholder="例如 wall" value={parameterName} onChange={e => setParameterName(e.target.value)} /><button type="button" className="secondary" onClick={addParameter} disabled={!parameterName.trim()}>添加参数</button></div></details>
@@ -220,12 +242,14 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
           <SortHandle group="notebook" id={id} name={n.name} />
           <button type="button" className="notebook-disclosure" aria-label={`${open ? '收起' : '展开'}${value ? '参数' : '节点'} ${n.name}`} aria-expanded={open} aria-controls={`card-${id}`} onClick={() => toggle(id)}><ChevronRight size={16} className={open ? 'expanded' : ''} aria-hidden="true" /></button>
           <button type="button" className="notebook-node-select" aria-label={`选择${value ? '参数' : '步骤'} ${n.name}`} aria-pressed={selected === id} title={type} onClick={() => select(id)}><strong>{n.name}</strong>{!value && scene.root === id && <ArrowDownToLine size={14} aria-label="最终输出" />}</button>
+          {/* B1：节点状态徽标（待更新 / 计算中 / 缓存复用 / 已完成 / 失败），进度状态经 store 订阅刷新 */}
+          {!value && <NodeStateBadge id={id} />}
           {!value && <button type="button" className="card-preview" aria-label={allEntities ? `${hiddenEntities.includes(id) ? '显示' : '隐藏'}实体 ${n.name}` : `预览节点 ${n.name}`} aria-pressed={allEntities ? !hiddenEntities.includes(id) : activePreviewNode === id} disabled={!available || busy || !!issue} onClick={() => allEntities ? toggleEntity(id) : previewNode(id)}><Eye size={17} aria-hidden="true" /></button>}
           <ReferenceOutput id={n.id} type={value ? n.kind === 'vector' ? 'vector' : 'number' : 'body'} name={n.name} onClick={() => select(id)} />
           <button type="button" className="card-menu-trigger" aria-label={`节点操作 ${n.name}`} aria-expanded={menu?.id === id} onClick={e => showMenu(e, id)}><MoreHorizontal size={18} aria-hidden="true" /></button>
         </SortHeading>
         {issue && !open && <p className="node-error" role="alert">{issue}</p>}
-        <div id={`card-${id}`} hidden={!open}>{open && (value ? <fieldset disabled={busy} className="selected-editor notebook-editor"><ValueEditor inline compact scene={scene} onChange={onChange} selected={n} outputs={valueOutputs} reportError={reportError} onSelect={select} /></fieldset> : renderEditor(n))}</div>
+        <div id={`card-${id}`} hidden={!open}>{open && (value ? <fieldset disabled={inputsLocked} className="selected-editor notebook-editor"><ValueEditor inline compact scene={scene} onChange={onChange} selected={n} outputs={valueOutputs} reportError={reportError} onSelect={select} /></fieldset> : renderEditor(n))}</div>
       </li>;
     })}</ol>
     <button ref={addButton} type="button" className="card-add" aria-expanded={adding} disabled={busy} onClick={() => { setAdding(old => !old); setQuery(''); }}><Plus size={19} aria-hidden="true" />新节点</button>

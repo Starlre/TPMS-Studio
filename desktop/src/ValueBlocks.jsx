@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, Hash, Variable, Move3D, ArrowRight, ChevronRight } from 'lucide-react';
+import React from 'react';
+import { Variable, ArrowRight, Trash2 } from 'lucide-react';
 import { valueConsumers } from './node_graph.mjs';
-import { SortHeading, SortHandle, SortButtons, ReferenceOutput, ReferenceInput } from './WorkflowDrag';
+import { SortButtons, ReferenceInput } from './WorkflowDrag';
 
 const names = { number: '数值', formula: '公式', vector: '向量' };
-const icons = { number: Hash, formula: Variable, vector: Move3D };
 export function createValueBlock(scene, kind) {
   const blocks = scene.value_nodes || [];
   let i = 1;
@@ -37,29 +36,4 @@ export function ValueEditor({ scene, onChange, selected: block, outputs, reportE
     {inline && !compact && <SortButtons group="value" id={block.id} name={block.name} />}
   </article>;
 }
-
-export default function ValueBlocks({ scene, onChange, outputs, selected, onSelect, evaluate, busy, expanded, onToggle, register, reportError }) {
-  const [kind, setKind] = useState('number');
-  const blocks = scene.value_nodes || [];
-  function add() {
-    const block = createValueBlock(scene, kind);
-    onChange({ ...scene, value_nodes: [...blocks, block] });
-    onSelect(`value:${block.id}`);
-  }
-  return <section className="value-blocks" aria-label="参数节点">
-    <div className="workflow-add"><select aria-label="新参数节点类型" value={kind} onChange={e => setKind(e.target.value)}>{Object.entries(names).map(([key, name]) => <option key={key} value={key}>{name}参数</option>)}</select><button type="button" className="secondary" disabled={blocks.length >= 32} onClick={add}><Plus size={18} aria-hidden="true" />添加参数节点</button></div>
-    {!blocks.length && <p className="hint">数值、公式或向量可被多个实体引用；简单模型直接填写尺寸即可。</p>}
-    <ul className="workflow-values notebook-values" aria-label="设计参数列表">{blocks.map(block => {
-      const Icon = icons[block.kind];
-      const result = outputs[block.id]?.value;
-      const summary = block.kind === 'number' ? block.value : block.kind === 'formula' ? block.expression : `[${block.components.join(', ')}]`;
-      const id = `value:${block.id}`, open = expanded.has(id);
-      return <li key={block.id} ref={element => register(id, element)} data-value-id={block.id} className={`notebook-node ${selected === id ? 'selected' : ''}`}>
-        <SortHeading group="value" id={block.id}><SortHandle group="value" id={block.id} name={block.name} /><button type="button" className="notebook-disclosure" aria-label={`${open ? '收起' : '展开'}参数 ${block.name}`} aria-expanded={open} aria-controls={`notebook-value-${block.id}`} onClick={() => onToggle(id)}><ChevronRight size={16} className={open ? 'expanded' : ''} aria-hidden="true" /></button><button type="button" className="notebook-node-select" aria-label={`选择参数 ${block.name}`} aria-pressed={selected === id} onClick={() => onSelect(id)}><Icon size={18} aria-hidden="true" /><span className="step-text"><strong>{block.name}</strong><small>{names[block.kind]} · {block.symbol}</small></span>{result !== undefined && <output aria-label={`${block.name}计算值`}>{JSON.stringify(result)}</output>}</button><ReferenceOutput id={block.id} type={block.kind === 'vector' ? 'vector' : 'number'} name={block.name} onClick={() => onSelect(id)} /></SortHeading>
-        <div className="notebook-node-summary value-summary">{summary}</div>
-        <div id={`notebook-value-${block.id}`} hidden={!open}>{open && <fieldset disabled={busy} className="selected-editor notebook-editor"><ValueEditor inline scene={scene} onChange={onChange} selected={block} outputs={outputs} reportError={reportError} onSelect={onSelect} /></fieldset>}</div>
-      </li>;
-    })}</ul>
-    {!!blocks.length && <button type="button" className="secondary full evaluate-values" disabled={busy} onClick={evaluate}>计算参数值</button>}
-  </section>;
-}
+// B7：原先这里有一个未被任何模块引用的 ValueBlocks 默认导出组件（卡片列表已由 NodeWorkflow 统一渲染），已删除。
