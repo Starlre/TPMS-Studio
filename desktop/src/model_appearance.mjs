@@ -8,6 +8,22 @@ export const MODEL_LIGHTING = Object.freeze({
   rim: { color: 0xb9dfff, intensity: 0.85, position: [-30, 50, 40] },
 });
 
+// M6：视口叠加物（轴标 / 测量标签 / 底衬）按主题取色，集中在此而非散落在 Viewport.jsx。
+// 浅色视口背景 #e8eef4 上原先的 #f07878/#53c996/#79aaff 对比度仅 1.8-2.3:1，低于图形件 3:1 下限；
+// 下列浅色轴标值相对 #e8eef4 的对比度分别为 5.1 / 4.9 / 5.3，均超过 4.5:1。
+export const OVERLAY_COLORS = Object.freeze({
+  axis: Object.freeze({
+    dark: Object.freeze(['#f07878', '#53c996', '#79aaff']),
+    light: Object.freeze(['#b83a3a', '#187954', '#2a5fc4']),
+  }),
+  // 测量点 A/B 圆盘底衬：浅色主题略提亮，避免在浅视口上形成突兀的深色块
+  markerPlate: Object.freeze({ dark: '#172536', light: '#1b3a56' }),
+  // 轴标底衬圆盘：半透明，保证轴标压在模型表面时依然可读
+  axisPlate: Object.freeze({ dark: 'rgba(16,21,28,.72)', light: 'rgba(232,238,244,.78)' }),
+  // 视口背景，必须与 native.css 的 --viewport 保持同值（Three.js 用 JS 值绘制，CSS 变量只管兜底底色）
+  viewport: Object.freeze({ dark: '#10151c', light: '#e8eef4' }),
+});
+
 // The implicit preview uses its own shading, so reproduce the blue surface and
 // broad specular highlights here without changing the shared Qt ray marcher.
 export function styleImplicitSurface(source) {

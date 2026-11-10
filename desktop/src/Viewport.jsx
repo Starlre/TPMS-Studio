@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DEFAULT_SECTION, planeNormal, distanceBetween } from './inspection_math.mjs';
 import { createDisplayGeometry, IMPLICIT_SURFACES, supportsImplicitPreview } from './display_geometry.mjs';
-import { MODEL_COLOR, MODEL_MATERIAL, MODEL_LIGHTING, styleImplicitSurface } from './model_appearance.mjs';
+import { MODEL_COLOR, MODEL_MATERIAL, MODEL_LIGHTING, OVERLAY_COLORS, styleImplicitSurface } from './model_appearance.mjs';
 
 function typed(bytes, Type) {
   const buffer = Uint8Array.from(bytes).buffer;
@@ -153,7 +153,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         if (!point) return;
         const marker = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), new THREE.MeshBasicMaterial({ color: i ? '#7651bb' : '#ba354a', depthTest: false })); marker.position.set(...point); marker.renderOrder = 10; markers.add(marker);
         const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
-        const context = canvas.getContext('2d'); context.fillStyle = '#172536'; context.beginPath(); context.arc(32, 32, 30, 0, Math.PI * 2); context.fill(); context.font = 'bold 38px Segoe UI'; context.textAlign = 'center'; context.fillStyle = '#ffffff'; context.fillText(i ? 'B' : 'A', 32, 46);
+        const context = canvas.getContext('2d'); context.fillStyle = light ? OVERLAY_COLORS.markerPlate.light : OVERLAY_COLORS.markerPlate.dark; context.beginPath(); context.arc(32, 32, 30, 0, Math.PI * 2); context.fill(); context.font = 'bold 38px Segoe UI'; context.textAlign = 'center'; context.fillStyle = '#ffffff'; context.fillText(i ? 'B' : 'A', 32, 46);
         const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false })); label.position.copy(marker.position).add(new THREE.Vector3(0, 0, radius * 2)); label.scale.setScalar(radius * 4); label.renderOrder = 11; markers.add(label);
       });
       if (measurePoints[0] && measurePoints[1]) {
@@ -185,9 +185,13 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     window.addEventListener('keydown', escape);
     function drawAxes() {
       axisContext.clearRect(0, 0, 112, 112);
+      // M6：先铺半透明底衬圆盘，轴标压在深色模型表面时也能读清
+      axisContext.fillStyle = light ? OVERLAY_COLORS.axisPlate.light : OVERLAY_COLORS.axisPlate.dark;
+      axisContext.beginPath(); axisContext.arc(56, 58, 46, 0, Math.PI * 2); axisContext.fill();
       axisContext.lineWidth = 2.5;
       const inverseRotation = camera.quaternion.clone().invert();
-      const directions = [[new THREE.Vector3(1, 0, 0), 'X', '#f07878'], [new THREE.Vector3(0, 1, 0), 'Y', '#53c996'], [new THREE.Vector3(0, 0, 1), 'Z', '#79aaff']];
+      const axisColors = light ? OVERLAY_COLORS.axis.light : OVERLAY_COLORS.axis.dark;
+      const directions = [[new THREE.Vector3(1, 0, 0), 'X', axisColors[0]], [new THREE.Vector3(0, 1, 0), 'Y', axisColors[1]], [new THREE.Vector3(0, 0, 1), 'Z', axisColors[2]]];
       directions.map(([vector, label, color]) => [vector.applyQuaternion(inverseRotation), label, color])
         .sort((a, b) => a[0].z - b[0].z).forEach(([v, label, color]) => {
           axisContext.strokeStyle = color; axisContext.fillStyle = color;
@@ -269,7 +273,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
       setMeasurement(value, armed) { measurePoints = value; picking = armed; updateMarkers(); },
       zoom: factor => { camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target); controls.update(); schedule(); },
       setTheme(value) {
-        light = value === 'light'; scene.background = new THREE.Color(light ? '#e8eef4' : '#171e27');
+        // 视口背景与 native.css 的 --viewport 同源（此前 JS 硬编码 #171e27，与 CSS token 不一致）
+        light = value === 'light'; scene.background = new THREE.Color(light ? OVERLAY_COLORS.viewport.light : OVERLAY_COLORS.viewport.dark);
         if (mesh && !mesh.material.vertexColors) mesh.material.color.set(light ? MODEL_COLOR.light : MODEL_COLOR.dark);
         if (grid) grid.material.opacity = light ? 0.24 : 0.16;
         if (rayMaterial) rayMaterial.uniforms.u_lightBg.value = light ? 1 : 0;
