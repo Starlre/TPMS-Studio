@@ -41,6 +41,12 @@ exports/
 # IDE and operating-system files
 .vscode/
 .idea/
+.claude/
+.workbuddy/
+.refs/
+presentation/
+presentation-assets/
+tpms-project.json
 *.code-workspace
 Thumbs.db
 Desktop.ini
