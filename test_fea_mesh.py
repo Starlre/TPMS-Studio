@@ -204,3 +204,81 @@ def test_electron_backend_fea_dispatch_and_validation(tmp_path):
     finally:
         worker.workflow.close()
         worker.layout_workflow.close()
+
+
+def test_fea_dotted_filename_and_surface_defect_guards(tmp_path):
+    scene = SolidScene(
+        nodes=[
+            SolidNode(id="n1", name="Sphere", kind="sphere", dimensions=(10.0,)),
+            SolidNode(
+                id="n2",
+                name="Gyroid",
+                kind="tpms",
+                tpms=TPMSParameters(surface="Gyroid", mode="solid", size_x=22.0, size_y=22.0, size_z=22.0, cells_x=2, cells_y=2, cells_z=2),
+            ),
+            SolidNode(id="n3", name="Inter", kind="intersection", inputs=("n1", "n2")),
+        ],
+        root="n3",
+        cell_size=0.6,
+    )
+    engine = WorkflowEngine()
+    try:
+        sr, _ = engine.generate(scene)
+    finally:
+        engine.close()
+
+    res = export_fea_volume_mesh(
+        sr.mesh,
+        tmp_path / "sphere_v1.5.bdf",
+        FEAMeshOptions(element_size=1.8, remesh_surface="auto"),
+    )
+    assert res.bdf_path.name == "sphere_v1.5.bdf"
+    assert res.msh_path.name == "sphere_v1.5.msh"
+    assert res.bdf_path.is_file() and res.msh_path.is_file()
+    assert res.remeshed is True
+    assert res.min_scaled_jacobian > 0.01
+    assert res.mesh_volume == pytest.approx(sr.mesh.volume, rel=0.025)
+
+    bdf = meshio.read(res.bdf_path, file_format="nastran")
+    tris = np.vstack([b.data for b in bdf.cells if b.type == "triangle"])
+    tm = trimesh.Trimesh(vertices=bdf.points, faces=tris, process=False)
+    adj = tm.face_adjacency
+    dots = np.sum(tm.face_normals[adj[:, 0]] * tm.face_normals[adj[:, 1]], axis=1)
+    assert float(dots.min()) > -0.65
+    assert float(tm.area_faces.min()) > 1e-4
+
+
+def test_fea_sphere_infill_preserves_volume_at_default_element_size(tmp_path):
+    scene = SolidScene(
+        nodes=[
+            SolidNode(id="n1", name="Sphere", kind="sphere", dimensions=(8.0,)),
+            SolidNode(
+                id="n2",
+                name="Infill",
+                kind="tpms_infill",
+                dimensions=(8.0, 0.0, 0.0),
+                inputs=("n1",),
+                tpms=TPMSParameters(surface="Gyroid", mode="solid"),
+            ),
+        ],
+        root="n2",
+        cell_size=0.6,
+    )
+    engine = WorkflowEngine()
+    try:
+        sr, _ = engine.generate(scene)
+    finally:
+        engine.close()
+
+    res = export_fea_volume_mesh(
+        sr.mesh,
+        tmp_path / "sphere_infill.bdf",
+        FEAMeshOptions(element_size=2.0, remesh_surface="auto"),
+    )
+    assert res.mesh_volume == pytest.approx(sr.mesh.volume, rel=0.025)
+    assert res.min_scaled_jacobian > 0.08
+    bdf = meshio.read(res.bdf_path, file_format="nastran")
+    tris = np.vstack([b.data for b in bdf.cells if b.type == "triangle"])
+    tm = trimesh.Trimesh(vertices=bdf.points, faces=tris, process=False)
+    dots = np.sum(tm.face_normals[tm.face_adjacency[:, 0]] * tm.face_normals[tm.face_adjacency[:, 1]], axis=1)
+    assert float(dots.min()) > 0.0

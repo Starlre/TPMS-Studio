@@ -152,3 +152,20 @@ def test_boundary_layers_export_prisms_and_quality_data(tmp_path: Path) -> None:
     assert metadata["mesh_options"]["end_refinement_enabled"] is True
     assert metadata["mesh_options"]["curvature_refinement_enabled"] is True
     assert metadata["quality"]["low_quality_elements"] == result.quality.low_quality_elements
+
+    dotted = export_comsol_fluid_mesh(
+        TPMSParameters(
+            size_x=8,
+            size_y=8,
+            size_z=8,
+            cells_x=1,
+            cells_y=1,
+            cells_z=1,
+            thickness=1.0,
+            samples_per_cell=16,
+        ),
+        tmp_path / "fluid_0.3mm.bdf",
+        CFDMeshOptions(flow_axis="X", element_size=1.8, surface_samples_per_cell=16, curvature_refinement_enabled=False),
+    )
+    assert dotted.bdf_path.name == "fluid_0.3mm.bdf" and dotted.bdf_path.is_file()
+    assert dotted.msh_path.name == "fluid_0.3mm.msh" and dotted.msh_path.is_file()

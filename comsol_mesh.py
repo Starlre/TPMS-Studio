@@ -640,8 +640,8 @@ def export_comsol_fluid_mesh(
     if base.suffix.lower() in {".msh", ".bdf", ".json", ".vtu"}:
         base = base.with_suffix("")
     base.parent.mkdir(parents=True, exist_ok=True)
-    msh_path = base.with_suffix(".msh")
-    bdf_path = base.with_suffix(".bdf")
+    msh_path = base.with_name(base.name + ".msh")
+    bdf_path = base.with_name(base.name + ".bdf")
     metadata_path = base.with_name(base.name + "_boundaries.json")
     quality_path = base.with_name(base.name + "_quality.vtu")
 

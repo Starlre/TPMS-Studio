@@ -406,7 +406,7 @@ def validate_infill_surface(mesh, node, cell_size: float) -> None:
     a fold spanning more than three requested cells as well; this catches the
     QEF spikes without rejecting resolved sharp CAD edges or tight necks.
     """
-    if node.kind != 'tpms_infill' or float(node.dimensions[1]) > 0:
+    if node.kind != 'tpms_infill' or (len(node.dimensions) > 1 and float(node.dimensions[1]) > 0) or not len(mesh.face_adjacency_angles):
         return
     angles = mesh.face_adjacency_angles
     edges = mesh.vertices[mesh.face_adjacency_edges]
@@ -415,7 +415,7 @@ def validate_infill_surface(mesh, node, cell_size: float) -> None:
     if np.any(folded):
         raise ValueError(
             f"TPMS 填充存在局部曲面折叠（{int(np.count_nonzero(folded))} 条折边，"
-            f"最大法向夹角 {math.degrees(float(angles.max())):.1f}°），无法作为有效结果导出。"
+            f"最大法向夹角 {math.degrees(float(angles[folded].max())):.1f}°），无法作为有效结果导出。"
             "请减小网格尺寸或调整晶胞尺寸/壁厚后重新生成；水密性不代表曲面无折叠。"
         )
 

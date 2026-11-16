@@ -439,6 +439,11 @@ def test_sphere_infill_rejects_watertight_folded_surface(monkeypatch):
     finally:
         engine.close()
 
+    from solid_operations import validate_infill_surface
+    from solid_model import SolidNode
+    empty_tri = trimesh.Trimesh(vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces=[[0, 1, 2]], process=False)
+    validate_infill_surface(empty_tri, SolidNode(id='n', name='N', kind='tpms_infill', dimensions=(8.0, 0.0, 0.0)), 0.3)
+
 
 @native
 def test_infill_numpy_and_native_keep_same_geometry_across_precision():

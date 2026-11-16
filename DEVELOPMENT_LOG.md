@@ -158,6 +158,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-112 | 移除 PyQt5 旧版界面路线 | 26-11-16 16:07:00：删除 `app.py`/`solid_panel.py`/`run_qt.bat` 与 Qt 验证脚本及截图，清理 `PyQt5` 依赖及冗余 Qt 测试与文档入口 | 已完成 |
 | R-113 | 合并精简桌面端三项核心冗余 | 26-11-16 16:37:00：精度预设提至生成区上方并去重顶部检查入口、节点目录收拢至单一清单、合并 `style.css`+`native.css` 并复用数字微调函数 | 已完成 |
 | R-117 | 修复精细球形 TPMS 填充 STL 局部折叠 | 2026-11-16 22:38:13：固定跨精度边界几何规则、长折边拦截、STL 回读与 COMSOL 6.3 实机导入核验 | 已完成 |
+| R-118 | 加固 FEA 重划分表面质量、路径保真与填充校验细节 | 26-11-16 23:36:00：几何等效尺度步长、防翻折 Taubin + 2-流形短边折叠修复、带点文件名修复及 `validate_infill_surface` 边界保护 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -739,6 +740,16 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 已知限制：长折边检查不等于完整自交检查；修复沿用原标准模式边界，旧精细版的体积及局部孔道连通关系会改变。COMSOL 验收仅覆盖该样本的表面网格导入，未覆盖求解与 FEA 体网格处理。
 - 交付：生成修复版 `tpms2-model-fixed.stl`、可编辑项目 `tpms2-model-fixed.json`、数值检查报告 `tpms2-model-fixed-check.json` 与可直接打开的 `tpms2-model-fixed-comsol.mph`，保留原始问题样本。
 - 状态：修复与验证已完成，代码、回归测试和记录已提交至 `完善建模功能和UI分支`（功能提交 `dc59313`）；未推送远程。
+
+### R-118：26-11-16 23:36:00（Asia/Shanghai），加固 FEA 重划分表面质量、路径保真与填充长折边报告细节
+
+- 需求与原因：紧随 FEA（R-116）与纯填充表面修复（R-117）实测诊断发现四处需补齐的几何与工程细节：① `Sphere ∩ Gyroid` 等含尖锐交线的组合体走 `_remesh_discrete_surface` 时，裸 `marching_cubes(level=-1e-4*h_surf)` 在零交叉贴近体素角点处切出极小针刺面，随后无保护 `filter_taubin` 将对折角边（`dot < -0.8`）放大至多处且留下微碎面；② 默认 `element_size=2.0 mm` 时 `_default_surface_spacing` 为小尺寸模型选取 `1.0 mm` 步长，引起显著体积收缩与交界阶梯锯齿；③ `auto` 模式未检查 `direct` 原表面的尖折/针刺及过低雅可比回退；④ [fea_mesh.py](fea_mesh.py) 与 [comsol_mesh.py](comsol_mesh.py) 使用 `base.with_suffix('.bdf')` 会在文件名含小数点时截断文件名，同时 [solid_operations.py](solid_operations.py) `validate_infill_surface` 未防护单元素 `dimensions` 与空邻接且报错夹角取全网最大值而非 `angles[folded].max()`。
+- 实现：
+  - **防碎面与防翻折光滑重划分（[fea_mesh.py](fea_mesh.py)）**：`_default_surface_spacing` 引入几何等效尺寸（`(prod(extent)**(1/3))/48.0`）约束上限；`_remesh_discrete_surface` 结合偏置等值面与 `_smooth_and_repair_surface`（局部法向防翻转/防微缩/防对折检查的 Taubin 光滑 + 严格保持 2-流形 Link-Condition 与邻接夹角约束的 `_collapse_short_edges` 短边折叠 + 惰性构建局部质量/二面角联合优化）；新增 `_surface_has_defects`（拦截 `dot < -0.75` 对折、`< 1e-6` 面积或 `< 1.5°` 针刺）及 `auto` 模式下 `min_scaled_jacobian < 0.03` 自动回退至重划分路线。
+  - **路径扩展与边界守护**：[fea_mesh.py](fea_mesh.py) 与 [comsol_mesh.py](comsol_mesh.py) 改用 `base.with_name(base.name + '.msh')` / `'.bdf'`；[solid_operations.py](solid_operations.py) 加固 `validate_infill_surface` 对 `len(node.dimensions) > 1` 与空 `face_adjacency_angles` 的保护并报告 `angles[folded].max()`。
+- 涉及文件：`fea_mesh.py`、`comsol_mesh.py`、`solid_operations.py`、`test_fea_mesh.py`、`test_comsol_mesh.py`、`test_solid_operations.py`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：Python 全量回归 `pytest -q` **`198 passed in 274.01s`**（`0 failed / 0 skipped`，含新增 `test_fea_dotted_filename_and_surface_defect_guards`、`test_fea_sphere_infill_preserves_volume_at_default_element_size`、CFD 带小数点文件名测试及 `validate_infill_surface` 边界断言）；桌面端 `npm test` **`28 passed in 13.06s`**、Playwright `verify-fea`（含多孔板及 2 节点跑鞋晶格中底）与 `verify-ui` 均通过，零页面错误。
+- 状态：已完成实现、全量验证与文档更新，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定
 
