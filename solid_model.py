@@ -24,7 +24,7 @@ KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
          "tpms": "TPMS", "union": "并集", "intersection": "交集",
          "difference": "差集 A−B", "smooth_union": "平滑融合", "smooth_difference": "平滑差集",
          "transform": "变换", "shell": "抽壳", "offset": "偏置", "mirror": "镜像",
-         "linear_pattern": "线性阵列", "circular_pattern": "圆周阵列"}
+         "linear_pattern": "线性阵列", "circular_pattern": "圆周阵列", "tpms_infill": "TPMS 填充"}
 REMOVED_OPERATIONS = {"extrude", "extrude_cut"}
 REMOVED_MESSAGE = "拉伸和切除操作已移除，当前保留抽壳；含这类节点的旧项目不再支持，请使用基本体和布尔差集重新建模"
 OPERATIONS = {"union", "intersection", "difference", "smooth_union", "smooth_difference"}
@@ -132,6 +132,8 @@ class SolidScene:
             kwargs.setdefault("dimensions", PRIMITIVE_DIMENSIONS[kind])
         if kind in OP_DEFAULTS:
             kwargs.setdefault("dimensions", OP_DEFAULTS[kind])
+        if kind == "tpms_infill":
+            kwargs.setdefault("tpms", TPMSParameters())
         node = SolidNode(id=f"n{index}", name=f"{KINDS[kind]} {index}", kind=kind, **kwargs)
         self.nodes.append(node)
         self.root = node.id
@@ -184,7 +186,7 @@ class SolidScene:
                     validate_operation(self, node)
             elif node.inputs:
                 raise ValueError("基本实体不能引用其他对象")
-            if node.kind == "tpms":
+            if node.kind in {"tpms", "tpms_infill"}:
                 if node.tpms is None:
                     raise ValueError("TPMS 对象缺少参数")
                 node.tpms.validate()
@@ -254,7 +256,7 @@ class SolidScene:
                 continue
             seen.add(current)
             node = self.by_id(current)
-            if node.kind == "tpms":
+            if node.kind in {"tpms", "tpms_infill"}:
                 return True
             pending.extend(node.inputs)
         return False

@@ -309,3 +309,71 @@ def test_mirror_linear_and_circular_patterns():
     c_scene.add('circular_pattern', inputs=(ccyl.id,), dimensions=(6, 360.0), operation={'axis': 'Z'})
     c_mesh = generate_solid(c_scene).mesh
     assert c_mesh.is_watertight and c_mesh.volume == pytest.approx(6 * math.pi * 4 * 8, rel=.03)
+
+
+def test_tpms_infill_validation_and_bounds():
+    scene = SolidScene(cell_size=.3)
+    cyl = scene.add('cylinder', dimensions=(10.0, 20.0), position=(12.0, -6.0, 4.0))
+    inf = scene.add('tpms_infill', inputs=(cyl.id,), dimensions=(8.0, 1.2, 0.5),
+                    operation={'openings': ['+Z', '-Z']}, tpms=TPMSParameters(thickness=1.2, samples_per_cell=20))
+    scene.validate()
+    b = scene.bounds()
+    assert np.allclose(b, [[2.0, -16.0, -4.8], [22.0, 4.0, 12.8]], atol=1e-6)
+
+    with pytest.raises(ValueError, match='单胞周期尺寸'):
+        bad = SolidScene.from_dict(scene.to_dict())
+        bad.nodes[-1] = replace(inf, dimensions=(0.0, 1.2, 0.5))
+        bad.validate()
+    with pytest.raises(ValueError, match='外蒙皮壁厚'):
+        bad = SolidScene.from_dict(scene.to_dict())
+        bad.nodes[-1] = replace(inf, dimensions=(8.0, 10.0, 0.5))
+        bad.validate()
+    with pytest.raises(ValueError, match='网格过粗'):
+        bad = SolidScene.from_dict(scene.to_dict())
+        bad.cell_size = 0.8
+        bad.validate()
+
+
+@native
+def test_tpms_infill_watertight_pure_and_sandwich_modes():
+    # Pure conformal infill automatically centers on shifted ellipsoid without manual sizing.
+    scene = SolidScene(cell_size=.3)
+    el = scene.add('ellipsoid', dimensions=(10.0, 7.0, 9.0), position=(10.0, -8.0, 4.0))
+    el_vol = generate_solid(SolidScene(cell_size=.3, nodes=list(scene.nodes), root=el.id)).mesh.volume
+    scene.add('tpms_infill', inputs=(el.id,), dimensions=(8.0, 0.0, 0.0),
+              tpms=TPMSParameters(surface='Gyroid', mode='sheet', thickness=1.4, samples_per_cell=20))
+    pure = generate_solid(scene).mesh
+    assert pure.is_watertight and 0 < pure.volume < el_vol
+    assert np.all(pure.bounds[0] >= np.array([0.0, -15.0, -5.0]) - 0.1)
+    assert np.all(pure.bounds[1] <= np.array([20.0, -1.0, 13.0]) + 0.1)
+
+    # Shifted frustum open-skin sandwich infill renders cleanly and watertight.
+    s_fr = SolidScene(cell_size=.3)
+    fr = s_fr.add('frustum', dimensions=(9.0, 5.0, 16.0), position=(10.0, -8.0, 4.0))
+    s_fr.add('tpms_infill', inputs=(fr.id,), dimensions=(8.0, 1.2, 0.5),
+             operation={'openings': ['+Z', '-Z']},
+             tpms=TPMSParameters(surface='Gyroid', mode='sheet', thickness=1.4, samples_per_cell=20))
+    fr_mesh = generate_solid(s_fr).mesh
+    assert fr_mesh.is_watertight and fr_mesh.volume > 0
+    assert np.allclose(fr_mesh.bounds, [[1.3, -16.7, -2.8], [18.7, 0.7, 10.8]], atol=0.15)
+
+    # Open-ended outer skin + smooth fillet join keeps exterior flush (no outward bulge).
+    s2 = SolidScene(cell_size=.3)
+    cy = s2.add('cylinder', dimensions=(10.0, 16.0))
+    open_shell_only = SolidScene(cell_size=.3, nodes=list(s2.nodes), root=cy.id)
+    sh = open_shell_only.add('shell', inputs=(cy.id,), dimensions=(1.2,), operation={'openings': ['+Z', '-Z']})
+    shell_vol = generate_solid(open_shell_only).mesh.volume
+    s2.add('tpms_infill', inputs=(cy.id,), dimensions=(8.0, 1.2, 0.6),
+           operation={'openings': ['+Z', '-Z']},
+           tpms=TPMSParameters(surface='Gyroid', mode='sheet', thickness=1.2, samples_per_cell=20))
+    sandwich = generate_solid(s2).mesh
+    assert sandwich.is_watertight and sandwich.volume > shell_vol
+    assert np.allclose(sandwich.bounds, [[-10.0, -10.0, -6.8], [10.0, 10.0, 6.8]], atol=0.1)
+
+    # Porosity calibration mode on tpms_infill calibrates unit cell directly.
+    s3 = SolidScene(cell_size=.3)
+    bx = s3.add('box', dimensions=(16.0, 16.0, 16.0))
+    s3.add('tpms_infill', inputs=(bx.id,), dimensions=(8.0, 0.0, 0.0),
+           tpms=TPMSParameters(surface='Primitive', mode='sheet', target_porosity=0.68, samples_per_cell=20))
+    por = generate_solid(s3).mesh
+    assert por.is_watertight and 0.15 * 16**3 < por.volume < 0.55 * 16**3

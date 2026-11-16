@@ -151,6 +151,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-106 | 近期 nTop 风格 Notebook 改进 | 26-11-16 10:37:00：槽位就地新建与匿名内嵌子块、章节分组注释与折叠、符号重命名同步、`I/V` 视口快捷键 | 已完成 |
 | R-107 | 通用特征工具与放开抽壳/偏置/平滑布尔限制 | 26-11-16 11:32:00：P0（偏置/平滑差集/镜像/线性与圆周阵列/多方向增强抽壳）、P1（一阶/归一化SDF放开抽壳与偏置）、P2（放开平滑融合/差集限制） | 已完成 |
 | R-108 | 默认启动切换为白天/亮色背景 | 26-11-16 11:43:00：Electron 窗口与首屏 `data-theme="light"`、`alabaster-light-v1` 配置迁移及端到端测试更新 | 已完成 |
+| R-109 | 一键 TPMS 填充节点 | 26-11-16 13:52:00：`tpms_infill` 复合节点，包围盒/单胞自动对齐、可选外蒙皮抽壳/平滑接壁与多方向开口 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -630,6 +631,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 实现：将 [desktop/src/main.jsx](desktop/src/main.jsx) 主题配置键从 `slate-blue-v1` 迁移至 `alabaster-light-v1` 并将默认回退主题设为 `light`（保留右上角切换按钮与后续用户手动选择记忆）；[desktop/index.html](desktop/index.html) 预设 `data-theme="light"`；[desktop/main.cjs](desktop/main.cjs) 的 `BrowserWindow` 初始 `backgroundColor` 同步改为 `#eef1f6`；[desktop/src/Viewport.jsx](desktop/src/Viewport.jsx) 初始 `light` 状态对齐传入 `theme` prop；更新 [desktop/tests/ui-smoke.cjs](desktop/tests/ui-smoke.cjs) 与 [desktop/tests/workflow-drag-ui.cjs](desktop/tests/workflow-drag-ui.cjs) 以默认 `light` 启动验证并保留明暗双主题切换测试。
 - 涉及文件：`desktop/index.html`、`desktop/main.cjs`、`desktop/src/main.jsx`、`desktop/src/Viewport.jsx`、`desktop/tests/ui-smoke.cjs`、`desktop/tests/workflow-drag-ui.cjs` 及实机测试更新的 `docs/*.png`。
 - 验证：`npx vite build` 通过；`npm test` `25/25` 通过；Electron UI 测试 `ui-smoke.cjs`、`workflow-drag-ui.cjs`、`ribbon-ui.cjs`、`features-ui.cjs` 全通过，零页面错误；视觉检查 [electron-tpms-light.png](docs/electron-tpms-light.png) 确认亮色背景与模型渲染正常。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
+### R-109：26-11-16 13:52:00（Asia/Shanghai），新增一键 `TPMS 填充` (`tpms_infill`) 复合节点
+
+- 需求与原因：此前在实体工作流中构造“外壳 + TPMS 内芯”或纯异形 TPMS 填充需手连 `TPMS`、`抽壳`、`交集` 与 `平滑融合` 多个节点，并手动对齐 TPMS 外形尺寸与坐标中心；用户希望提供单节点一键 TPMS 填充工具。
+- 实现：
+  - 在 [libfive_backend.py](libfive_backend.py) 提取共享 `tpms_material_tree`（支持外部传入空间中心 `center`、梯度归一化尺寸 `sizes`、物理周期 `periods` 与局部居中自定义公式），复用至内置 TPMS 与填充操作，避免重复梯度归一化逻辑。
+  - 在 [solid_operations.py](solid_operations.py) 与 [solid_model.py](solid_model.py) 注册一元特征节点 `tpms_infill`（默认 `dimensions=(8.0, 0.0, 0.0)` 对应 `单胞尺寸 / 外蒙皮壁厚 / 接壁平滑融合`）：纯填充直接与上游体求交；启用外蒙皮时自动生成向内抽壳 + 可选多方向开口截平面（复用 `_opening_planes` / `_apply_opening_bounds` / `_check_opposite_openings`），并通过将内芯嵌壁内缩后与外皮平滑融合再用外轮廓夹紧防止外壁鼓包，同时支持单胞孔隙率反求校准 `_infill_tpms_parameters` 与扇出上限 `<= 64` 保护。
+  - 在前端 [node_graph.mjs](desktop/src/node_graph.mjs)、[NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx)（自动隐藏手动尺寸/周期输入框，提供“保留外蒙皮外壳”开关与 `OpeningsGrid` 外壳开口面选择器）与 [main.jsx](desktop/src/main.jsx)（`操作 → 特征与阵列` 及 `TPMS 节点 → 加入实体工作流` Ribbon 入口）打通全流程与参数引用同步。
+- 涉及文件：`libfive_backend.py`、`solid_operations.py`、`solid_model.py`、`desktop/src/node_graph.mjs`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`test_solid_operations.py`、`desktop/tests/solid-operations.test.cjs`、`desktop/tests/features-ui.cjs`、`docs/electron-tpms-infill-light.png`（及测试刷新的 `docs/*.png`）。
+- 验证：Python 全套 6 个测试文件 `151 passed`（覆盖偏移椭球纯填充、偏移圆台开孔夹芯填充、柱体无鼓包平滑接壁与孔隙率反求校准）；`npm test` `26/26` 通过；Electron UI 测试 `operations-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`notebook-ntop-ui.cjs` 通过，随后调整 [NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx) 中 `外壳开口面` 网格排版后重新执行 `npx vite build` 与 `features-ui.cjs` 通过，并检查截图 [electron-tpms-infill-light.png](docs/electron-tpms-infill-light.png) 确认 UI 排版与柱体夹芯填充模型水密无误。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定

@@ -115,6 +115,40 @@ async function main() {
     await page.getByRole('button', { name: '生成工作流', exact: true }).click();
     await done('模型已生成');
     assert.match((await page.locator('.metrics').allTextContents()).join(' '), /封闭 \/ 水密/);
+
+    // 4. One-click TPMS Infill (`tpms_infill`) in daytime light theme with outer skin + open ends
+    const cleanProj = path.join(output, 'infill-clean.json');
+    await fs.writeFile(cleanProj, JSON.stringify({
+      type: 'tpms-electron', version: 1, mode: 'nodes', cfd: {},
+      parameters: {
+        surface: 'Gyroid', mode: 'sheet', size_x: 40, size_y: 40, size_z: 40,
+        cells_x: 2, cells_y: 2, cells_z: 2, thickness: 1.2, iso_level: 0, samples_per_cell: 32,
+        target_porosity: null, formula: '', gradient_enabled: false, gradient_axis: 'Z',
+        gradient_thickness_start: 1, gradient_thickness_end: 5, tubular_enabled: false, tubular_inner_radius: 10
+      },
+      scene: { version: 1, root: '', cell_size: 0.3, parameters: {}, value_nodes: [], nodes: [] }
+    }));
+    await app.evaluate(({ dialog }, f) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] }); }, cleanProj);
+    await page.getByRole('button', { name: '打开', exact: true }).click();
+    await done('项目已打开');
+    if (await page.locator('html').getAttribute('data-theme') !== 'light') {
+      await page.getByRole('button', { name: '切换亮色主题', exact: true }).click();
+    }
+    await page.getByRole('tab', { name: '建模', exact: true }).click();
+    await ribbon.getByRole('button', { name: '创建圆柱', exact: true }).click(); // n1
+    await editor('n1').getByLabel('半径', { exact: true }).fill('10');
+    await editor('n1').getByLabel('高度', { exact: true }).fill('18');
+    await page.getByRole('tab', { name: 'TPMS 节点', exact: true }).click();
+    await ribbon.getByRole('button', { name: 'TPMS 填充', exact: true }).click(); // n2
+    assert.equal(await editor('n2').getByLabel('单胞尺寸', { exact: true }).inputValue(), '8');
+    await editor('n2').getByLabel('保留外蒙皮外壳（向内抽壳 + 内芯填充）', { exact: true }).check();
+    assert.equal(await editor('n2').getByLabel('外蒙皮壁厚', { exact: true }).inputValue(), '1.2');
+    assert.equal(await editor('n2').getByLabel('接壁平滑融合', { exact: true }).inputValue(), '0.5');
+    assert.equal(await editor('n2').getByRole('group', { name: '外壳开口面' }).getByRole('button', { name: '+Z', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: '生成工作流', exact: true }).click();
+    await done('模型已生成');
+    assert.match((await page.locator('.metrics').allTextContents()).join(' '), /封闭 \/ 水密/);
+    await page.screenshot({ path: path.join(root, 'docs', 'electron-tpms-infill-light.png'), scale: 'css', style: '.statusbar [role="status"] { visibility:hidden; }' });
     assert.deepEqual(errors, []);
 
     console.log(JSON.stringify({
@@ -123,7 +157,8 @@ async function main() {
       checks: [
         'circular_pattern + smooth_difference flange',
         'offset + multi-opening outward shell on boolean result (no node errors)',
-        'TPMS + multi-opening tube shell + smooth_union watertight generation'
+        'TPMS + multi-opening tube shell + smooth_union watertight generation',
+        'one-click TPMS infill node (open outer skin + smooth core join) watertight in light theme'
       ],
       errors
     }, null, 2));

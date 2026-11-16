@@ -14,10 +14,11 @@ import { WorkflowDrag, SortHeading, SortHandle, SortButtons, ReferenceOutput, Re
 import { PRIMITIVES } from './primitive_catalog.mjs';
 import { useNodeState } from './ui_status.mjs';
 
-const OPERATION_KINDS = new Set(['shell', 'offset', 'mirror', 'linear_pattern', 'circular_pattern']);
+const OPERATION_KINDS = new Set(['shell', 'offset', 'mirror', 'linear_pattern', 'circular_pattern', 'tpms_infill']);
 const INLINE_CREATION_KINDS = [
   ...PRIMITIVES.map(p => ({ id: p.kind, name: p.name, group: '基本体' })),
   { id: 'tpms', name: 'TPMS', group: '场/结构' },
+  { id: 'tpms_infill', name: 'TPMS 填充', group: '操作' },
   { id: 'union', name: '并集', group: '布尔' },
   { id: 'intersection', name: '交集', group: '布尔' },
   { id: 'difference', name: '差集', group: '布尔' },
@@ -94,6 +95,7 @@ function cardSummaryText(n, isValue, scene) {
   if (n.kind === 'mirror') return `${n.operation?.axis || 'X'} 镜像${n.operation?.keep_original !== false ? ' · 对称' : ''}`;
   if (n.kind === 'linear_pattern') return `${n.dimensions?.[0] ?? 3}×${n.dimensions?.[1] ?? 1}×${n.dimensions?.[2] ?? 1} 阵列`;
   if (n.kind === 'circular_pattern') return `${n.operation?.axis || 'Z'}轴 ${n.dimensions?.[0] ?? 6} 份`;
+  if (n.kind === 'tpms_infill') return `${n.tpms?.surface || 'Gyroid'} · ${n.dimensions?.[0] ?? 8}mm${Number(n.dimensions?.[1] ?? 0) > 0 ? ` · 外皮 ${n.dimensions[1]}mm` : ' · 纯填充'}`;
   if (ARITY[n.kind]) {
     const names = (n.inputs || []).filter(Boolean).map(id => scene.nodes.find(x => x.id === id)?.name || id);
     return names.length ? names.join(n.kind === 'difference' || n.kind === 'smooth_difference' ? ' − ' : ' · ') : '未连接输入';
@@ -140,7 +142,12 @@ function Reference({ id, name, kind = 'body', onClick }) {
   return <DragSource id={id} type={kind} name={name} className={`reference-token reference-${kind}`} aria-label={`定位引用 ${name}`} onClick={onClick}><span>{kind === 'body' ? <Box size={14} aria-hidden="true" /> : kind === 'vector' ? <Move3D size={14} aria-hidden="true" /> : <Hash size={14} aria-hidden="true" />}{kind === 'body' ? '实体' : kind === 'vector' ? '向量' : '数值'}</span><strong>{name}</strong><ChevronRight size={14} aria-hidden="true" /></DragSource>;
 }
 
-function TPMSFields({ node, patch, currentParameters }) {
+function OpeningsGrid({ openings, onToggle, label = '多方向开口' }) {
+  return <div className="shell-openings-grid" role="group" aria-label={label}>{['+X', '-X', '+Y', '-Y', '+Z', '-Z'].map(face =>
+    <button type="button" key={face} aria-pressed={openings.includes(face)} onClick={() => onToggle(face)}>{face}</button>)}</div>;
+}
+
+function TPMSFields({ node, patch, currentParameters, infill = false }) {
   const p = node.tpms;
   function change(key, value) {
     const next = { ...p, [key]: value };
@@ -154,8 +161,10 @@ function TPMSFields({ node, patch, currentParameters }) {
   return <>
     <Choice label="曲面类型" value={p.surface} onChange={v => change('surface', v)} options={['Gyroid', 'Diamond', 'Primitive', 'I-WP', 'Neovius', 'Custom'].map(k => [k, k === 'Custom' ? '自定义公式' : k])} />
     {p.surface === 'Custom' && <label className="field"><span>隐式函数 f(x,y,z)</span><textarea aria-label="节点隐式函数" rows={3} value={p.formula} onChange={e => change('formula', e.target.value)} /><small>x/y/z 为 mm 坐标；沿用安全数学公式语法。</small></label>}
-    <div className="triple">{['x', 'y', 'z'].map(axis => field(`size_${axis}`, `${axis.toUpperCase()} 尺寸`))}</div>
-    {p.surface !== 'Custom' && <div className="triple">{['x', 'y', 'z'].map(axis => field(`cells_${axis}`, `${axis.toUpperCase()} 周期`, ''))}</div>}
+    {infill ? <p className="hint">外轮廓尺寸与空间位置自动匹配上游实体包围盒。</p> : <>
+      <div className="triple">{['x', 'y', 'z'].map(axis => field(`size_${axis}`, `${axis.toUpperCase()} 尺寸`))}</div>
+      {p.surface !== 'Custom' && <div className="triple">{['x', 'y', 'z'].map(axis => field(`cells_${axis}`, `${axis.toUpperCase()} 周期`, ''))}</div>}
+    </>}
     <Choice label="结构模式" value={p.mode} onChange={v => change('mode', v)} options={[[ 'sheet', '片层结构' ], [ 'solid', '实体结构' ]]} />
     <label className="toggle"><input type="checkbox" checked={p.target_porosity !== null} onChange={e => change('target_porosity', e.target.checked ? 0.7 : null)} /><span>按目标孔隙率反求参数</span></label>
     {p.target_porosity !== null ? field('target_porosity', '目标孔隙率', '0–1') : p.mode === 'sheet' ? !p.gradient_enabled && field('thickness', '壁厚') : field('iso_level', '等值面偏移', '')}
@@ -410,7 +419,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
               if (val === 'custom') patch(node.id, { operation: { ...op, opening: 'closed', openings: activeOpenings.length ? activeOpenings : ['+Z', '-Z'] } });
               else { const nextOp = { ...op, opening: val }; delete nextOp.openings; patch(node.id, { operation: nextOp }); }
             }} />
-            {hasMulti && <div className="shell-openings-grid" role="group" aria-label="多方向开口">{['+X','-X','+Y','-Y','+Z','-Z'].map(face => <button type="button" key={face} aria-pressed={activeOpenings.includes(face)} onClick={() => toggleFace(face)}>{face}</button>)}</div>}
+            {hasMulti && <OpeningsGrid openings={activeOpenings} onToggle={toggleFace} label="多方向开口" />}
             <p className="hint">支持向内、向外及对称等壁厚抽壳与多方向组合开口；支持所有基本体、圆锥/圆台/椭球、布尔组合与 TPMS。网格尺寸不超过壁厚的一半。</p>
           </>;
         })()}
@@ -434,6 +443,37 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
           <div className="double">{field('dimensions.0', '阵列数量', node.dimensions[0], '')}{field('dimensions.1', '总角度', node.dimensions[1], '°')}</div>
           <p className="hint">绕局部原点指定轴旋转复制；总角度 360° 时均匀铺满整圈，小于 360° 时按圆弧均匀分布。</p>
         </>}
+        {node.kind === 'tpms_infill' && (() => {
+          const expr = node.expressions || {};
+          const skinOn = Object.hasOwn(expr, 'dimensions.1') || Number(node.dimensions?.[1] ?? 0) > 0;
+          const infillOpenings = Array.isArray(node.operation?.openings) ? node.operation.openings : [];
+          const toggleInfillFace = face => {
+            const next = infillOpenings.includes(face) ? infillOpenings.filter(f => f !== face) : [...infillOpenings, face];
+            patch(node.id, { operation: { ...node.operation, openings: next } });
+          };
+          const toggleSkin = enabled => {
+            const nextExpr = { ...expr };
+            if (!enabled) { delete nextExpr['dimensions.1']; delete nextExpr['dimensions.2']; }
+            patch(node.id, {
+              dimensions: [node.dimensions[0], enabled ? 1.2 : 0, enabled ? 0.5 : 0],
+              operation: { ...node.operation, openings: enabled ? (infillOpenings.length ? infillOpenings : ['+Z', '-Z']) : [] },
+              expressions: nextExpr,
+            });
+          };
+          return <>
+            {field('dimensions.0', '单胞尺寸', node.dimensions[0])}
+            <label className="toggle"><input type="checkbox" checked={skinOn} onChange={e => toggleSkin(e.target.checked)} /><span>保留外蒙皮外壳（向内抽壳 + 内芯填充）</span></label>
+            {skinOn && <>
+              <div className="double">
+                {field('dimensions.1', '外蒙皮壁厚', node.dimensions[1])}
+                {field('dimensions.2', '接壁平滑融合', node.dimensions[2])}
+              </div>
+              <div className="field"><span>外壳开口面</span><span className="hint">不选则为全封闭夹芯</span></div>
+              <OpeningsGrid openings={infillOpenings} onToggle={toggleInfillFace} label="外壳开口面" />
+            </>}
+            {node.tpms && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} infill />}
+          </>;
+        })()}
       </section>
       <details key={node.id} className="editor-section editor-transforms" open={node.kind === 'transform' || undefined}><summary>位置与旋转</summary>{vectorSelector('position', '位置')}<div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`position.${i}`, `${axis} 位置`, node.position[i]))}</div>{vectorSelector('rotation', '旋转')}<div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`rotation.${i}`, `${axis} 旋转`, node.rotation[i], '°'))}</div></details>
     </article></fieldset>;

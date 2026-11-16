@@ -1,8 +1,12 @@
-"""Analytic feature operations (shell, offset, mirror, patterns) on implicit fields."""
+"""Analytic feature operations (shell, offset, mirror, patterns, tpms_infill) on implicit fields."""
+from dataclasses import replace
 from itertools import product
 import math
 
 import numpy as np
+
+from libfive_backend import tpms_material_tree
+from tpms_core import CUSTOM_SURFACE, _material_scalar_field
 
 OP_DEFAULTS = {
     'shell': (1.0,),
@@ -10,6 +14,7 @@ OP_DEFAULTS = {
     'mirror': (),
     'linear_pattern': (3.0, 1.0, 1.0, 16.0, 16.0, 16.0),
     'circular_pattern': (6.0, 360.0),
+    'tpms_infill': (8.0, 0.0, 0.0),
 }
 EXACT_SOURCES = {'sphere', 'box', 'cube', 'rounded_box', 'cylinder', 'rounded_cylinder', 'capsule', 'torus'}
 OPENINGS = {'closed', '+X', '-X', '+Y', '-Y', '+Z', '-Z'}
@@ -44,6 +49,29 @@ def _shell_config(options):
     else:
         openings = () if opening == 'closed' else (opening,)
     return direction, openings
+
+
+def _infill_openings(options):
+    if set(options) - {'openings'}:
+        raise ValueError('TPMS 填充设置无效')
+    raw_list = options.get('openings', ())
+    if not isinstance(raw_list, (list, tuple)) or any(not isinstance(item, str) or item not in OPENING_FACES for item in raw_list):
+        raise ValueError('TPMS 填充开口方向无效')
+    return tuple(dict.fromkeys(raw_list))
+
+
+def _infill_tpms_parameters(p, unit_size):
+    if p.target_porosity is None:
+        return p
+    unit_p = replace(
+        p, size_x=unit_size, size_y=unit_size, size_z=unit_size,
+        cells_x=1, cells_y=1, cells_z=1, tubular_enabled=False,
+    )
+    calibrated = _material_scalar_field(unit_p)[0]
+    return replace(
+        p, thickness=calibrated.thickness, iso_level=calibrated.iso_level,
+        target_porosity=None,
+    )
 
 
 def _exact_primitive(scene, start_id, seen=None):
@@ -83,6 +111,9 @@ def _tree_cost(scene, node_id, visiting=None):
     if node.kind == 'mirror':
         mult = 2 if node.operation.get('keep_original', True) else 1
         return min(256, mult * _tree_cost(scene, node.inputs[0], seen))
+    if node.kind == 'tpms_infill':
+        tpms_cost = 5 if (node.tpms and node.tpms.surface != CUSTOM_SURFACE) else 1
+        return min(256, _tree_cost(scene, node.inputs[0], seen) + tpms_cost)
     return min(256, sum(_tree_cost(scene, cid, seen) for cid in node.inputs))
 
 
@@ -171,6 +202,35 @@ def _fold_min(op, trees):
     return items[0]
 
 
+def _opening_planes(coords, bounds, openings, in_pad):
+    planes = []
+    for opening in openings:
+        axis = 'XYZ'.index(opening[1])
+        planes.append(
+            coords[axis] - (bounds[1, axis] - in_pad)
+            if opening[0] == '+'
+            else (bounds[0, axis] + in_pad) - coords[axis]
+        )
+    return planes
+
+
+def _apply_opening_bounds(bounds, orig_bounds, openings, in_pad):
+    for opening in openings:
+        axis = 'XYZ'.index(opening[1])
+        if opening[0] == '+':
+            bounds[1, axis] = orig_bounds[1, axis] - in_pad
+        else:
+            bounds[0, axis] = orig_bounds[0, axis] + in_pad
+    return bounds
+
+
+def _check_opposite_openings(src_bounds, openings, in_pad):
+    for axis in range(3):
+        letter = 'XYZ'[axis]
+        if f'+{letter}' in openings and f'-{letter}' in openings and src_bounds[1, axis] - src_bounds[0, axis] <= 2 * in_pad + 1e-6:
+            raise ValueError(f'{letter} 方向两端同时开口时，实体长度须大于双侧内退壁厚（{2 * in_pad:g} mm）')
+
+
 def validate_operation(scene, node):
     d, options = node.dimensions, node.operation
     if not isinstance(options, dict) or not all(isinstance(key, str) for key in options):
@@ -191,10 +251,39 @@ def validate_operation(scene, node):
         if scene.cell_size > wall / 2:
             raise ValueError(f'抽壳网格过粗：网格尺寸须不超过壁厚的一半（{wall / 2:g} mm）')
         src_bounds = scene.bounds(node.inputs[0])
-        for axis in range(3):
-            letter = 'XYZ'[axis]
-            if f'+{letter}' in openings and f'-{letter}' in openings and src_bounds[1, axis] - src_bounds[0, axis] <= 2 * in_pad + 1e-6:
-                raise ValueError(f'{letter} 方向两端同时开口时，实体长度须大于双侧内退壁厚（{2 * in_pad:g} mm）')
+        _check_opposite_openings(src_bounds, openings, in_pad)
+    elif node.kind == 'tpms_infill':
+        _check_finite_numbers(d, 3, node.name)
+        openings = _infill_openings(options)
+        if node.tpms is None:
+            raise ValueError('TPMS 填充节点缺少 TPMS 参数')
+        node.tpms.validate()
+        if node.tpms.tubular_enabled:
+            raise ValueError('实体组合暂不支持管状卷绕 TPMS')
+        if _tree_cost(scene, node.id) > 64:
+            raise ValueError('TPMS 填充嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级')
+        unit_size, skin_thickness, join_blend = float(d[0]), float(d[1]), float(d[2])
+        if unit_size <= 0 or unit_size > 1000:
+            raise ValueError('单胞周期尺寸须大于 0 且不超过 1000 mm')
+        if skin_thickness < 0 or skin_thickness > 200:
+            raise ValueError('外蒙皮壁厚须在 0–200 mm 之间')
+        if join_blend < 0 or join_blend > 50:
+            raise ValueError('接壁平滑宽度须在 0–50 mm 之间')
+        src_bounds = scene.bounds(node.inputs[0])
+        if skin_thickness > 0:
+            limit = _inward_thickness_limit(scene, node)
+            if skin_thickness >= limit:
+                raise ValueError(f'外蒙皮壁厚须小于 {limit:g} mm，否则内腔消失')
+            _check_opposite_openings(src_bounds, openings, skin_thickness)
+        eff_p = _infill_tpms_parameters(node.tpms, unit_size)
+        max_cell = unit_size / 8.0 if eff_p.surface != CUSTOM_SURFACE else float('inf')
+        if eff_p.mode == 'sheet':
+            thin = min(eff_p.gradient_thickness_start, eff_p.gradient_thickness_end) if eff_p.gradient_enabled else eff_p.thickness
+            max_cell = min(max_cell, thin / 2.0)
+        if skin_thickness > 0:
+            max_cell = min(max_cell, skin_thickness / 2.0)
+        if scene.cell_size > max_cell * (1 + 1e-6):
+            raise ValueError(f'TPMS 填充网格过粗（当前 {scene.cell_size:g} mm），请将输出网格尺寸设至不超过 {max_cell:g} mm')
     elif node.kind == 'offset':
         _check_finite_numbers(d, 1, node.name)
         if options:
@@ -251,12 +340,11 @@ def operation_bounds(scene, node, cache, rotation_matrix):
         orig_lo, orig_hi = bounds[0].copy(), bounds[1].copy()
         bounds[0] = orig_lo - (out_pad + slope_pad)
         bounds[1] = orig_hi + (out_pad + slope_pad)
-        for opening in openings:
-            axis = 'XYZ'.index(opening[1])
-            if opening[0] == '+':
-                bounds[1, axis] = orig_hi[axis] - in_pad
-            else:
-                bounds[0, axis] = orig_lo[axis] + in_pad
+        return _apply_opening_bounds(bounds, np.array([orig_lo, orig_hi]), openings, in_pad)
+    if node.kind == 'tpms_infill':
+        skin_thickness = float(d[1])
+        if skin_thickness > 0:
+            return _apply_opening_bounds(bounds.copy(), bounds, _infill_openings(options), skin_thickness)
         return bounds
     if node.kind == 'offset':
         distance = float(d[0])
@@ -313,11 +401,39 @@ def operation_tree(arena, scene, node, source, coords, rotation_matrix):
             in_pad = half
         if openings:
             bounds = scene.bounds(node.inputs[0])
-            for opening in openings:
-                axis = 'XYZ'.index(opening[1])
-                plane = coords[axis] - (bounds[1, axis] - in_pad) if opening[0] == '+' else (bounds[0, axis] + in_pad) - coords[axis]
+            for plane in _opening_planes(coords, bounds, openings, in_pad):
                 tree = op('max', tree, plane)
         return tree
+    if node.kind == 'tpms_infill':
+        unit_size, skin_thickness, join_blend = float(d[0]), float(d[1]), float(d[2])
+        openings = _infill_openings(options)
+        src_bounds = scene.bounds(node.inputs[0])
+        center = tuple(((src_bounds[0] + src_bounds[1]) * 0.5).tolist())
+        extent = tuple(np.maximum(src_bounds[1] - src_bounds[0], 1e-3).tolist())
+        eff_p = _infill_tpms_parameters(node.tpms, unit_size)
+        tpms_field = tpms_material_tree(
+            arena, eff_p, coords, center=center, sizes=extent,
+            periods=(unit_size, unit_size, unit_size),
+        )
+        if skin_thickness <= 0:
+            return op('max', tpms_field, source)
+        cap_planes = _opening_planes(coords, src_bounds, openings, skin_thickness) if openings else []
+        capped_source = source
+        for plane in cap_planes:
+            capped_source = op('max', capped_source, plane)
+        shell_tree = op('max', source, -source - skin_thickness)
+        for plane in cap_planes:
+            shell_tree = op('max', shell_tree, plane)
+        if join_blend <= 0:
+            core_tree = op('max', tpms_field, capped_source)
+            return op('min', shell_tree, core_tree)
+        core_clip = source + 0.35 * skin_thickness
+        for plane in cap_planes:
+            core_clip = op('max', core_clip, plane)
+        core_tree = op('max', tpms_field, core_clip)
+        h = op('max', join_blend - op('abs', shell_tree - core_tree), 0) / join_blend
+        joined = op('min', shell_tree, core_tree) - h ** 2 * (join_blend / 4)
+        return op('max', joined, capped_source)
     if node.kind == 'offset':
         return source - float(d[0])
     if node.kind == 'mirror':

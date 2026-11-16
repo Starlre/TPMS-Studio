@@ -522,7 +522,8 @@ function App() {
         { label: '偏置', icon: Expand, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('offset'), hint: '对基本体做等距膨胀或收缩' },
         { label: '镜像', icon: FlipHorizontal2, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('mirror'), hint: '沿坐标平面对称镜像复制或翻转' },
         { label: '线性阵列', icon: LayoutGrid, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('linear_pattern'), hint: '按 XYZ 数量与步距生成多份阵列' },
-        { label: '圆周阵列', icon: RefreshCw, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('circular_pattern'), hint: '绕 X/Y/Z 轴按数量与总角度圆周阵列' }
+        { label: '圆周阵列', icon: RefreshCw, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('circular_pattern'), hint: '绕 X/Y/Z 轴按数量与总角度圆周阵列' },
+        { label: 'TPMS 填充', icon: Waves, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('tpms_infill'), hint: '按选中实体外形一键填充 TPMS，可选保留外蒙皮与开口面' }
       ] }
     ] },
     { id: 'tpms', label: mode === 'nodes' ? 'TPMS 节点' : 'TPMS', workspaces:['nodes','tpms'], groups: [
@@ -533,7 +534,8 @@ function App() {
       ] },
       { label: '加入实体工作流', workspaces: ['nodes'], tools: [
         {label:'添加 TPMS',icon:Waves,disabled:noEntity,onClick:() => ribbonNode('tpms'),hint:'将当前 TPMS 参数复制为独立节点'},
-        {label:'添加隐式公式',icon:Variable,disabled:noEntity,onClick:() => ribbonNode('tpms',true)}
+        {label:'添加隐式公式',icon:Variable,disabled:noEntity,onClick:() => ribbonNode('tpms',true)},
+        {label:'TPMS 填充',icon:Waves,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('tpms_infill'),hint:'按选中实体外形一键填充 TPMS，可选保留外蒙皮与开口面'}
       ] }
     ] },
     { id: 'values', label: '参数与公式', workspaces: ['nodes'], groups: [

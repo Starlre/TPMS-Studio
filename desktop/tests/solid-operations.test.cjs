@@ -100,3 +100,33 @@ test('new P0 feature nodes expose valid defaults, arity and upstream validation'
   assert.match(graphErrors(heavySmooth)[hDiff.id], /扇出/);
   assert.ok(affectedNodes(scene, bad).has(bad.nodes[1].id));
 });
+
+test('tpms_infill exposes defaults, validation, fanout guard and dependency invalidation', async () => {
+  const { createNode, graphErrors, affectedNodes, ARITY } = await import('../src/node_graph.mjs');
+  assert.equal(ARITY.tpms_infill, 1);
+  const scene = { nodes: [], root: '' };
+  const cyl = createNode(scene, 'cylinder', {});
+  scene.nodes.push(cyl);
+  const infill = createNode(scene, 'tpms_infill', { surface: 'Gyroid', mode: 'sheet', thickness: 1.2, samples_per_cell: 32, tubular_enabled: true }, cyl.id);
+  scene.nodes.push(infill);
+  assert.deepEqual(infill.inputs, [cyl.id]);
+  assert.deepEqual(infill.dimensions, [8, 0, 0]);
+  assert.deepEqual(infill.operation, { openings: [] });
+  assert.equal(infill.tpms.tubular_enabled, false);
+  assert.deepEqual(graphErrors(scene), {});
+
+  const badUnit = structuredClone(scene);
+  badUnit.nodes[1].dimensions[0] = 0;
+  assert.match(graphErrors(badUnit)[infill.id], /单胞周期尺寸/);
+  assert.ok(affectedNodes(scene, badUnit).has(infill.id));
+
+  const badSkin = structuredClone(scene);
+  badSkin.nodes[1].dimensions[1] = 250;
+  assert.match(graphErrors(badSkin)[infill.id], /外蒙皮壁厚/);
+
+  const heavy = { nodes: [cyl] };
+  const pat = createNode(heavy, 'circular_pattern', {}, cyl.id); pat.dimensions = [60, 360]; heavy.nodes.push(pat);
+  const hInfill = createNode(heavy, 'tpms_infill', { surface: 'Gyroid', mode: 'sheet', thickness: 1.2 }, pat.id);
+  heavy.nodes.push(hInfill);
+  assert.match(graphErrors(heavy)[hInfill.id], /扇出/);
+});

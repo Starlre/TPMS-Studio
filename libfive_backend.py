@@ -229,40 +229,59 @@ def _formula_tree(node: ast.AST, arena: _TreeArena, values) -> _Tree:
     raise ValueError("公式包含不支持的语法")
 
 
-def _field_tree(arena: _TreeArena, p: TPMSParameters) -> _Tree:
-    coords = [arena.op(f"var-{axis}") for axis in ("x", "y", "z")]
-    sizes = (p.size_x, p.size_y, p.size_z)
+def tpms_material_tree(
+    arena: _TreeArena,
+    p: TPMSParameters,
+    coords=None,
+    *,
+    center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    sizes: tuple[float, float, float] | None = None,
+    periods: tuple[float, float, float] | None = None,
+) -> _Tree:
+    coords = list(coords) if coords is not None else [arena.op(f"var-{axis}") for axis in ("x", "y", "z")]
+    eff_sizes = tuple(float(v) for v in (sizes if sizes is not None else (p.size_x, p.size_y, p.size_z)))
     cells = (p.cells_x, p.cells_y, p.cells_z)
-    phases = [2 * math.pi * count * (coord / size + 0.5)
-              for coord, size, count in zip(coords, sizes, cells)]
+    if periods is None:
+        eff_periods = tuple(size / count for size, count in zip(eff_sizes, cells))
+        phases = [2 * math.pi * count * ((coord - c) / size + 0.5)
+                  for coord, c, size, count in zip(coords, center, eff_sizes, cells)]
+    else:
+        eff_periods = tuple(float(v) for v in periods)
+        phases = [2 * math.pi * ((coord - c) / period)
+                  for coord, c, period in zip(coords, center, eff_periods)]
     aliases = _builtins(arena, *phases)
     if p.surface == CUSTOM_SURFACE:
+        local_coords = [coord - c for coord, c in zip(coords, center)]
         field = _formula_tree(_parse_formula(p.formula), arena, {
-            **dict(zip(("x", "y", "z"), coords)), "pi": math.pi, **aliases})
+            **dict(zip(("x", "y", "z"), local_coords)), "pi": math.pi, **aliases})
     else:
         field = aliases[p.surface.lower().replace("-", "_")]
     if p.mode == "solid" and p.surface == CUSTOM_SURFACE:
-        material = p.iso_level - field
-    else:
-        # Central-difference gradient normalization preserves the zero set and
-        # converts built-in periodic fields (sheet & solid) to approximate mm units.
-        gradients = []
-        for axis, (size, count) in enumerate(zip(sizes, cells)):
-            step = size / (count * p.samples_per_cell)
-            plus, minus = list(coords), list(coords)
-            plus[axis], minus[axis] = coords[axis] + step, coords[axis] - step
-            gradients.append((field.remap(plus) - field.remap(minus)) / (2 * step))
-        norm = arena.op("max", arena.op("sqrt", sum(g ** 2 for g in gradients)), 0.05)
-        if p.mode == "solid":
-            material = (p.iso_level - field) / norm
-        else:
-            thickness = p.thickness
-            if p.gradient_enabled:
-                index = "XYZ".index(p.gradient_axis)
-                u = arena.op("min", 1, arena.op("max", 0, coords[index] / sizes[index] + 0.5))
-                thickness = p.gradient_thickness_start + (
-                    p.gradient_thickness_end - p.gradient_thickness_start) * u
-            material = arena.op("abs", field) / norm - 0.5 * thickness
+        return p.iso_level - field
+    # Central-difference gradient normalization preserves the zero set and
+    # converts built-in periodic fields (sheet & solid) to approximate mm units.
+    gradients = []
+    for axis, period in enumerate(eff_periods):
+        step = period / p.samples_per_cell
+        plus, minus = list(coords), list(coords)
+        plus[axis], minus[axis] = coords[axis] + step, coords[axis] - step
+        gradients.append((field.remap(plus) - field.remap(minus)) / (2 * step))
+    norm = arena.op("max", arena.op("sqrt", sum(g ** 2 for g in gradients)), 0.05)
+    if p.mode == "solid":
+        return (p.iso_level - field) / norm
+    thickness = p.thickness
+    if p.gradient_enabled:
+        index = "XYZ".index(p.gradient_axis)
+        u = arena.op("min", 1, arena.op("max", 0, (coords[index] - center[index]) / eff_sizes[index] + 0.5))
+        thickness = p.gradient_thickness_start + (
+            p.gradient_thickness_end - p.gradient_thickness_start) * u
+    return arena.op("abs", field) / norm - 0.5 * thickness
+
+
+def _field_tree(arena: _TreeArena, p: TPMSParameters) -> _Tree:
+    coords = [arena.op(f"var-{axis}") for axis in ("x", "y", "z")]
+    sizes = (p.size_x, p.size_y, p.size_z)
+    material = tpms_material_tree(arena, p, coords)
     q = [arena.op("abs", coord) - size / 2 for coord, size in zip(coords, sizes)]
     box = arena.op("sqrt", sum(arena.op("max", v, 0) ** 2 for v in q)) + arena.op(
         "min", arena.op("max", q[0], arena.op("max", q[1], q[2])), 0)

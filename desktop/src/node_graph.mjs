@@ -2,13 +2,13 @@
 import { PRIMITIVES } from './primitive_catalog.mjs';
 export const NODE_KINDS = { sphere: '球体', box: '长方体', cylinder: '圆柱', torus: '圆环', tpms: 'TPMS',
   union: '并集', intersection: '交集', difference: '差集 A−B', smooth_union: '平滑融合', smooth_difference: '平滑差集',
-  transform: '变换', shell: '抽壳', offset: '偏置', mirror: '镜像', linear_pattern: '线性阵列', circular_pattern: '圆周阵列' };
+  transform: '变换', shell: '抽壳', offset: '偏置', mirror: '镜像', linear_pattern: '线性阵列', circular_pattern: '圆周阵列', tpms_infill: 'TPMS 填充' };
 export const ARITY = { union: 2, intersection: 2, difference: 2, smooth_union: 2, smooth_difference: 2,
-  transform: 1, shell: 1, offset: 1, mirror: 1, linear_pattern: 1, circular_pattern: 1 };
+  transform: 1, shell: 1, offset: 1, mirror: 1, linear_pattern: 1, circular_pattern: 1, tpms_infill: 1 };
 export const APPROXIMATE_PRIMITIVES = new Set(['cone','frustum','ellipsoid']);
 export const EXACT_SDF_PRIMITIVES = new Set(['sphere','box','cube','rounded_box','cylinder','rounded_cylinder','capsule','torus']);
 export const DIMENSIONS = { sphere: [8], box: [16, 16, 16], cylinder: [6, 24], torus: [10, 3], tpms: [],
-  shell: [1], offset: [1], mirror: [], linear_pattern: [3, 1, 1, 16, 16, 16], circular_pattern: [6, 360] };
+  shell: [1], offset: [1], mirror: [], linear_pattern: [3, 1, 1, 16, 16, 16], circular_pattern: [6, 360], tpms_infill: [8, 0, 0] };
 for (const item of PRIMITIVES) { NODE_KINDS[item.kind] = item.name; DIMENSIONS[item.kind] = item.dimensions; }
 
 function treeCost(nodes, nodeId, visiting = new Set()) {
@@ -27,6 +27,9 @@ function treeCost(nodes, nodeId, visiting = new Set()) {
   } else if (n.kind === 'mirror') {
     const mult = n.operation?.keep_original !== false ? 2 : 1;
     cost = Math.min(256, mult * treeCost(nodes, n.inputs[0], visiting));
+  } else if (n.kind === 'tpms_infill') {
+    const tpmsCost = n.tpms?.surface !== 'Custom' ? 5 : 1;
+    cost = Math.min(256, treeCost(nodes, n.inputs[0], visiting) + tpmsCost);
   } else {
     cost = Math.min(256, n.inputs.reduce((sum, cid) => sum + treeCost(nodes, cid, visiting), 0));
   }
@@ -81,6 +84,13 @@ export function graphErrors(scene) {
       const d = n.dimensions || [], expr = n.expressions || {};
       if (!Object.hasOwn(expr, 'dimensions.0') && (!Number.isInteger(d[0]) || d[0] < 1 || d[0] > 64)) errors[n.id] = '圆周阵列数量须为 1–64 的整数';
       else if (!Object.hasOwn(expr, 'dimensions.1') && (!Number.isFinite(d[1]) || Math.abs(d[1]) <= 0 || Math.abs(d[1]) > 360)) errors[n.id] = '圆周阵列总角度须在 (0, 360°] 范围内';
+    } else if (n.kind === 'tpms_infill') {
+      const d = n.dimensions || [], expr = n.expressions || {};
+      if (treeCost(scene.nodes, n.id) > 64) errors[n.id] = 'TPMS 填充嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级';
+      else if (!n.tpms) errors[n.id] = 'TPMS 填充节点缺少 TPMS 参数';
+      else if (!Object.hasOwn(expr, 'dimensions.0') && (!Number.isFinite(d[0]) || d[0] <= 0 || d[0] > 1000)) errors[n.id] = '单胞周期尺寸须大于 0 且不超过 1000 mm';
+      else if (!Object.hasOwn(expr, 'dimensions.1') && (!Number.isFinite(d[1]) || d[1] < 0 || d[1] > 200)) errors[n.id] = '外蒙皮壁厚须在 0–200 mm 之间';
+      else if (!Object.hasOwn(expr, 'dimensions.2') && (!Number.isFinite(d[2]) || d[2] < 0 || d[2] > 50)) errors[n.id] = '接壁平滑宽度须在 0–50 mm 之间';
     }
   }
   return errors;
@@ -108,11 +118,12 @@ export function createNode(scene, kind, parameters, selected) {
     : kind === 'mirror' ? { operation: { axis: 'X', keep_original: true } }
     : kind === 'linear_pattern' ? { operation: { centered: false } }
     : kind === 'circular_pattern' ? { operation: { axis: 'Z' } }
+    : kind === 'tpms_infill' ? { operation: { openings: [] } }
     : {};
   return { id: `n${index}`, name: `${NODE_KINDS[kind]} ${index}`, kind,
     dimensions: [...(DIMENSIONS[kind] || [])], position: [0, 0, 0], rotation: [0, 0, 0],
     inputs: ARITY[kind] === 2 ? [first?.id || '', other?.id || ''] : ARITY[kind] === 1 ? [first?.id || ''] : [],
-    blend: 2, tpms: kind === 'tpms' ? { ...parameters, tubular_enabled: false } : null, expressions: {},
+    blend: 2, tpms: (kind === 'tpms' || kind === 'tpms_infill') ? { ...parameters, tubular_enabled: false } : null, expressions: {},
     ...opDefaults };
 }
 
