@@ -423,8 +423,12 @@ def operation_tree(arena, scene, node, source, coords, rotation_matrix):
             periods=(unit_size, unit_size, unit_size),
         )
         if skin_thickness <= 0:
-            # Micro-fillet intersection relieves grazing Dual Contouring pinch seams cleanly.
-            k_crop = max(1e-3, min(0.35, unit_size * 0.05))
+            # Resolve crop fillet over ~3.5 voxels to prevent sub-voxel QEF sawtooth edges.
+            thin = unit_size
+            if eff_p.mode == 'sheet':
+                sheet_t = min(eff_p.gradient_thickness_start, eff_p.gradient_thickness_end) if eff_p.gradient_enabled else eff_p.thickness
+                thin = min(thin, sheet_t)
+            k_crop = max(1e-3, min(max(scene.cell_size * 3.5, 0.35), thin * 0.9, unit_size * 0.18))
             return _smooth_join(op, tpms_field, source, k_crop, 'max')
         cap_planes = _opening_planes(coords, src_bounds, openings, skin_thickness) if openings else []
         capped_source = source

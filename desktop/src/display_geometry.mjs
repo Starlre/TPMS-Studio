@@ -4,10 +4,9 @@ export const IMPLICIT_SURFACES = ['Gyroid', 'Diamond', 'Primitive', 'I-WP', 'Neo
 export const supportsImplicitPreview = parameters => !!parameters &&
   IMPLICIT_SURFACES.includes(parameters.surface) && !parameters.tubular_enabled;
 
-// Smooth by corner angle, splitting only vertices whose incident faces cross a
-// crease. Use source indices, never a coordinate weld: nearby thin walls stay
-// separate. Positions and triangle winding remain exactly as generated.
-export function createDisplayGeometry(source, creaseAngle = Math.PI / 6) {
+// Smooth by corner angle (45 deg keeps CAD 60/90 deg rims crisp while smoothing
+// Dual Contouring curved seam transitions), without welding coordinates.
+export function createDisplayGeometry(source, creaseAngle = Math.PI / 4) {
   if (!source.index) throw new Error('Display geometry requires indexed triangles');
   const positions = source.getAttribute('position'), indices = source.index.array;
   const vertices = positions.count, faces = indices.length / 3;

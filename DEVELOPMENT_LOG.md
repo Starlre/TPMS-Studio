@@ -153,6 +153,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-108 | 默认启动切换为白天/亮色背景 | 26-11-16 11:43:00：Electron 窗口与首屏 `data-theme="light"`、`alabaster-light-v1` 配置迁移及端到端测试更新 | 已完成 |
 | R-109 | 一键 TPMS 填充节点 | 26-11-16 13:52:00：`tpms_infill` 复合节点，包围盒/单胞自动对齐、可选外蒙皮抽壳/平滑接壁与多方向开口 | 已完成 |
 | R-110 | 修复填充破面、碎角碎片与 Z-fighting 预览重影 | 26-11-16 14:34:00：边界微倒圆裁剪、`libfive` 捏合棱拓扑拆分、小碎块清理与自动隐藏被填充上游实体 | 已完成 |
+| R-111 | 优化 TPMS 填充边缘锯齿与曲面法线粗糙度 | 26-11-16 15:04:00：体素自适应 `k_crop = 3.5*cell_size` 消除亚体素 QEF 锯齿，视口法线折痕阈值调至 `45°` | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -654,6 +655,16 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - 在 [desktop/src/main.jsx](desktop/src/main.jsx) 新增 `tpms_infill` 上游被消费实体的自动隐藏逻辑（用户仍可在卡片或视口随时手动重新点亮对比），并在 [desktop/src/Viewport.jsx](desktop/src/Viewport.jsx) 为布局网格启用 `polygonOffset` 深度防闪。
 - 涉及文件：`libfive_backend.py`、`solid_operations.py`、`desktop/src/Viewport.jsx`、`desktop/src/main.jsx`、`test_libfive_backend.py`、`test_solid_operations.py`、`desktop/tests/features-ui.cjs`（及实机测试更新的 `docs/*.png`）。
 - 验证：Python 全套 6 个测试文件 `152 passed`（新增默认圆柱/球体/长方体纯填充水密与 `body_count == 1` 无悬浮角块回归，及捏合棱拆解/真开孔不掩盖单测）；前端 `npx vite build` 通过；`npm test` `26/26` 通过；Electron UI 全部 7 项端到端测试（`features-ui.cjs`、`operations-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`notebook-ntop-ui.cjs`）全通过，零页面错误；视觉检查确认长方体布局与生成成品无 Z-fighting 与悬浮碎角。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
+### R-111：26-11-16 15:04:00（Asia/Shanghai），消除 TPMS 填充边界亚体素锯齿与法线粗糙度
+
+- 需求与原因：用户截图反馈默认 `球体 1 (R=8) + TPMS 填充 2`（`0.3 mm` 标准精度）放大后交界线呈现明显的锯齿与硬暗斑。实测定量诊断定位到两点原因：① 原 `k_crop = 0.35 mm`（实际倒圆半径仅 `0.0875 mm`）小于 `0.3 mm` 单个体素，触发 Dual Contouring QEF 亚体素走样，交界棱长最长达 `1.036 mm`、99% 分位二面角高达 `61.2°`、且产生 `r_max = 8.0351 mm` 的外冲尖刺；② 前端 `createDisplayGeometry` 原 `30°` 折痕阈值将曲面交界处 `30°–44°` 网格曲率过渡拆为锐利三角阴影面，在放大视角下突出锯齿感。
+- 实现：
+  - 在 [solid_operations.py](solid_operations.py) 将纯填充 `k_crop` 升级为体素自适应平滑过渡：`k_crop = max(1e-3, min(max(scene.cell_size * 3.5, 0.35), thin * 0.9, unit_size * 0.18))`（标准 `0.3 mm` 时为 `1.05 mm`、精细 `0.15 mm` 时自动收敛至 `0.525 mm`），将默认球体交界最大边长压半至 `0.479 mm`、消除外冲（`r_max = 7.9661`）、99% 分位二面角降至 `43.7°`。
+  - 在 [desktop/src/display_geometry.mjs](desktop/src/display_geometry.mjs) 将 `createDisplayGeometry` 默认折痕阈值由 `Math.PI / 6`（`30°`）调整为 `Math.PI / 4`（`45°`），完整保留长方体/圆柱端盖等 `60°/90°` 工业硬边，同时柔化曲面交界像素级折痕阴影。
+- 涉及文件：`solid_operations.py`、`desktop/src/display_geometry.mjs` 及实机测试更新的 `docs/*.png`。
+- 验证：Python 全套 6 个测试文件 `152 passed`；`npx vite build` 通过；`npm test` `26/26` 通过；Electron UI 全部 8 项测试（`edge-quality-ui.cjs`、`features-ui.cjs`、`operations-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`notebook-ntop-ui.cjs`）全通过；放大视角实机对比确认 `0.3 mm` 锯齿显著收敛、切换 `0.15 mm`（`精细`）后达到光滑曲面效果。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定
