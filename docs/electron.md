@@ -1,6 +1,6 @@
 # Electron 工程工作台
 
-TPMS Studio 的默认桌面界面使用 Electron、React 和 Three.js。界面负责交互和视图，独立 Python 计算进程复用 TPMS、libfive 和 Gmsh 内核。本文描述当前版本；原 Qt 界面保留为兼容入口。
+TPMS Studio 的桌面界面统一使用 Electron、React 和 Three.js。界面负责交互和视图，独立 Python 计算进程复用 TPMS、libfive 和 Gmsh 内核（原 PyQt5 界面已移除）。
 
 ![当前 Electron 工作台：深灰蓝圆角面板与亮天蓝模型](electron-tpms-dark.png)
 
@@ -17,7 +17,7 @@ python launch_desktop.py
 
 Windows 可双击 `run_tpms.bat` / `启动Electron.cmd`。启动器首次安装界面依赖并构建，后续在源码变化时重新构建；首次安装需要网络。libfive 配置见 [原生内核说明](libfive.md)，没有该库时普通 TPMS 连续场建模仍可使用，实体工作区会提示依赖缺失。
 
-旧 Qt 入口为 `python app.py` / `run_qt.bat`。当前没有包含 Python、Node.js 与原生库的独立安装包。
+当前没有包含 Python、Node.js 与原生库的独立安装包。
 
 ## 工作区与布局
 

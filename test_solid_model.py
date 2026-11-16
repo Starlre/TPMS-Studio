@@ -185,65 +185,11 @@ def test_empty_difference_and_low_resolution_rejected():
         generate_solid(scene)
 
 
-def test_qt_editor_operations_and_serialization(tmp_path, monkeypatch):
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt5.QtWidgets import QApplication
-    from app import MainWindow
-    application = QApplication.instance() or QApplication([])
-    window = MainWindow()
-    window.modeling_mode.setCurrentIndex(1)
-    panel = window.solid_panel
-    assert window.generate_button.text() == "生成实体"
-    assert not window.parameter_tabs.isVisible()
-    panel.kind_combo.setCurrentIndex(0)
-    panel.add_object()
-    panel.position_fields[0].setValue(7)
-    assert panel.apply_properties()
-    assert panel.scene.nodes[0].position == (7, 0, 0)
-    panel.kind_combo.setCurrentIndex(2)
-    panel.add_object()
-    panel.combine_a.setCurrentIndex(0)
-    panel.combine_b.setCurrentIndex(1)
-    panel.operation_combo.setCurrentIndex(2)
-    panel.combine()
-    assert panel.scene.by_id(panel.scene.root).kind == "difference"
-    panel.snapshot().save(tmp_path / "ui-model.json")
-    panel.scene = SolidScene.load(tmp_path / "ui-model.json")
-    panel.refresh()
-    assert panel.objects.count() == 3
-    # Cycle editor rolls back and leaves a useful inline error.
-    panel.input_a.setCurrentIndex(panel.input_a.findData(panel.scene.nodes[0].id))
-    panel.input_b.setCurrentIndex(panel.input_b.findData(panel.scene.nodes[0].id))
-    assert not panel.apply_properties()
-    assert "两个不同" in panel.message.text()
-    assert panel.scene.nodes[-1].inputs == ("n1", "n2")
-    window.close()
-    application.processEvents()
-
-
 @native
-def test_qt_solid_result_fits_translated_mesh_and_restores_tpms():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt5.QtWidgets import QApplication
-    from app import MainWindow
-    from tpms_core import generate_tpms, TPMSParameters, simplify_mesh_for_preview
-    application = QApplication.instance() or QApplication([])
+def test_solid_result_preserves_translated_bounds():
     scene = SolidScene(cell_size=0.5)
     scene.add("sphere", dimensions=(4,), position=(100, 20, -30))
     result = generate_solid(scene)
-    window = MainWindow()
-    window._solid_finished(result)
-    assert np.allclose(window.current_preview.vertices.min(axis=0) + window.current_preview.vertices.max(axis=0), 0, atol=0.01)
-    assert np.allclose(window.current_result.mesh.bounds.mean(axis=0), [100, 20, -30], atol=0.01)
-    window._invalidate_region_preview()
-    assert not window.region_action.isEnabled()
-    tpms = generate_tpms(TPMSParameters(samples_per_cell=12))
-    window._generation_finished(tpms, simplify_mesh_for_preview(tpms.mesh, 100000))
-    assert window.current_solid_result is None
-    assert window.export_backend_combo.isEnabled()
-    assert window.cfd_export_action.isEnabled()
-    assert window.region_action.isEnabled()
-    window.close()
-    application.processEvents()
+    assert result.mesh.is_watertight
+    assert np.allclose(result.mesh.bounds.mean(axis=0), [100, 20, -30], atol=0.01)
+

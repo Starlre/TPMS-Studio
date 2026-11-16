@@ -148,7 +148,7 @@ X 位置：radius * 3
 - 网格导入转隐式、Voronoi 点阵、体网格节点及 STEP/B-Rep 输出尚未加入。节点工作流不等于已经支持截图中 nTop 的所有功能块。
 - 组合输出暂不支持 CFD/COMSOL，管状卷绕 TPMS 不支持进入实体图；平滑融合只支持基本体及其组合。
 - 空间中的细孔和薄壁仍受 libfive 网格尺寸影响，需要精度收敛检查。错误保留上次模型；取消计算清空后端结果，需要重新生成。
-- 使用 Electron 工作台编辑含表达式与变换节点的项目；Qt 兼容版本没有新增的节点编辑界面。
+- 节点建模与表达式编辑在当前 Electron 工作台统一提供。
 
 实现：`desktop/src/NodeWorkflow.jsx`、`ValueBlocks.jsx`、`WorkflowDrag.jsx`、`workflow_drag.mjs`、`node_graph.mjs`、`parametric.py`、`workflow_values.py`、`workflow_engine.py`、`solid_model.py` 和 `electron_backend.py`。
 

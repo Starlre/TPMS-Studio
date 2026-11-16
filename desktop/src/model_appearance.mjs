@@ -48,7 +48,7 @@ export const OVERLAY_COLORS = Object.freeze({
 });
 
 // The implicit preview uses its own shading, so reproduce the blue surface and
-// broad specular highlights here without changing the shared Qt ray marcher.
+// broad specular highlights here without changing the shared GLSL ray marcher.
 export function styleImplicitSurface(source) {
   const rgb = color => [1, 3, 5].map(index => (parseInt(color.slice(index, index + 2), 16) / 255).toFixed(6)).join(', ');
   return source.replace(

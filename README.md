@@ -46,7 +46,7 @@ TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模�
 | CFD 网格 | 普通 TPMS 的流体域提取、入口/出口/壁面分组、四面体与棱柱边界层、局部加密 |
 | 质量诊断 | 缩放雅可比统计与直方图、低质量单元定位、VTU 质量场导出 |
 
-普通 TPMS 可用连续场 Marching Cubes 或可选 libfive 自适应提取；实体节点工作流使用 libfive。Electron + React 提供界面，Three.js/WebGL2 处理预览，独立 Python 进程负责计算。原 Qt 界面保留为兼容入口。
+普通 TPMS 可用连续场 Marching Cubes 或可选 libfive 自适应提取；实体节点工作流使用 libfive。Electron + React 提供界面，Three.js/WebGL2 处理预览，独立 Python 进程负责计算。
 
 ## 工程工作台
 
@@ -113,7 +113,7 @@ python -m pip install -r requirements.txt
 python launch_desktop.py
 ```
 
-启动器首次安装界面依赖并构建，首次安装需要网络。Windows 也可双击 `run_tpms.bat` 或 `启动Electron.cmd`；旧 Qt 界面使用 `python app.py` 或 `run_qt.bat`。
+启动器首次安装界面依赖并构建，首次安装需要网络。Windows 也可双击 `run_tpms.bat` 或 `启动Electron.cmd`。
 
 **要运行实体建模与画廊项目，需先配置 libfive 原生库。** TPMS 连续场建模可在没有 libfive 时运行。安装、官方源码版本和许可见 [libfive 指南](docs/libfive.md)。
 

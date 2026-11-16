@@ -6,6 +6,8 @@
 
 ### 项目维护
 
+- `[26-11-16 16:07]` 移除旧版 PyQt5 桌面路线，统一保留 Electron + React + Three.js 桌面工作台：删除 `app.py`、`solid_panel.py`、`run_qt.bat`、Qt 验收脚本及旧 Qt 截图，从 `requirements.txt` 移除 `PyQt5` 依赖，清理测试与文档中的 Qt 兼容入口说明（继续兼容打开历史项目 JSON）。记录 R-112。
+
 - 明确 GitHub Linguist 对 Python、JavaScript/JSX、CSS、HTML 与构建脚本的语言识别，将前端源码和测试标为手写源码，排除依赖、参考仓库和网页/桌面编译产物，避免语言占比受打包文件影响。记录 R-094。
 
 - 清理 16 张未被当前文档或代码引用的旧截图，以及缓存、历史测试输出和同步临时文件；保留现用截图、运行依赖、模型示例和网页部署资源。记录 R-093。

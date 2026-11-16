@@ -138,66 +138,6 @@ def test_export_all_formats_follow_quality(tmp_path):
             assert path.stat().st_size > 0
 
 
-def test_export_quality_ui_defaults_headless():
-    """左侧不再占用建模区，顶部下拉可在 offscreen 初始化并切换质量更新目标面数"""
-    try:
-        import os
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        from PyQt5.QtWidgets import QApplication
-        from PyQt5.QtCore import Qt
-        QApplication.setAttribute(Qt.AA_UseSoftwareOpenGL, True)
-        app = QApplication.instance()
-        if app is None:
-            import sys
-            app = QApplication(sys.argv)
-        from app import MainWindow
-        w = MainWindow()
-        # 1. 左侧不再创建旧 group
-        assert not hasattr(w, 'export_quality_group'), "左侧不应再有 export_quality_group"
-        # 2. 顶部导出控件存在
-        assert hasattr(w, 'export_tool_button'), "顶部应有 export_tool_button"
-        assert hasattr(w, 'export_menu'), "顶部应有 export_menu"
-        assert hasattr(w, 'export_target_spin'), "下拉中应有 export_target_spin"
-        assert hasattr(w, 'export_quality_info'), "下拉中应有状态标签"
-        # 检查菜单包含 4 个质量选项
-        assert hasattr(w, '_export_quality_actions')
-        assert set(w._export_quality_actions.keys()) == {EXPORT_QUALITY_ORIGINAL, EXPORT_QUALITY_HIGH, EXPORT_QUALITY_MEDIUM, EXPORT_QUALITY_LOW}
-        # 3. 默认原始精度，目标禁用
-        # 检查当前选中为原始
-        checked = [q for q, a in w._export_quality_actions.items() if a.isChecked()]
-        assert checked == [EXPORT_QUALITY_ORIGINAL]
-        assert w.export_target_spin.isEnabled() is False
-        assert "原始" in w.export_quality_info.text()
-        # 4. 生成模型后切换高精度会更新目标面数
-        result = _small_result()
-        w.current_result = result
-        w._update_export_quality_defaults()
-        # 切换到高精度
-        w._on_export_quality_selected(EXPORT_QUALITY_HIGH)
-        assert w.export_target_spin.isEnabled() is True
-        expected = get_default_target_faces(len(result.mesh.faces), EXPORT_QUALITY_HIGH)
-        assert w.export_target_spin.value() == expected
-        assert "目标" in w.export_quality_info.text()
-        # 5. 工具栏主按钮点击仍按当前选择导出（通过 _get_export_quality_and_target 验证）
-        q, tgt = w._get_export_quality_and_target()
-        assert q == EXPORT_QUALITY_HIGH
-        assert tgt == expected
-        # 切回原始
-        w._on_export_quality_selected(EXPORT_QUALITY_ORIGINAL)
-        q2, tgt2 = w._get_export_quality_and_target()
-        assert q2 == EXPORT_QUALITY_ORIGINAL
-        assert tgt2 is None
-        assert w.export_target_spin.isEnabled() is False
-        # 校验目标面数
-        with pytest.raises(ValueError):
-            validate_export_target_faces(len(result.mesh.faces) + 10, len(result.mesh.faces))
-        w.deleteLater()
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        pytest.skip(f"headless UI skip: {e}")
-
-
 def test_simplify_does_not_mutate_original_and_keeps_normals(tmp_path):
     result = _small_result()
     original_faces = len(result.mesh.faces)
@@ -218,17 +158,4 @@ def test_simplify_does_not_mutate_original_and_keeps_normals(tmp_path):
         loaded = list(loaded.geometry.values())[0]
     assert len(loaded.faces) == actual2
 
-def test_export_tool_button_style_has_menu_button_states():
-    from app import STYLE
-    # 更具体的选择器覆盖全局 QToolButton
-    assert "QToolButton#exportToolButton" in STYLE
-    assert "QToolButton#exportToolButton::menu-button" in STYLE
-    assert "QToolButton#exportToolButton::menu-button:hover" in STYLE
-    assert "QToolButton#exportToolButton::menu-button:pressed" in STYLE or "QToolButton#exportToolButton::menu-button:open" in STYLE
-    assert "QToolButton#exportToolButton:open" in STYLE
-    assert "QToolButton#exportToolButton::menu-arrow" in STYLE
-    # 深色系背景，不能是白色默认
-    assert "rgba(255,255,255,0.06)" in STYLE or "0f172a" in STYLE
-    # 分隔线
-    assert "border-left" in STYLE
 

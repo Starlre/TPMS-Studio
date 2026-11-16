@@ -1,6 +1,6 @@
 # 实体建模与布尔运算
 
-本文以当前 Electron 工作台为准，见 [运行与界面说明](electron.md)。原 Qt 版本保留为兼容入口，逐次更新见 [开发记录](../DEVELOPMENT_LOG.md)。
+本文介绍当前 Electron 工作台中的实体建模流程，见 [运行与界面说明](electron.md)，逐次更新见 [开发记录](../DEVELOPMENT_LOG.md)。
 
 点击顶部 **实体建模** 进入统一 Notebook 节点工作区。左侧从空白项目与“＋新节点”开始，实体与参数统一显示为可拖动卡片。有效实体默认同时预览，创建后展开编辑，有实体后显示底部“生成工作流”。最终模型来自 libfive，原始精度导出使用成功生成的最终网格；多实体布局是独立的查看状态。
 
@@ -110,4 +110,4 @@ STEP / STP 文件可从顶部导入为独立参考模型，支持显示、变换
 - 平移后模型预览自动居中便于观察，导出文件保持原始世界坐标。
 - 管状卷绕、网格导入变隐式实体、节点图自由布线、任意 CAD/复杂组合自动抽壳、STEP/B-Rep 转隐式节点及编辑尚未包含；解析距离函数基本体已支持向内抽壳。
 
-实现文件：`solid_model.py`、`libfive_backend.py`、`electron_backend.py`、`desktop/src/main.jsx`、`desktop/src/Viewport.jsx`。核心测试：`test_solid_model.py`；Electron IPC 与实机验收：在 `desktop/` 执行 `npm test`、`npm run verify-ui`。`solid_panel.py`、`app.py` 及 `scripts/verify_solid_ui.py` 仍用于 Qt 兼容版本。
+实现文件：`solid_model.py`、`libfive_backend.py`、`electron_backend.py`、`desktop/src/main.jsx`、`desktop/src/Viewport.jsx`。核心测试：`test_solid_model.py`；Electron IPC 与实机验收：在 `desktop/` 执行 `npm test`、`npm run verify-ui`。

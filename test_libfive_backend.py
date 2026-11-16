@@ -144,42 +144,6 @@ def test_export_formats_keep_original_and_use_solved_parameters(kernel, tmp_path
     assert np.array_equal(source.mesh.vertices, original)
 
 
-def test_libfive_export_ui_state_and_worker_failure(tmp_path, monkeypatch):
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt5.QtWidgets import QApplication
-    from app import MainWindow, LibfiveExportWorker
-    application = QApplication.instance() or QApplication([])
-    clicks = []
-    monkeypatch.setattr(MainWindow, "export_current", lambda self: clicks.append(True))
-    window = MainWindow()
-    source = generate_tpms(parameters())
-    window.current_result = source
-    window._update_export_quality_defaults()
-    window.export_action.setEnabled(True)
-    window.export_tool_button.click()
-    assert clicks == [True]
-    window._on_export_quality_selected("medium")
-    assert window.export_target_spin.isEnabled()
-    window.export_backend_combo.setCurrentIndex(1)
-    assert window.libfive_cell_spin.isEnabled()
-    assert not window.export_target_spin.isEnabled()
-    assert all(not action.isEnabled() for action in window._export_quality_actions.values())
-    window.export_backend_combo.setCurrentIndex(0)
-    assert window.export_target_spin.isEnabled()
-    messages = []
-    def fail(*args):
-        raise RuntimeError("Native unavailable")
-    monkeypatch.setattr("app.export_libfive_mesh", fail)
-    worker = LibfiveExportWorker(source, tmp_path / "out.stl", 0.3)
-    worker.failed.connect(messages.append)
-    worker.run()
-    assert messages == ["Native unavailable"]
-    assert not (tmp_path / "out.stl").exists()
-    window.close()
-    application.processEvents()
-
-
 def test_split_pinch_manifolds_repairs_edge_pinches_without_hiding_open_holes():
     import trimesh
     a = trimesh.creation.box(extents=[2.0, 2.0, 2.0], transform=trimesh.transformations.translation_matrix([1.0, 1.0, 0.0]))

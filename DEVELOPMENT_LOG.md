@@ -2,13 +2,13 @@
 
 > 用途：持续记录需求、实现、验证结果、技术决策和已知限制。<br>
 > 创建日期：2026-09-17<br>
-> 当前界面：Electron 工程工作台；早期 Qt 界面记录按当时实现保留，当前操作以 README 和 `docs/electron.md` 为准。
+> 当前界面：统一使用 Electron + React + Three.js 工程工作台（早期 Qt 界面及相关脚本已在 R-112 移除，历史记录按当时实现保留）。
 
 ## 1. 产品目标
 
 TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输入曲面类型、外形尺寸、周期数、壁厚或等值面偏移、精度和目标孔隙率，软件生成 TPMS 封闭模型，并支持：
 
-- Three.js/WebGL2 GPU 混合隐式曲面与网格预览；原 Qt/OpenGL 界面保留为兼容入口。
+- Three.js/WebGL2 GPU 混合隐式曲面与网格预览。
 - libfive 基本实体、变换与布尔组合建模。
 - STL、OBJ 和 PLY 表面网格导出。
 - TPMS 孔隙流体域提取。
@@ -28,13 +28,12 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | `workflow_values.py` / `workflow_engine.py` | 类型化参数依赖解析、数学场复用、网格 LRU、中间预览与计算状态 | 安全 AST、依赖哈希、libfive |
 | `desktop/src/ValueBlocks.jsx` / `NodeWorkflow.jsx` / `node_graph.mjs` | Notebook 参数/实体节点树、节点内编辑、引用定位与按依赖失效 | React、标量/向量引用 |
 | `desktop/src/WorkflowDrag.jsx` / `workflow_drag.mjs` | 节点显示排序、拖动引用、连接校验、边缘滚动和顺序无关计算签名 | React、HTML Drag and Drop |
-| `app.py` / `solid_panel.py` | Qt 兼容 GUI、后台任务、OpenGL 预览、导出交互 | PyQt5、OpenGL 3.3 |
 | `tpms_core.py` | 隐式场、材料域/流体域、Marching Cubes、孔隙率求解、碎片清理 | NumPy、scikit-image、trimesh |
-| `gpu_preview.py` | GPU 隐式场判定、uniform 构建、GLSL 射线步进源码 | PyQt5 OpenGL 3.3, GLSL |
+| `gpu_preview.py` | GPU 隐式场判定、uniform 构建、GLSL 射线步进源码 | GLSL、Three.js / WebGL2 |
 | `comsol_mesh.py` | 连通流体域分解、四面体划分、边界分组、BDF/MSH/JSON 导出 | Gmsh、meshio |
 | `test_tpms_core.py` | 封闭性、孔隙率、流体域回归测试 | pytest |
 | `test_comsol_mesh.py` | 真实体网格生成和格式回读测试 | pytest、Gmsh、meshio |
-| `test_gpu_preview.py` | GPU 预览状态与 fallback 回归测试 | pytest, PyQt5 offscreen |
+| `test_gpu_preview.py` | GPU 预览判定、uniform 与着色器回归测试 | pytest |
 
 ### 2.1 建模约定
 
@@ -154,6 +153,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-109 | 一键 TPMS 填充节点 | 26-11-16 13:52:00：`tpms_infill` 复合节点，包围盒/单胞自动对齐、可选外蒙皮抽壳/平滑接壁与多方向开口 | 已完成 |
 | R-110 | 修复填充破面、碎角碎片与 Z-fighting 预览重影 | 26-11-16 14:34:00：边界微倒圆裁剪、`libfive` 捏合棱拓扑拆分、小碎块清理与自动隐藏被填充上游实体 | 已完成 |
 | R-111 | 优化 TPMS 填充边缘锯齿与曲面法线粗糙度 | 26-11-16 15:04:00：体素自适应 `k_crop = 3.5*cell_size` 消除亚体素 QEF 锯齿，视口法线折痕阈值调至 `45°` | 已完成 |
+| R-112 | 移除 PyQt5 旧版界面路线 | 26-11-16 16:07:00：删除 `app.py`/`solid_panel.py`/`run_qt.bat` 与 Qt 验证脚本及截图，清理 `PyQt5` 依赖及冗余 Qt 测试与文档入口 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -665,6 +665,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - 在 [desktop/src/display_geometry.mjs](desktop/src/display_geometry.mjs) 将 `createDisplayGeometry` 默认折痕阈值由 `Math.PI / 6`（`30°`）调整为 `Math.PI / 4`（`45°`），完整保留长方体/圆柱端盖等 `60°/90°` 工业硬边，同时柔化曲面交界像素级折痕阴影。
 - 涉及文件：`solid_operations.py`、`desktop/src/display_geometry.mjs` 及实机测试更新的 `docs/*.png`。
 - 验证：Python 全套 6 个测试文件 `152 passed`；`npx vite build` 通过；`npm test` `26/26` 通过；Electron UI 全部 8 项测试（`edge-quality-ui.cjs`、`features-ui.cjs`、`operations-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`notebook-ntop-ui.cjs`）全通过；放大视角实机对比确认 `0.3 mm` 锯齿显著收敛、切换 `0.15 mm`（`精细`）后达到光滑曲面效果。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
+### R-112：26-11-16 16:07:00（Asia/Shanghai），移除旧版 PyQt5 桌面界面路线
+
+- 需求与原因：仓库长期并行维护 PyQt5（`app.py` / `solid_panel.py` / `run_qt.bat`）与 Electron 桌面端，不仅引入近 3,200 行重复界面与导出/OpenGL 视图代码，还需额外维持 `PyQt5` 依赖和无头 Qt 测试分支。用户明确决定放弃 Qt 路线，统一使用 Electron + React + Three.js 工作台。
+- 实现：
+  - 移除 Qt 界面与启动/验证文件：`app.py`、`solid_panel.py`、`run_qt.bat`、`scripts/verify_solid_ui.py`、`scripts/verify_libfive_ui.py`，并清理不再被引用的旧 Qt 截图 `docs/solid-modeling-ui.png` 与 `docs/solid-modeling-panel.png`。
+  - 从 [requirements.txt](requirements.txt) 移除 `PyQt5>=5.15` 依赖；更新 [README.md](README.md)、[docs/electron.md](docs/electron.md)、[docs/solid-modeling.md](docs/solid-modeling.md)、[docs/libfive.md](docs/libfive.md)、[docs/node-modeling.md](docs/node-modeling.md)、[docs/inspection.md](docs/inspection.md) 与 [desktop/src/model_appearance.mjs](desktop/src/model_appearance.mjs) 注释，移除 Qt 入口文档同时保留历史实体 JSON 兼容打开能力。
+  - 清理 [test_export_quality.py](test_export_quality.py)、[test_gpu_preview.py](test_gpu_preview.py)、[test_libfive_backend.py](test_libfive_backend.py) 中的 PyQt5 控件测试，并将 [test_solid_model.py](test_solid_model.py) 中的平移边界测试改写为纯后端单元回归 `test_solid_result_preserves_translated_bounds`。
+- 涉及文件：`requirements.txt`、`test_export_quality.py`、`test_gpu_preview.py`、`test_libfive_backend.py`、`test_solid_model.py`、`desktop/src/model_appearance.mjs`、`README.md`、`docs/*.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`（及删除的 Qt 文件与测试刷新的 `docs/*.png`）。
+- 验证：Python 全量回归 `pytest -q` `183 passed in 104.83s`（0 failed / 0 skipped）；前端 `npx vite build` 通过；`npm test` `26/26` 通过；Electron 实机测试 `verify-ui`（`ui-smoke.cjs`）、`verify-ribbon`（`ribbon-ui.cjs`）、`verify-operations`（`operations-ui.cjs`）均通过，零页面错误。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定
