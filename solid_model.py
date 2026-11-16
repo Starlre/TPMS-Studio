@@ -16,7 +16,8 @@ from libfive_backend import (NativeKernel, _TreeArena, _field_tree, _Region,
 from tpms_core import TPMSParameters, _material_scalar_field
 from parametric import TPMS_FIELDS, evaluate_expression, validate_parameters
 from workflow_values import resolve_values, copy_value_nodes
-from solid_operations import OP_DEFAULTS, validate_operation, operation_bounds, operation_tree, tree_cost
+from solid_operations import (OP_DEFAULTS, validate_operation, operation_bounds,
+                              operation_tree, tree_cost, validate_infill_surface)
 from mesh_source import validate_imported_node, imported_local_bounds
 
 KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
@@ -469,6 +470,7 @@ def generate_solid(scene: SolidScene) -> SolidResult:
     if scene.uses_imported_solid():
         from sdf_grid import evaluate_sdf_scene
         mesh = evaluate_sdf_scene(scene, scene.root, scene.cell_size, rotation_matrix)
+        validate_infill_surface(mesh, scene.by_id(scene.root), scene.cell_size)
         return SolidResult(mesh, snapshot)
     bounds = scene.bounds()
     size = bounds[1] - bounds[0]
@@ -483,6 +485,7 @@ def generate_solid(scene: SolidScene) -> SolidResult:
         tree = _scene_tree(arena, scene, scene.root, {})
         region = _Region(*[_Interval(float(lo - margin), float(hi + margin)) for lo, hi in zip(*bounds)])
         mesh = render_tree_mesh(kernel, tree, region, scene.cell_size)
+    validate_infill_surface(mesh, scene.by_id(scene.root), scene.cell_size)
     return SolidResult(mesh, snapshot)
 
 

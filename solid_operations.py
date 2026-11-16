@@ -6,7 +6,7 @@ import math
 import numpy as np
 
 from libfive_backend import tpms_material_tree
-from tpms_core import CUSTOM_SURFACE, _material_scalar_field
+from tpms_core import CUSTOM_SURFACE, TPMSParameters, _material_scalar_field
 
 OP_DEFAULTS = {
     'shell': (1.0,),
@@ -384,6 +384,42 @@ def operation_bounds(scene, node, cache, rotation_matrix):
     return bounds
 
 
+def infill_crop_width(parameters: TPMSParameters, unit_size: float) -> float:
+    """Keep the boundary geometry independent of tessellation precision.
+
+    Preserve the existing standard (0.3 mm) crop, including the thin-wall and
+    cell-period caps. Refining a mesh must not shrink the fillet into a pinched
+    neck or silently change the material volume.
+    """
+    thin = float(unit_size)
+    if parameters.mode == 'sheet':
+        wall = (min(parameters.gradient_thickness_start, parameters.gradient_thickness_end)
+                if parameters.gradient_enabled else parameters.thickness)
+        thin = min(thin, float(wall))
+    return max(1e-3, min(1.05, thin * 0.9, float(unit_size) * 0.18))
+
+
+def validate_infill_surface(mesh, node, cell_size: float) -> None:
+    """Reject unresolved long, near-reversed spikes on a pure conformal fill.
+
+    An angle alone cannot distinguish a real sharp edge from a defect. Require
+    a fold spanning more than three requested cells as well; this catches the
+    QEF spikes without rejecting resolved sharp CAD edges or tight necks.
+    """
+    if node.kind != 'tpms_infill' or float(node.dimensions[1]) > 0:
+        return
+    angles = mesh.face_adjacency_angles
+    edges = mesh.vertices[mesh.face_adjacency_edges]
+    lengths = np.linalg.norm(edges[:, 1] - edges[:, 0], axis=1)
+    folded = (angles > math.radians(150.0)) & (lengths > 3.0 * cell_size)
+    if np.any(folded):
+        raise ValueError(
+            f"TPMS 填充存在局部曲面折叠（{int(np.count_nonzero(folded))} 条折边，"
+            f"最大法向夹角 {math.degrees(float(angles.max())):.1f}°），无法作为有效结果导出。"
+            "请减小网格尺寸或调整晶胞尺寸/壁厚后重新生成；水密性不代表曲面无折叠。"
+        )
+
+
 def _smooth_join(op, a, b, width, mode='min'):
     h = op('max', width - op('abs', a - b), 0) / width
     if mode == 'min':
@@ -423,12 +459,7 @@ def operation_tree(arena, scene, node, source, coords, rotation_matrix):
             periods=(unit_size, unit_size, unit_size),
         )
         if skin_thickness <= 0:
-            # Resolve crop fillet over ~3.5 voxels to prevent sub-voxel QEF sawtooth edges.
-            thin = unit_size
-            if eff_p.mode == 'sheet':
-                sheet_t = min(eff_p.gradient_thickness_start, eff_p.gradient_thickness_end) if eff_p.gradient_enabled else eff_p.thickness
-                thin = min(thin, sheet_t)
-            k_crop = max(1e-3, min(max(scene.cell_size * 3.5, 0.35), thin * 0.9, unit_size * 0.18))
+            k_crop = infill_crop_width(eff_p, unit_size)
             return _smooth_join(op, tpms_field, source, k_crop, 'max')
         cap_planes = _opening_planes(coords, src_bounds, openings, skin_thickness) if openings else []
         capped_source = source

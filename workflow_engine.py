@@ -11,6 +11,7 @@ from libfive_backend import NativeKernel, _TreeArena, _Region, _Interval, render
 from sdf_grid import evaluate_sdf_scene
 from solid_model import SolidScene, SolidResult, _scene_tree, rotation_matrix
 from workflow_values import resolve_values
+from solid_operations import validate_infill_surface
 
 
 def field_keys(scene: SolidScene) -> dict[str, str]:
@@ -114,6 +115,7 @@ class WorkflowEngine:
                     report(target, 'meshing')
                     region = _Region(*[_Interval(float(lo - margin), float(hi + margin)) for lo, hi in zip(*bounds)])
                     mesh = render_tree_mesh(self.kernel, tree, region, scene.cell_size)
+                validate_infill_surface(mesh, scene.by_id(target), scene.cell_size)
             except Exception:
                 report(target, 'error')
                 raise

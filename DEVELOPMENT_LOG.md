@@ -157,6 +157,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-111 | 优化 TPMS 填充边缘锯齿与曲面法线粗糙度 | 26-11-16 15:04:00：体素自适应 `k_crop = 3.5*cell_size` 消除亚体素 QEF 锯齿，视口法线折痕阈值调至 `45°` | 已完成 |
 | R-112 | 移除 PyQt5 旧版界面路线 | 26-11-16 16:07:00：删除 `app.py`/`solid_panel.py`/`run_qt.bat` 与 Qt 验证脚本及截图，清理 `PyQt5` 依赖及冗余 Qt 测试与文档入口 | 已完成 |
 | R-113 | 合并精简桌面端三项核心冗余 | 26-11-16 16:37:00：精度预设提至生成区上方并去重顶部检查入口、节点目录收拢至单一清单、合并 `style.css`+`native.css` 并复用数字微调函数 | 已完成 |
+| R-117 | 修复精细球形 TPMS 填充 STL 局部折叠 | 2026-11-16：固定跨精度边界几何规则、长折边拦截、STL 回读与 COMSOL 6.3 实机导入核验 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -724,6 +725,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 涉及文件：`fea_mesh.py`、`test_fea_mesh.py`、`electron_backend.py`、`desktop/main.cjs`、`desktop/package.json`、`desktop/src/main.jsx`、`desktop/tests/fea-mesh-ui.cjs`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
 - 验证：Python 全量回归 `pytest -q` **`193 passed`**（`118.31s`，含新增 `test_fea_mesh.py` 6 项：空壳腔体体积保真与 MSH/BDF/VTU 回读、多分离域计数、非封闭拦截、`tpms_infill` 重划分与低质量预览、`Workbench` IPC 与项目校验）；`desktop` 下 `npx vite build` 通过（`5.92s`），`npm test` **`28/28 passed`**（`11.28s`）；Playwright 新增 `verify-fea`（覆盖 24×24×16 带孔布尔板 `6,067` 单元、低质量单元 3D 高亮定位、BDF/MSH/VTU/JSON 导出及项目保存，以及 2 节点 Gyroid 跑鞋中底 `2.4 mm` 参数生成 **`124,673` 节点 / `495,975` 四面体单元**、缩放雅可比均值 `0.6402`、仅 `243` 个低质量单元）与 `verify-ui`、`verify-ribbon`、`verify-imported-solid`、`verify-operations`、`verify-notebook-cards` 全部通过（零页面报错）。
 - 状态：已完成实现与全量验证，提交至 `完善建模功能和UI分支`。
+
+### R-117：2026-11-16 22:38:13（Asia/Shanghai），修复精细 TPMS 填充 STL 在 COMSOL 中暴露的局部尖折
+
+- 复现：用户提供 `F:/下载F/tpms2-model.stl`；当前默认 R=8 mm 球体、Gyroid 8 mm 晶胞、1.2 mm 片层、0.15 mm 网格复现 317,268 面、866.6544 mm³、228 条 >90° 法向夹角折边（36 条 >150°，最大 175.22°），异常发生在球面裁剪边界。水密、法向一致和正体积检查均不能排除这些缺陷。
+- 根因：纯填充边界 `k_crop` 与 `cell_size` 绑定。0.3→0.15 mm 同时将平滑宽度 1.05→0.525 mm，改变了零等值面和局部孔道连通关系，诱发 native QEF 长折边；提高精度实际上改变了几何，而不只是细化网格。
+- 实现：`solid_operations.infill_crop_width()` 保留既有 0.3 mm 标准模式规则（上限 1.05 mm，片层壁厚 0.9 倍、晶胞 0.18 倍限幅），不再依赖提取精度；`sdf_grid` 与原生树共用规则。`generate_solid` 及桌面使用的 `WorkflowEngine.generate` 对纯填充最终输出增加 >150° 且跨越 >3 个网格尺寸的长折边拦截，失败结果不进入网格缓存。该启发式只针对未解析长折边，不等同于完整自交检测，也不改变外蒙皮或普通 CAD/布尔输出的锐边判断。
+- 回归：新增实际球形细化与 STL 回读、故障注入（复原旧 0.525 mm 过渡并验证两条生成入口拒绝及无缓存污染）、NumPy/native 跨精度体积一致性三项测试。`python -m pytest -q` **196 passed / 175.08s**；桌面 `npm test` **28 passed**；`git diff --check` 通过。本次未修改前端源文件。
+- 实物导出：`tpms2-model-fixed.stl` 为 295,716 面，体积 806.4414 mm³，单连通、水密、法向一致，>90° 折边为 0，最大法向夹角 51.00°，最大边长 0.2290 mm；与原标准模式体积 806.8617 mm³ 相差约 0.052%。固定规则使精细模式收敛于标准模式。
+- 几何兼容性：本次选择保留原标准模式的边界几何，旧精细版不是同一几何。相对用户的畸变 STL，体积减少约 6.95%，Euler 数 -62→-50，部分边界细颈/孔道的局部连通关系随裁剪修正改变；不宣称修复版与旧精细版几何或拓扑完全等价。旧项目需重新生成与导出。
+- COMSOL 实机验收：使用本机 COMSOL **6.3**，几何单位设为 mm，经 Mesh Import 实际导入修复 STL（绝对合并容差 1e-7），回读 **147,808 顶点 / 295,716 三角面**。双向最近顶点距离最大值 **0.0**，三角面数量一致、仍水密/法向一致、最大夹角 51.00°；已保存可直接打开的 `tpms2-model-fixed-comsol.mph`。验收范围为表面网格导入，不包含求解及 FEA 重划分路线。
+- 交付：修复版 STL、可编辑 `tpms2-model-fixed.json`、数值检查报告 `tpms2-model-fixed-check.json` 与 COMSOL 模型均放在原下载目录，原 STL 保留。
 
 ## 5. 技术约定
 

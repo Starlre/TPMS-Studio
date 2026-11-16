@@ -25,6 +25,7 @@ from solid_operations import (
     _circular_angles,
     _infill_openings,
     _infill_tpms_parameters,
+    infill_crop_width,
     _linear_axis_offsets,
     _shell_config,
 )
@@ -506,11 +507,7 @@ def evaluate_sdf_scene(
             tpms_field = _eval_tpms_field(eff_p, c, center=center, sizes=extent,
                                           periods=(unit_size, unit_size, unit_size))
             if skin <= 0.0:
-                thin = unit_size
-                if eff_p.mode == "sheet":
-                    sheet_t = min(eff_p.gradient_thickness_start, eff_p.gradient_thickness_end) if eff_p.gradient_enabled else eff_p.thickness
-                    thin = min(thin, sheet_t)
-                k_crop = max(1e-3, min(max(cell_size * 3.5, 0.35), thin * 0.9, unit_size * 0.18))
+                k_crop = infill_crop_width(eff_p, unit_size)
                 return _smooth_join_np(tpms_field, src, k_crop, "max")
             planes = _opening_planes_np(c, src_bounds, openings, skin) if openings else []
             capped = src

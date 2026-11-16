@@ -388,3 +388,73 @@ def test_tpms_infill_watertight_pure_and_sandwich_modes():
         assert m_def.is_watertight and m_def.is_winding_consistent and m_def.volume > 0
         if kind == 'box':
             assert m_def.body_count == 1
+
+
+@native
+def test_sphere_infill_precision_preserves_geometry_and_has_no_folds(tmp_path):
+    # Regression: the reported R=8, Gyroid/8 mm/1.2 mm, 0.15 mm STL had
+    # 228 folds >90 degrees and changed volume by 7% relative to standard.
+    standard = SolidScene(cell_size=.3)
+    sphere = standard.add('sphere', dimensions=(8.0,))
+    fill = standard.add('tpms_infill', inputs=(sphere.id,))
+    coarse = generate_solid(standard).mesh
+    fine = SolidScene.from_dict(standard.to_dict())
+    fine.cell_size = .15
+    engine = WorkflowEngine()
+    try:
+        result, _ = engine.generate(fine)
+        mesh = result.mesh
+        assert mesh.is_watertight and mesh.is_winding_consistent
+        assert mesh.body_count == 1 and mesh.euler_number == coarse.euler_number
+        assert mesh.volume == pytest.approx(coarse.volume, rel=.005)
+        assert np.degrees(mesh.face_adjacency_angles).max() < 90
+        assert mesh.edges_unique_length.max() < .45
+        assert np.linalg.norm(mesh.vertices, axis=1).max() <= 8.01
+        path, *_ = export_mesh_with_quality(MeshResult(mesh, TPMSParameters()),
+                                           tmp_path / 'sphere-infill.stl')
+        loaded = trimesh.load(path, force='mesh')
+        assert loaded.is_watertight and loaded.is_winding_consistent
+        assert np.degrees(loaded.face_adjacency_angles).max() < 90
+        cached, metadata = engine.generate(fine)
+        assert metadata['mesh_cached'] and cached.mesh is mesh
+    finally:
+        engine.close()
+
+
+@native
+def test_sphere_infill_rejects_watertight_folded_surface(monkeypatch):
+    import solid_operations
+    # Recreate the old fine-mode crop without storing a 16 MB binary fixture.
+    monkeypatch.setattr(solid_operations, 'infill_crop_width', lambda p, unit: .525)
+    scene = SolidScene(cell_size=.15)
+    sphere = scene.add('sphere', dimensions=(8.0,))
+    scene.add('tpms_infill', inputs=(sphere.id,))
+    with pytest.raises(ValueError, match='局部曲面折叠'):
+        generate_solid(scene)
+    engine = WorkflowEngine()
+    try:
+        with pytest.raises(ValueError, match='局部曲面折叠'):
+            engine.generate(scene)
+        assert not engine.meshes
+    finally:
+        engine.close()
+
+
+@native
+def test_infill_numpy_and_native_keep_same_geometry_across_precision():
+    from sdf_grid import evaluate_sdf_scene
+    from solid_model import rotation_matrix
+    scene = SolidScene(cell_size=.3)
+    sphere = scene.add('sphere', dimensions=(8.0,))
+    scene.add('tpms_infill', inputs=(sphere.id,))
+    native_mesh = generate_solid(scene).mesh
+    volumes = []
+    for step in (.3, .15):
+        scene.cell_size = step
+        mesh = evaluate_sdf_scene(scene, scene.root, step, rotation_matrix)
+        assert mesh.is_watertight and mesh.is_winding_consistent
+        assert mesh.volume == pytest.approx(native_mesh.volume, rel=.02)
+        volumes.append(mesh.volume)
+        if step == .15:
+            assert np.degrees(mesh.face_adjacency_angles).max() < 90
+    assert volumes[0] == pytest.approx(volumes[1], rel=.02)
