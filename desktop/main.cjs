@@ -14,6 +14,40 @@ const layoutBridge = new PythonBridge(root);
 let layoutBusy = false;
 let busy = false;
 let importedSource = null;
+let startupConsumed = false;
+
+function findStartupArg() {
+  const fromEnv = process.env.TPMS_STARTUP_PROJECT;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+  const args = process.argv.slice(1);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--project' || arg === '--open') return args[i + 1] || null;
+    if (arg.startsWith('--project=') || arg.startsWith('--open=')) return arg.split('=').slice(1).join('=') || null;
+    if (!arg.startsWith('-') && arg.toLowerCase().endsWith('.json')) return arg;
+  }
+  return null;
+}
+
+async function resolveStartupProject() {
+  const raw = findStartupArg();
+  if (!raw) return null;
+  const fromCwd = path.resolve(raw);
+  try { await fs.access(fromCwd); return fromCwd; } catch {}
+  return path.resolve(root, raw);
+}
+
+async function loadProjectFile(file) {
+  if ((await fs.stat(file)).size > 2_000_000) throw new Error('项目超过 2 MB');
+  const project = JSON.parse(await fs.readFile(file, 'utf8'));
+  const validated = await bridge.call('validate_project', { project });
+  if (validated.project.mode === 'cad') {
+    validated.imported = await bridge.call('import_step', { cad: validated.project.cad });
+    importedSource = validated.imported.cad.source;
+  }
+  return validated;
+}
+
 ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
   if (method === 'cancel') { bridge.cancel(); layoutBridge.cancel(); return {}; }
   if (method === 'preview_scene') {
@@ -28,7 +62,16 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
     if (allowed.has(method)) {
       // Diagnostic files stay in the worker-owned temp directory. Exports require a native dialog.
       const { destination, ...safePayload } = payload;
-      return await bridge.call(method, safePayload);
+      const answer = await bridge.call(method, safePayload);
+      if (method === 'init' && !startupConsumed) {
+        const startupFile = await resolveStartupProject();
+        if (startupFile) {
+          startupConsumed = true;
+          try { answer.startup = await loadProjectFile(startupFile); }
+          catch (error) { answer.startup_error = error.message; }
+        }
+      }
+      return answer;
     }
     if (method === 'import_step') {
       const result = await dialog.showOpenDialog(window, {title:'导入 STEP 模型', filters:[{name:'STEP CAD 模型',extensions:['step','stp']}],properties:['openFile']});
@@ -64,15 +107,7 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
     if (method === 'open_project') {
       const result = await dialog.showOpenDialog(window, { title: '打开建模项目', filters: [{ name: 'TPMS / 实体组合项目', extensions: ['json'] }], properties: ['openFile'] });
       if (result.canceled) return { canceled: true };
-      const file = result.filePaths[0];
-      if ((await fs.stat(file)).size > 2_000_000) throw new Error('项目超过 2 MB');
-      const project = JSON.parse(await fs.readFile(file, 'utf8'));
-      const validated = await bridge.call('validate_project', { project });
-      if (validated.project.mode === 'cad') {
-        validated.imported = await bridge.call('import_step', {cad:validated.project.cad});
-        importedSource = validated.imported.cad.source;
-      }
-      return validated;
+      return await loadProjectFile(result.filePaths[0]);
     }
     throw new Error('不支持的操作');
   } finally { busy = false; }

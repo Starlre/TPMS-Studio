@@ -690,6 +690,16 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 验证：`npx vite build` 通过（`5.32s`，CSS `49.16 kB`）；`npm test` `27/27` 通过（含新增统一目录一致性单测）；全套 13 项 Playwright 端到端界面回归（`verify-ui`、`verify-ribbon`、`verify-edge-quality`、`verify-inspection`、`verify-web`、`verify-operations`、`features-ui.cjs`、`verify-notebook-cards`、`verify-workflow-drag`、`notebook-ntop-ui.cjs`、`verify-multi-entity`、`verify-primitives`、`verify-step-import`）全部通过，零页面报错，实机截图确认暗/亮主题、顶部单列导航与底部精度预设展示无误。Python 后端代码未修改，沿用 `5d09caf` 的 `pytest -q` `183 passed` 基线。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
+### R-114：26-11-16 17:15:00（Asia/Shanghai），新增启动直载项目能力与 Gyroid 晶格鞋底示例
+
+- 需求与原因：支持在启动 Electron 桌面工作台时直接打开并生成指定建模项目（环境变量或命令行传入 `.json`），便于一键调起并交互查看复杂工程模型；同时提供一套可直接在 `实体建模` 中打开编辑与导出 STL 的跑鞋点阵中底参数化示例。
+- 实现：
+  - **启动直载与共用校验流**：[desktop/start.cjs](desktop/start.cjs) 与 [launch_desktop.py](launch_desktop.py) 透传 CLI 参数；[desktop/main.cjs](desktop/main.cjs) 新增 `resolveStartupProject()`（读取 `TPMS_STARTUP_PROJECT` 或 `--project`/`--open`/`.json` 参数）并抽取共用 `loadProjectFile()`，在 `init` 时安全校验并随初始化结果返回一次性 `startup` 项目；[desktop/src/main.jsx](desktop/src/main.jsx) 提取 `applyLoadedProject()` 供启动直载与 `openProject()` 共用，并在 `startupPending` 时自动触发首次工作流生成。
+  - **Gyroid 晶格跑鞋中底示例**：新增 [examples/showcase/gyroid-shoe-midsole.json](examples/showcase/gyroid-shoe-midsole.json)（20 个几何节点 + 3 个可调参数 `cell_unit=12.5 mm`、`sole_blend=18.0 mm`、`cell_iso=-0.08`，以多区圆柱+`smooth_union` 构建解剖学鞋楦轮廓，经 5 道 `smooth_difference` 削出跟趾落差、后跟包覆杯、平坦底面与前掌滚动弧，再以实体模式 `Gyroid` `tpms_infill` 共形填充，生成 `311,340` 面单连通封闭体 `136,616.79 mm³`），并更新 [examples/showcase/README.md](examples/showcase/README.md)。
+- 涉及文件：`desktop/main.cjs`、`desktop/start.cjs`、`desktop/src/main.jsx`、`launch_desktop.py`、`examples/showcase/gyroid-shoe-midsole.json`、`examples/showcase/README.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：`pytest -q` `183 passed`（95.89s）；`desktop` 端 `npx vite build` 通过，`npm test` `27/27` 通过；端到端 `verify-ui`、`verify-ribbon`、`verify-notebook-cards` 全部通过（零页面报错）；独立启动验证 `TPMS_STARTUP_PROJECT=examples/showcase/gyroid-shoe-midsole.json` 自动进入 `实体建模` 并生成 `311,340` 面、`封闭 / 水密`（`bodies=1`）中底，三维/俯视/侧视/剖切视觉核验通过。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
 ## 5. 技术约定
 
 

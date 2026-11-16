@@ -53,7 +53,8 @@ def main():
         subprocess.run([npm, 'run', 'build'], cwd=desktop, check=True)
     environment = {**os.environ, 'TPMS_PYTHON': sys.executable, 'TPMS_PROJECT_ROOT': str(root)}
     environment.pop('ELECTRON_RUN_AS_NODE', None)
-    return subprocess.call([npm, 'start'], cwd=desktop, env=environment)
+    command = [npm, 'start', '--', *sys.argv[1:]] if len(sys.argv) > 1 else [npm, 'start']
+    return subprocess.call(command, cwd=desktop, env=environment)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,654 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "solid",
+    "size_x": 40.0,
+    "size_y": 40.0,
+    "size_z": 40.0,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.7,
+    "iso_level": -0.08,
+    "samples_per_cell": 24,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1.0,
+    "gradient_thickness_end": 5.0,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10.0
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n20",
+    "cell_size": 0.75,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "单胞晶格周期 / mm",
+        "kind": "number",
+        "symbol": "cell_unit",
+        "value": 12.5
+      },
+      {
+        "id": "p2",
+        "name": "轮廓融合宽度 / mm",
+        "kind": "number",
+        "symbol": "sole_blend",
+        "value": 18.0
+      },
+      {
+        "id": "p3",
+        "name": "支柱饱满度偏移 (iso)",
+        "kind": "number",
+        "symbol": "cell_iso",
+        "value": -0.08
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "后跟缓冲区",
+        "kind": "cylinder",
+        "dimensions": [
+          30.5,
+          38.0
+        ],
+        "position": [
+          -72.0,
+          -1.0,
+          19.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n2",
+        "name": "中足支撑区",
+        "kind": "cylinder",
+        "dimensions": [
+          28.5,
+          36.0
+        ],
+        "position": [
+          -24.0,
+          5.0,
+          18.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n3",
+        "name": "前掌外侧区",
+        "kind": "cylinder",
+        "dimensions": [
+          29.0,
+          34.0
+        ],
+        "position": [
+          22.0,
+          8.0,
+          17.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n4",
+        "name": "前掌内侧区",
+        "kind": "cylinder",
+        "dimensions": [
+          28.0,
+          34.0
+        ],
+        "position": [
+          28.0,
+          -10.0,
+          17.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n5",
+        "name": "前掌翘头区",
+        "kind": "cylinder",
+        "dimensions": [
+          26.5,
+          34.0
+        ],
+        "position": [
+          60.0,
+          -5.0,
+          19.5
+        ],
+        "rotation": [
+          0.0,
+          -14.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n6",
+        "name": "跟腰平滑过渡",
+        "kind": "smooth_union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n1",
+          "n2"
+        ],
+        "blend": 18.0,
+        "tpms": null,
+        "expressions": {
+          "blend": "sole_blend"
+        },
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n7",
+        "name": "前掌内外合流",
+        "kind": "smooth_union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n3",
+          "n4"
+        ],
+        "blend": 18.0,
+        "tpms": null,
+        "expressions": {
+          "blend": "sole_blend"
+        },
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n8",
+        "name": "鞋身主轮廓",
+        "kind": "smooth_union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n6",
+          "n7"
+        ],
+        "blend": 18.0,
+        "tpms": null,
+        "expressions": {
+          "blend": "sole_blend"
+        },
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n9",
+        "name": "鞋头流线融合",
+        "kind": "smooth_union",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n8",
+          "n5"
+        ],
+        "blend": 18.0,
+        "tpms": null,
+        "expressions": {
+          "blend": "sole_blend"
+        },
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n10",
+        "name": "鞋床落差斜切面",
+        "kind": "box",
+        "dimensions": [
+          280.0,
+          140.0,
+          40.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          47.5
+        ],
+        "rotation": [
+          0.0,
+          4.2,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n11",
+        "name": "鞋床落差修型",
+        "kind": "smooth_difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n9",
+          "n10"
+        ],
+        "blend": 5.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n12",
+        "name": "后跟环抱凹槽",
+        "kind": "sphere",
+        "dimensions": [
+          26.0
+        ],
+        "position": [
+          -72.0,
+          -1.0,
+          56.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n13",
+        "name": "后跟包覆修型",
+        "kind": "smooth_difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n11",
+          "n12"
+        ],
+        "blend": 5.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n14",
+        "name": "地面找平基准",
+        "kind": "box",
+        "dimensions": [
+          260.0,
+          140.0,
+          30.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          -14.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n15",
+        "name": "底面接地修平",
+        "kind": "smooth_difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n13",
+          "n14"
+        ],
+        "blend": 3.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n16",
+        "name": "前掌上翘底弧",
+        "kind": "box",
+        "dimensions": [
+          100.0,
+          140.0,
+          30.0
+        ],
+        "position": [
+          93.0,
+          0.0,
+          -9.0
+        ],
+        "rotation": [
+          0.0,
+          -18.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n17",
+        "name": "前掌滚动弧",
+        "kind": "smooth_difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n15",
+          "n16"
+        ],
+        "blend": 8.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n18",
+        "name": "后跟落地倒角",
+        "kind": "box",
+        "dimensions": [
+          60.0,
+          140.0,
+          30.0
+        ],
+        "position": [
+          -106.0,
+          0.0,
+          -9.0
+        ],
+        "rotation": [
+          0.0,
+          16.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n19",
+        "name": "鞋底最终外轮廓",
+        "kind": "smooth_difference",
+        "dimensions": [
+          8.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n17",
+          "n18"
+        ],
+        "blend": 6.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {}
+      },
+      {
+        "id": "n20",
+        "name": "Gyroid 晶格中底",
+        "kind": "tpms_infill",
+        "dimensions": [
+          12.5,
+          0.0,
+          0.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n19"
+        ],
+        "blend": 2.0,
+        "tpms": {
+          "surface": "Gyroid",
+          "mode": "solid",
+          "size_x": 40.0,
+          "size_y": 40.0,
+          "size_z": 40.0,
+          "cells_x": 2,
+          "cells_y": 2,
+          "cells_z": 2,
+          "thickness": 1.2,
+          "iso_level": -0.08,
+          "samples_per_cell": 24,
+          "target_porosity": null,
+          "formula": "",
+          "gradient_enabled": false,
+          "gradient_axis": "Z",
+          "gradient_thickness_start": 1.0,
+          "gradient_thickness_end": 5.0,
+          "tubular_enabled": false,
+          "tubular_inner_radius": 10.0
+        },
+        "expressions": {
+          "dimensions.0": "cell_unit",
+          "tpms.iso_level": "cell_iso"
+        },
+        "vector_inputs": {},
+        "operation": {}
+      }
+    ],
+    "notebook_sections": [
+      {
+        "id": "s1",
+        "name": "01 · 人体工学鞋底坯体",
+        "collapsed": true,
+        "note": "后跟+中足+前掌+翘头流线融合，并削出自然跟趾落差、后跟杯与前掌滚动弧"
+      },
+      {
+        "id": "s2",
+        "name": "02 · Gyroid 晶格中底填充",
+        "collapsed": false,
+        "note": "对鞋坯一键做实体模式 Gyroid 共形填充，形成单连通弹性点阵中底"
+      }
+    ],
+    "notebook_order": [
+      "value:p1",
+      "value:p2",
+      "value:p3",
+      "section:s1",
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "n5",
+      "n6",
+      "n7",
+      "n8",
+      "n9",
+      "n10",
+      "n11",
+      "n12",
+      "n13",
+      "n14",
+      "n15",
+      "n16",
+      "n17",
+      "n18",
+      "n19",
+      "section:s2",
+      "n20"
+    ]
+  }
+}

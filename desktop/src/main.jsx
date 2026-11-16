@@ -123,7 +123,7 @@ function App() {
   const [exportCell, setExportCell] = useState(0.3);
   const [dirty, setDirty] = useState(false);
   const viewport = useRef(); const exportMenu = useRef(); const dialogRef = useRef(); const workspaceRef = useRef();
-  const initialised = useRef(false);
+  const initialised = useRef(false); const startupPending = useRef(false);
   function startPaneResize(side, event) {
     if (event.button !== 0 || !workspaceRef.current) return;
     event.preventDefault();
@@ -164,7 +164,15 @@ function App() {
     });
     if (!initialised.current) {
       initialised.current = true;
-      window.tpms.request('init').then(setInfo).catch(e => { setError(e.message); setMessage('内核连接失败'); });
+      window.tpms.request('init').then(data => {
+        if (data.startup) {
+          startupPending.current = true;
+          applyLoadedProject(data.startup, { autoGenerate: true });
+        } else if (data.startup_error) {
+          setError(`启动项目打开失败：${data.startup_error}`);
+        }
+        setInfo(data);
+      }).catch(e => { setError(e.message); setMessage('内核连接失败'); });
     }
     return unsubscribe;
   }, []);
@@ -355,8 +363,14 @@ function App() {
     await window.tpms.request('cancel'); setPreviewResult(null); setNodeStates({}); setCacheSummary(''); setValueOutputs({}); setResult(null); setDisplayGeometry(null); setQuality(null); setDirty(true); setMessage('已取消计算，请重新生成');
   }, [sceneSignature]);
   useEffect(() => {
+    if (!info?.python || busy) return;
+    if (startupPending.current) {
+      startupPending.current = false;
+      if (mode !== 'cad') generate({ background: true });
+      return;
+    }
     // 首次连接内核后的自动生成同样按后台任务处理（不锁表单）
-    if (info && mode === 'tpms' && !result && !dirty && !busy && info.python) generate({ background: true });
+    if (mode === 'tpms' && !result && !dirty) generate({ background: true });
     // Generate once after connecting; subsequent edits require explicit generation.
   }, [info]);
   const node = scene.nodes.find(n => n.id === selected);
@@ -388,19 +402,25 @@ function App() {
     const r = await run('save_project', { project: { type: 'tpms-electron', version: 1, mode, parameters: p, scene:mode === 'cad' ? emptyScene() : scene, cfd, ...(mode === 'cad' ? {cad} : {}) } });
     if (r && !r.canceled) setMessage(`项目已保存：${r.path}`);
   }
-  async function openProject() {
-    const r = await run('open_project'); if (!r || r.canceled) return;
-    if (r.project.mode === 'cad') {
-      acceptCAD(r.imported);
-      setP({...DEFAULT,...r.project.parameters});setCfd({...CFD,...r.project.cfd});
+  function applyLoadedProject(loaded, { autoGenerate = false } = {}) {
+    if (loaded.project.mode === 'cad') {
+      acceptCAD(loaded.imported);
+      setP({ ...DEFAULT, ...loaded.project.parameters }); setCfd({ ...CFD, ...loaded.project.cfd });
       setMessage('STEP 项目已打开，源模型预览已恢复');
       return;
     }
-    setMode(r.project.mode === 'solid' ? 'nodes' : r.project.mode); setP({ ...DEFAULT, ...r.project.parameters }); setCfd({ ...CFD, ...r.project.cfd });
+    const nextMode = loaded.project.mode === 'solid' ? 'nodes' : loaded.project.mode;
+    setMode(nextMode); setP({ ...DEFAULT, ...loaded.project.parameters }); setCfd({ ...CFD, ...loaded.project.cfd });
     sceneHistory.current = { undo: [], redo: [] };
     setNodeStates({}); setValueOutputs({}); setCacheSummary(''); autoAttempt.current = '';
-    setAllEntities(true); infillHiddenRef.current = new Set(); setScene(r.project.scene || emptyScene()); setSelected(r.project.scene?.root || ''); setInspectorTab('model'); invalidate(); clearPreview();
-    setMessage('项目已打开，点击生成模型更新预览');
+    setAllEntities(!autoGenerate); infillHiddenRef.current = new Set();
+    setScene(loaded.project.scene || emptyScene()); setSelected(loaded.project.scene?.root || '');
+    setInspectorTab('model'); invalidate(); clearPreview();
+    setMessage(autoGenerate ? '启动项目已加载，正在生成模型…' : '项目已打开，点击生成模型更新预览');
+  }
+  async function openProject() {
+    const r = await run('open_project'); if (!r || r.canceled) return;
+    applyLoadedProject(r);
   }
   async function exportModel() {
     exportMenu.current.open = false;

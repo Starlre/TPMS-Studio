@@ -26,6 +26,7 @@
 
 ### 界面
 
+- `[26-11-16 17:15]` 新增桌面应用启动直载建模项目支持（`TPMS_STARTUP_PROJECT` 环境变量或 CLI `--project` / `--open` / `.json` 参数）：启动后共享同一项目校验与载入流程并自动触发首次模型生成；同步补充参数化跑鞋点阵中底示例 [examples/showcase/gyroid-shoe-midsole.json](examples/showcase/gyroid-shoe-midsole.json)。记录 R-114。
 - `[26-11-16 16:37]` 合并精简桌面界面与前端代码结构的三项冗余：① 将 `实体建模` 的**网格精度预设（快速 `0.6 mm` / 标准 `0.3 mm` / 精细 `0.15 mm`）**直接提升常驻至左下角 `生成工作流` 上方，并移除顶部导航中与右侧检查器/功能栏重复的 `.analysis-links`（`模型统计` / `剖切测量工具` / `CFD 设置`）；② 将实体、布尔、特征操作与默认配置收拢至 [primitive_catalog.mjs](desktop/src/primitive_catalog.mjs) 单一目录，驱动 `node_graph.mjs`、`NodeWorkflow.jsx` 与 `main.jsx`；③ 将 `desktop/src/native.css` 合并入 [style.css](desktop/src/style.css)（产物体积降约 29%）并提取共享数字微调工具 [number_scrub.mjs](desktop/src/number_scrub.mjs)，顺带修复预设高亮匹配 `[aria-current=true]`。记录 R-113。
 
 - `[26-11-16 11:43]` 将桌面应用默认启动主题调整为**白天/亮色背景**（`light`、`#eef1f6`）：首屏窗口背景色、`index.html`、`Viewport` 初始状态与 `localStorage` 配置键同步迁移至 `alabaster-light-v1`（保留手动切换暗色能力）。记录 R-108。
