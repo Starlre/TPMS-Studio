@@ -81,7 +81,7 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   window = new BrowserWindow({ width: 1520, height: 980, minWidth: 1100, minHeight: 720,
-    title: 'TPMS Studio · 隐式建模工作台', backgroundColor: '#090a0d',
+    title: 'TPMS Studio · 隐式建模工作台', backgroundColor: '#eef1f6',
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

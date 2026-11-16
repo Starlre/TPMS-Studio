@@ -80,7 +80,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     const maskScene = new THREE.Scene();
     const rayScene = new THREE.Scene();
     const rayCamera = new THREE.Camera();
-    let light = false, disposed = false, scheduled = 0, interacting = false, restore;
+    let light = theme === 'light', disposed = false, scheduled = 0, interacting = false, restore;
     let bounds = new THREE.Box3(new THREE.Vector3(-20, -20, -20), new THREE.Vector3(20, 20, 20));
     const inverse = new THREE.Matrix4();
     const size = new THREE.Vector2();

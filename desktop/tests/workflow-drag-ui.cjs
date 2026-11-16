@@ -119,6 +119,8 @@ async function main() {
     await undo(); await page.getByRole('checkbox', { name: '自动更新输出', exact: true }).uncheck(); await page.getByRole('button', { name: '返回最终输出', exact: true }).click();
     await page.getByRole('button', { name: '收起所有节点', exact: true }).click(); await select('n3');
     await step('n3').evaluate(el => { const pane = el.closest('.panel-scroll'); pane.scrollTop += el.getBoundingClientRect().top - pane.getBoundingClientRect().top - 120; });
+    if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: '切换暗色主题', exact: true }).click();
+    await page.waitForTimeout(250);
     await capture('electron-node-drag-dark.png'); await page.getByRole('button', { name: '切换亮色主题', exact: true }).click(); await page.waitForTimeout(250); await capture('electron-node-drag-light.png');
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1120, 760)); await page.emulateMedia({ reducedMotion: 'reduce' }); await select('n4');
     await step('n4').getByRole('button', { name: '节点操作 变换 4', exact: true }).click(); assert.ok(await page.getByRole('button', { name: '上移节点 变换 4', exact: true }).isVisible()); await page.keyboard.press('Escape');

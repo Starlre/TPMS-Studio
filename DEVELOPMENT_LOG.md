@@ -150,6 +150,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-105 | 现代曜石黑/浅灰白界面与分栏交互 | 26-11-16 09:54:09：曜石黑/浅灰白配色、透明画布径向背景、Bento 双栏统计、分栏拖拽与数值拖动微调 | 已完成 |
 | R-106 | 近期 nTop 风格 Notebook 改进 | 26-11-16 10:37:00：槽位就地新建与匿名内嵌子块、章节分组注释与折叠、符号重命名同步、`I/V` 视口快捷键 | 已完成 |
 | R-107 | 通用特征工具与放开抽壳/偏置/平滑布尔限制 | 26-11-16 11:32:00：P0（偏置/平滑差集/镜像/线性与圆周阵列/多方向增强抽壳）、P1（一阶/归一化SDF放开抽壳与偏置）、P2（放开平滑融合/差集限制） | 已完成 |
+| R-108 | 默认启动切换为白天/亮色背景 | 26-11-16 11:43:00：Electron 窗口与首屏 `data-theme="light"`、`alabaster-light-v1` 配置迁移及端到端测试更新 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -621,6 +622,14 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - **P2**：在 `solid_operations.py` 导出 `tree_cost`，移除 `solid_model.py` 与前端 `node_graph.mjs`、`workflow_drag.mjs`、`NodeWorkflow.jsx`、`main.jsx` 中对 `SMOOTH_OPERATIONS` 的 `TPMS` / 近似基本体 / 上游操作限制，保留 `tree_cost <= 64` 扇出保护，打通 `TPMS + 开孔抽壳` 的 `smooth_union` 与 `圆周阵列 + shell` 的 `smooth_difference` 水密生成，并补充 `desktop/tests/features-ui.cjs` 端到端测试。
 - 涉及文件：`solid_operations.py`、`solid_model.py`、`libfive_backend.py`、`solid_panel.py`、`desktop/src/node_graph.mjs`、`desktop/src/workflow_drag.mjs`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`desktop/src/native.css`、`test_solid_model.py`、`test_solid_operations.py`、`desktop/tests/solid-operations.test.cjs`、`desktop/tests/node-graph.test.cjs`、`desktop/tests/primitive-catalog.test.cjs`、`desktop/tests/workflow-drag.test.cjs`、`desktop/tests/ribbon-ui.cjs`、`desktop/tests/features-ui.cjs`、`docs/electron-features-p0-p2-dark.png`（及 UI 测试刷新的 `docs/*.png`）。
 - 验证：Python 6 个测试套件 `149 passed`（`test_tpms_core.py`、`test_libfive_backend.py`、`test_solid_model.py`、`test_solid_operations.py`、`test_node_workflow.py`、`test_workflow_optimization.py`）；前端 `npx vite build` 通过；`npm test` `25/25` 通过；Electron UI 7 项测试中，`features-ui.cjs`、`operations-ui.cjs`、`ribbon-ui.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`ui-smoke.cjs` 通过，`notebook-ntop-ui.cjs` 在首次串联批跑第 53 行出现过 1 次按钮失焦后 DOM 分离超时、单独重跑一次通过；实机截图 [electron-features-p0-p2-dark.png](docs/electron-features-p0-p2-dark.png) 视觉检查显示 6 孔 `圆周阵列 + 平滑差集` 法兰呈 `封闭 / 水密`（14,788 三角面、7,384 顶点）。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
+### R-108：26-11-16 11:43:00（Asia/Shanghai），桌面软件默认启动设置为白天/亮色背景
+
+- 需求与原因：调整软件启动默认主题为白天/亮色背景，使新开与既有用户环境打开时默认进入浅灰白高对比工作台，消除启动黑屏闪屏。
+- 实现：将 [desktop/src/main.jsx](desktop/src/main.jsx) 主题配置键从 `slate-blue-v1` 迁移至 `alabaster-light-v1` 并将默认回退主题设为 `light`（保留右上角切换按钮与后续用户手动选择记忆）；[desktop/index.html](desktop/index.html) 预设 `data-theme="light"`；[desktop/main.cjs](desktop/main.cjs) 的 `BrowserWindow` 初始 `backgroundColor` 同步改为 `#eef1f6`；[desktop/src/Viewport.jsx](desktop/src/Viewport.jsx) 初始 `light` 状态对齐传入 `theme` prop；更新 [desktop/tests/ui-smoke.cjs](desktop/tests/ui-smoke.cjs) 与 [desktop/tests/workflow-drag-ui.cjs](desktop/tests/workflow-drag-ui.cjs) 以默认 `light` 启动验证并保留明暗双主题切换测试。
+- 涉及文件：`desktop/index.html`、`desktop/main.cjs`、`desktop/src/main.jsx`、`desktop/src/Viewport.jsx`、`desktop/tests/ui-smoke.cjs`、`desktop/tests/workflow-drag-ui.cjs` 及实机测试更新的 `docs/*.png`。
+- 验证：`npx vite build` 通过；`npm test` `25/25` 通过；Electron UI 测试 `ui-smoke.cjs`、`workflow-drag-ui.cjs`、`ribbon-ui.cjs`、`features-ui.cjs` 全通过，零页面错误；视觉检查 [electron-tpms-light.png](docs/electron-tpms-light.png) 确认亮色背景与模型渲染正常。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定
