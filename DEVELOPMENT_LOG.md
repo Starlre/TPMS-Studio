@@ -154,6 +154,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-110 | 修复填充破面、碎角碎片与 Z-fighting 预览重影 | 26-11-16 14:34:00：边界微倒圆裁剪、`libfive` 捏合棱拓扑拆分、小碎块清理与自动隐藏被填充上游实体 | 已完成 |
 | R-111 | 优化 TPMS 填充边缘锯齿与曲面法线粗糙度 | 26-11-16 15:04:00：体素自适应 `k_crop = 3.5*cell_size` 消除亚体素 QEF 锯齿，视口法线折痕阈值调至 `45°` | 已完成 |
 | R-112 | 移除 PyQt5 旧版界面路线 | 26-11-16 16:07:00：删除 `app.py`/`solid_panel.py`/`run_qt.bat` 与 Qt 验证脚本及截图，清理 `PyQt5` 依赖及冗余 Qt 测试与文档入口 | 已完成 |
+| R-113 | 合并精简桌面端三项核心冗余 | 26-11-16 16:37:00：精度预设提至生成区上方并去重顶部检查入口、节点目录收拢至单一清单、合并 `style.css`+`native.css` 并复用数字微调函数 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -676,6 +677,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - 清理 [test_export_quality.py](test_export_quality.py)、[test_gpu_preview.py](test_gpu_preview.py)、[test_libfive_backend.py](test_libfive_backend.py) 中的 PyQt5 控件测试，并将 [test_solid_model.py](test_solid_model.py) 中的平移边界测试改写为纯后端单元回归 `test_solid_result_preserves_translated_bounds`。
 - 涉及文件：`requirements.txt`、`test_export_quality.py`、`test_gpu_preview.py`、`test_libfive_backend.py`、`test_solid_model.py`、`desktop/src/model_appearance.mjs`、`README.md`、`docs/*.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`（及删除的 Qt 文件与测试刷新的 `docs/*.png`）。
 - 验证：Python 全量回归 `pytest -q` `183 passed in 104.83s`（0 failed / 0 skipped）；前端 `npx vite build` 通过；`npm test` `26/26` 通过；Electron 实机测试 `verify-ui`（`ui-smoke.cjs`）、`verify-ribbon`（`ribbon-ui.cjs`）、`verify-operations`（`operations-ui.cjs`）均通过，零页面错误。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
+### R-113：26-11-16 16:37:00（Asia/Shanghai），合并精简桌面端三项核心冗余
+
+- 需求与原因：针对桌面工作台存在的交互入口重复与前端多头维护问题，按用户确认实施三项精简：① 顶部 `.analysis-links` 与右侧检查器/功能栏重复，且 `网格精度预设` 藏在 `设置` 折叠框中不易发现；② 节点清单、默认值、算子 arity 与创建目录分别散落在 `node_graph.mjs`、`NodeWorkflow.jsx` 与 `main.jsx`；③ `desktop/src/style.css` 与 `desktop/src/native.css` 两套样式表叠加覆盖（且后者遗留 `[aria-pressed=true]` 使 `[aria-current=true]` 预设高亮失效），数字标签拖动逻辑在两组件中重复实现。
+- 实现：
+  - **UI 入口精简与提显**：在 [desktop/src/main.jsx](desktop/src/main.jsx) 移除顶部重复 `.analysis-links` 导航，只保留工作区切换与连接状态指示；将 `网格精度预设`（`快速 0.6 mm` / `标准 0.3 mm` / `精细 0.15 mm`）移至左下角 `.generate-footer` 的 `生成工作流` 上方常驻显示，[desktop/src/NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx) `设置` 内保留自定义 `输出网格尺寸` 数值输入避免重复。
+  - **节点目录收拢为单一清单**：扩展 [desktop/src/primitive_catalog.mjs](desktop/src/primitive_catalog.mjs) 统一维护基本体、TPMS、5 类布尔与 7 类特征/阵列节点（`BOOLEAN_OPS`、`FEATURE_OPS`、`NODE_CATALOG`、`NODE_SPECS`、`INLINE_NODE_KINDS`、`MESH_PRESETS`），由 [desktop/src/node_graph.mjs](desktop/src/node_graph.mjs)、[NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx) 与 [main.jsx](desktop/src/main.jsx) 统一读取。
+  - **样式与工具合并**：将 `desktop/src/native.css` 合并进 [desktop/src/style.css](desktop/src/style.css)（修复 `[aria-current=true]` 预设激活边框，构建后 CSS 由 `69.54 kB` 降至 `49.16 kB`）并删除 `native.css`；抽取共享数字拖动微调函数 [desktop/src/number_scrub.mjs](desktop/src/number_scrub.mjs) 供两处表单复用；更新 [desktop/tests/primitive-catalog.test.cjs](desktop/tests/primitive-catalog.test.cjs) 校验目录一致性及 [desktop/tests/ui-smoke.cjs](desktop/tests/ui-smoke.cjs) 导航断言。
+- 涉及文件：`desktop/src/primitive_catalog.mjs`、`desktop/src/number_scrub.mjs`、`desktop/src/node_graph.mjs`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`desktop/src/style.css`（合并并删除 `desktop/src/native.css`）、`desktop/src/model_appearance.mjs`、`desktop/tests/primitive-catalog.test.cjs`、`desktop/tests/ui-smoke.cjs`、`docs/native-ui.md`、`docs/node-modeling.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`（及测试刷新的 `docs/*.png`）。
+- 验证：`npx vite build` 通过（`5.32s`，CSS `49.16 kB`）；`npm test` `27/27` 通过（含新增统一目录一致性单测）；全套 13 项 Playwright 端到端界面回归（`verify-ui`、`verify-ribbon`、`verify-edge-quality`、`verify-inspection`、`verify-web`、`verify-operations`、`features-ui.cjs`、`verify-notebook-cards`、`verify-workflow-drag`、`notebook-ntop-ui.cjs`、`verify-multi-entity`、`verify-primitives`、`verify-step-import`）全部通过，零页面报错，实机截图确认暗/亮主题、顶部单列导航与底部精度预设展示无误。Python 后端代码未修改，沿用 `5d09caf` 的 `pytest -q` `183 passed` 基线。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定

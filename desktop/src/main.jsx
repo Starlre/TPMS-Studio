@@ -5,7 +5,7 @@ import Viewport from './Viewport';
 import NodeWorkflow from './NodeWorkflow';
 import Ribbon from './Ribbon';
 import PrimitiveIcon from './PrimitiveIcon';
-import { PRIMITIVES, COMMON_PRIMITIVES } from './primitive_catalog.mjs';
+import { PRIMITIVES, COMMON_PRIMITIVES, BOOLEAN_OPS, FEATURE_OPS, NODE_SPECS, MESH_PRESETS } from './primitive_catalog.mjs';
 import { createValueBlock } from './ValueBlocks';
 import { Circle, Cylinder, CircleDot, Move3D, Hash, Variable, Undo2, Redo2, Eye, Scissors, Ruler, SlidersHorizontal, Waves, Grid3X3, GitMerge, GitCompare, Minus, Sparkles, Expand, FlipHorizontal2, LayoutGrid, RefreshCw, MinusCircle } from 'lucide-react';
 import InspectionPanel from './InspectionPanel';
@@ -15,8 +15,8 @@ import { graphErrors, affectedNodes, createNode, ancestors, APPROXIMATE_PRIMITIV
 import { notebookOrder, onlyOrderChanged, sceneSignature as computationalSignature } from './workflow_drag.mjs';
 // 进度消息与节点状态放入组件外的订阅 store：onProgress 高频推送时只刷新状态栏与对应徽标
 import { setMessage, setNodeStates, useStatusMessage } from './ui_status.mjs';
+import { startNumberScrub } from './number_scrub.mjs';
 import './style.css';
-import './native.css';
 
 const DEFAULT = { surface: 'Gyroid', mode: 'sheet', size_x: 40, size_y: 40, size_z: 40,
   cells_x: 2, cells_y: 2, cells_z: 2, thickness: 1.2, iso_level: 0, samples_per_cell: 64,
@@ -29,36 +29,7 @@ const CFD = { flow_axis: 'X', element_size: 1.5, surface_samples_per_cell: 32,
   curvature_refinement_enabled: true, curvature_points: 18, low_quality_threshold: 0.2 };
 const emptyScene = () => ({ version: 1, nodes: [], root: '', cell_size: 0.3, parameters: {}, value_nodes: [] });
 const format = (n, digits = 0) => Number(n ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: digits });
-
-function startNumberScrub(event, { value, onChange, min = -Infinity, max = Infinity, step = 0.1, disabled = false }) {
-  if (disabled || event.button !== 0) return;
-  const startX = event.clientX;
-  const startValue = Number.isFinite(Number(value)) ? Number(value) : 0;
-  const baseStep = Number.isFinite(Number(step)) && Number(step) > 0 ? Number(step) : 0.1;
-  let moved = false;
-  const move = moveEvent => {
-    const dx = moveEvent.clientX - startX;
-    if (!moved && Math.abs(dx) < 4) return;
-    moved = true;
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-    const effectiveStep = moveEvent.shiftKey ? baseStep * 0.1 : baseStep;
-    const decimals = Math.min(6, Math.max(0, (String(effectiveStep).split('.')[1] || '').length));
-    const raw = startValue + Math.round(dx / 6) * effectiveStep;
-    const clamped = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, raw));
-    onChange(Number(clamped.toFixed(decimals)));
-  };
-  const up = () => {
-    window.removeEventListener('mousemove', move);
-    window.removeEventListener('mouseup', up);
-    if (moved) {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-  };
-  window.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', up);
-}
+const NODE_ICONS = { GitMerge, GitCompare, Minus, Sparkles, MinusCircle, Box, Move3D, Expand, FlipHorizontal2, LayoutGrid, RefreshCw, Waves };
 
 function Num({ label, value, onChange, unit, min, max, step = 0.1, disabled = false }) {
   const id = useId();
@@ -523,7 +494,7 @@ function App() {
   const ribbonCategories = [
     { id: 'model', label: '建模', workspaces: ['nodes'], groups: [
       { label: '基本体', palette:true, common:COMMON_PRIMITIVES, tools:PRIMITIVES.map(item => ({ id:item.kind, label:`创建${item.name}`, icon:props => <PrimitiveIcon {...props} kind={item.kind}/>, disabled:noEntity, onClick:() => ribbonNode(item.kind), hint:item.hint })) },
-      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles],['smooth_difference','平滑差集',MinusCircle]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || ((kind === 'smooth_union' || kind === 'smooth_difference') && smoothBlocked), onClick:() => ribbonNode(kind), hint:'选中实体作为 A，在节点内编辑 A/B 引用；平滑布尔现已支持基本体、抽壳与 TPMS 过渡' })) },
+      { label: '布尔与融合', tools: BOOLEAN_OPS.map(spec => ({ label: `添加${spec.name}`, icon: NODE_ICONS[spec.iconKey], disabled: noEntity || scene.nodes.length < 2 || ((spec.kind === 'smooth_union' || spec.kind === 'smooth_difference') && smoothBlocked), onClick: () => ribbonNode(spec.kind), hint: '选中实体作为 A，在节点内编辑 A/B 引用；平滑布尔现已支持基本体、抽壳与 TPMS 过渡' })) },
       { label: '节点操作', tools: [
         {label:'独立变换',icon:Move3D,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('transform')},
         {label:'复制实体',icon:Copy,disabled:noEntity || !node,onClick:() => { duplicateNode(); setMode('nodes'); setInspectorTab('model'); }},
@@ -532,16 +503,12 @@ function App() {
       ] }
     ] },
     { id: 'operations', label: '操作', workspaces: ['nodes'], groups: [
-      { label: '操作', palette: true, paletteId: 'solid-operation-palette', common: ['shell'], footer: '支持基本体、布尔组合、圆锥/圆台/椭球及 TPMS 等壁厚抽壳', tools: [
-        { id: 'shell', label: '抽壳', icon: Box, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('shell'), hint: scene.nodes.length ? '向内、向外或对称等壁厚抽壳，支持多向开口与任意上游实体' : '先创建任意几何实体' }
-      ] },
-      { label: '特征与阵列', tools: [
-        { label: '偏置', icon: Expand, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('offset'), hint: '对基本体做等距膨胀或收缩' },
-        { label: '镜像', icon: FlipHorizontal2, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('mirror'), hint: '沿坐标平面对称镜像复制或翻转' },
-        { label: '线性阵列', icon: LayoutGrid, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('linear_pattern'), hint: '按 XYZ 数量与步距生成多份阵列' },
-        { label: '圆周阵列', icon: RefreshCw, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('circular_pattern'), hint: '绕 X/Y/Z 轴按数量与总角度圆周阵列' },
-        { label: 'TPMS 填充', icon: Waves, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('tpms_infill'), hint: '按选中实体外形一键填充 TPMS，可选保留外蒙皮与开口面' }
-      ] }
+      { label: '操作', palette: true, paletteId: 'solid-operation-palette', common: ['shell'], footer: '支持基本体、布尔组合、圆锥/圆台/椭球及 TPMS 等壁厚抽壳', tools: [NODE_SPECS.shell].map(spec => ({
+        id: spec.kind, label: spec.name, icon: NODE_ICONS[spec.iconKey], disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode(spec.kind), hint: scene.nodes.length ? spec.hint : '先创建任意几何实体',
+      })) },
+      { label: '特征与阵列', tools: FEATURE_OPS.filter(op => op.placement === 'feature').map(spec => ({
+        label: spec.name, icon: NODE_ICONS[spec.iconKey], disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode(spec.kind), hint: spec.hint,
+      })) }
     ] },
     { id: 'tpms', label: mode === 'nodes' ? 'TPMS 节点' : 'TPMS', workspaces:['nodes','tpms'], groups: [
       { label: 'TPMS 参数编辑', workspaces: ['tpms'], tools: [
@@ -552,7 +519,7 @@ function App() {
       { label: '加入实体工作流', workspaces: ['nodes'], tools: [
         {label:'添加 TPMS',icon:Waves,disabled:noEntity,onClick:() => ribbonNode('tpms'),hint:'将当前 TPMS 参数复制为独立节点'},
         {label:'添加隐式公式',icon:Variable,disabled:noEntity,onClick:() => ribbonNode('tpms',true)},
-        {label:'TPMS 填充',icon:Waves,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('tpms_infill'),hint:'按选中实体外形一键填充 TPMS，可选保留外蒙皮与开口面'}
+        {label:NODE_SPECS.tpms_infill.name,icon:NODE_ICONS[NODE_SPECS.tpms_infill.iconKey],disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('tpms_infill'),hint:NODE_SPECS.tpms_infill.hint}
       ] }
     ] },
     { id: 'values', label: '参数与公式', workspaces: ['nodes'], groups: [
@@ -612,11 +579,6 @@ function App() {
           <button className={mode === 'nodes' ? 'selected' : ''} aria-label="实体建模" aria-current={mode === 'nodes' ? 'page' : undefined} title="实体建模" disabled={busy} onClick={() => switchMode('nodes')}><Workflow size={19} aria-hidden="true" /><span className="nav-label">实体建模</span></button>
           {cad && <button className={mode === 'cad' ? 'selected' : ''} aria-label="导入模型" aria-current={mode === 'cad' ? 'page' : undefined} title="导入模型" disabled={busy} onClick={() => switchMode('cad')}><FolderOpen size={19} aria-hidden="true" /><span className="nav-label">导入模型</span></button>}
         </nav>
-        <nav className="analysis-links" aria-label="分析工具">
-          <button className={inspectorTab === 'model' ? 'selected' : ''} aria-label="模型统计" aria-current={inspectorTab === 'model' ? 'page' : undefined} title="模型统计" onClick={() => setInspectorTab('model')}><Activity size={19} aria-hidden="true" /><span className="nav-label">模型统计</span></button>
-          <button className={inspectorTab === 'inspection' ? 'selected' : ''} aria-label="剖切测量工具" aria-current={inspectorTab === 'inspection' ? 'page' : undefined} title="剖切测量工具" disabled={!hasView || layoutActive} onClick={() => setInspectorTab('inspection')}><Scissors size={19} aria-hidden="true" /><span className="nav-label">剖切测量工具</span></button>
-          <button aria-label="CFD 设置" title="CFD 设置" disabled={busy || mode !== 'tpms'} onClick={() => setTab('cfd')}><Waves size={19} aria-hidden="true" /><span className="nav-label">CFD 设置</span></button>
-        </nav>
       <span className="workspace-state"><span className={`connection ${info ? 'connected' : ''}`} />{busy ? (busySource === 'auto' ? '后台更新中' : '正在计算') : dirty ? '参数待更新' : info ? '本地内核已连接' : '正在连接内核'}</span>
     </div>
     <Ribbon key={mode} categories={ribbonCategories} />
@@ -667,7 +629,7 @@ function App() {
           <Section title="质量判定">{cv('low_quality_threshold', '低质量阈值', { min: 0.01, max: 0.9, step: 0.01 })}<p className="hint">缩放雅可比用于筛选低质量单元。导出 MSH、BDF、边界 JSON 和 VTU；物理场需在 COMSOL 中设置。</p></Section>
         </>}
         </fieldset></div>
-        {(mode === 'cad' && cad || mode === 'tpms' || scene.nodes.length > 0) && <div className="generate-footer">{mode === 'nodes' && <><div className="footer-output"><span>最终输出</span><strong>{scene.nodes.find(n => n.id === scene.root)?.name || '未设置'}</strong></div><Toggle label="自动更新输出" value={autoUpdate} disabled={busy} onChange={setAutoUpdate} /></>}<p className="hint">{busy ? (busySource === 'auto' ? '后台更新中，可继续编辑参数' : '计算中，视口仍可操作') : invalidWorkflow ? '步骤输入有误，请检查上游引用' : dirty ? '参数已修改，生成后更新模型' : mode === 'cad' ? '源曲面 → 显示网格 → 剖切与测量' : mode === 'nodes' ? '展开左侧节点，直接编辑参数与输入' : '参数定义 → 隐式场 → 封闭模型'}</p><button className="primary generate" disabled={!info || busy || (mode === 'cad' ? !info.step || !cad : mode === 'nodes' && (!info.libfive || !scene.nodes.length || invalidWorkflow))} onClick={generate}>{busy ? <LoaderCircle size={20} className="spin" aria-hidden="true" /> : <Layers3 size={20} aria-hidden="true" />}{busy ? '正在计算…' : mode === 'cad' ? '更新预览' : mode === 'tpms' ? '生成模型' : '生成工作流'}</button></div>}
+        {(mode === 'cad' && cad || mode === 'tpms' || scene.nodes.length > 0) && <div className="generate-footer">{mode === 'nodes' && <><div className="footer-output"><span>最终输出</span><strong>{scene.nodes.find(n => n.id === scene.root)?.name || '未设置'}</strong></div><Toggle label="自动更新输出" value={autoUpdate} disabled={busy} onChange={setAutoUpdate} /><div className="mesh-presets footer-presets" role="group" aria-label="网格精度预设">{MESH_PRESETS.map(([size, name]) => <button type="button" key={size} disabled={busy} aria-current={scene.cell_size === size ? 'true' : undefined} onClick={() => updateScene({ ...scene, cell_size: size })}>{name}<small>{size} mm</small></button>)}</div></>}<p className="hint">{busy ? (busySource === 'auto' ? '后台更新中，可继续编辑参数' : '计算中，视口仍可操作') : invalidWorkflow ? '步骤输入有误，请检查上游引用' : dirty ? '参数已修改，生成后更新模型' : mode === 'cad' ? '源曲面 → 显示网格 → 剖切与测量' : mode === 'nodes' ? '展开左侧节点，直接编辑参数与输入' : '参数定义 → 隐式场 → 封闭模型'}</p><button className="primary generate" disabled={!info || busy || (mode === 'cad' ? !info.step || !cad : mode === 'nodes' && (!info.libfive || !scene.nodes.length || invalidWorkflow))} onClick={generate}>{busy ? <LoaderCircle size={20} className="spin" aria-hidden="true" /> : <Layers3 size={20} aria-hidden="true" />}{busy ? '正在计算…' : mode === 'cad' ? '更新预览' : mode === 'tpms' ? '生成模型' : '生成工作流'}</button></div>}
       </aside>
       <main className="model-area" aria-label="三维模型预览">
         <div className="viewport-toolbar"><div className="viewport-title"><span>三维视图</span><small>{display === 'region' ? '仿真边界' : display === 'low' ? '低质量单元' : renderer}</small></div>{mode !== 'tpms' ? <span className="viewport-context">{mode === 'cad' ? 'STEP 参考模型' : layoutActive ? `全部实体 · ${visibleObjects?.length || 0} 个可见` : previewResult ? `预览：${previewResult.name}` : result?.mode === 'solid' ? '最终输出' : '等待生成工作流'}</span> : /* B4③：两态工具补 aria-pressed */ <div className="viewport-actions"><Tool icon={Activity} disabled={!canCFD} title={!canCFD ? '生成 TPMS 模型后可使用' : '计算体单元质量'} onClick={() => inspectQuality()}>网格质量</Tool><Tool icon={Scan} disabled={!canCFD} active={display === 'region'} pressed={display === 'region'} onClick={showRegion}>仿真区域</Tool><Tool icon={Triangle} disabled={!canCFD || !quality} title={!quality ? '先计算网格质量' : '定位低质量单元'} active={display === 'low'} pressed={display === 'low'} onClick={lowQuality}>低质量</Tool></div>}</div>

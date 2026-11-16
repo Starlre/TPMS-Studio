@@ -11,28 +11,14 @@ import { valueConsumers, APPROXIMATE_PRIMITIVES } from './node_graph.mjs';
 import { Plus, Box, Move3D, Trash2, Undo2, Redo2, ArrowDownToLine, Eye, ChevronRight, ChevronsDownUp, Hash } from 'lucide-react';
 import { NODE_KINDS, ARITY, inputOptions, graphErrors, createNode } from './node_graph.mjs';
 import { WorkflowDrag, SortHeading, SortHandle, SortButtons, ReferenceOutput, ReferenceInput, DragSource } from './WorkflowDrag';
-import { PRIMITIVES } from './primitive_catalog.mjs';
+import { PRIMITIVES, INLINE_NODE_KINDS, FEATURE_OPS, NODE_SPECS } from './primitive_catalog.mjs';
 import { useNodeState } from './ui_status.mjs';
+import { startNumberScrub } from './number_scrub.mjs';
 
-const OPERATION_KINDS = new Set(['shell', 'offset', 'mirror', 'linear_pattern', 'circular_pattern', 'tpms_infill']);
-const INLINE_CREATION_KINDS = [
-  ...PRIMITIVES.map(p => ({ id: p.kind, name: p.name, group: '基本体' })),
-  { id: 'tpms', name: 'TPMS', group: '场/结构' },
-  { id: 'tpms_infill', name: 'TPMS 填充', group: '操作' },
-  { id: 'union', name: '并集', group: '布尔' },
-  { id: 'intersection', name: '交集', group: '布尔' },
-  { id: 'difference', name: '差集', group: '布尔' },
-  { id: 'smooth_union', name: '平滑融合', group: '布尔' },
-  { id: 'smooth_difference', name: '平滑差集', group: '布尔' },
-  { id: 'transform', name: '变换', group: '操作' },
-  { id: 'shell', name: '抽壳', group: '操作' },
-  { id: 'offset', name: '偏置', group: '操作' },
-  { id: 'mirror', name: '镜像', group: '操作' },
-  { id: 'linear_pattern', name: '线性阵列', group: '操作' },
-  { id: 'circular_pattern', name: '圆周阵列', group: '操作' }
-];
+const OPERATION_KINDS = new Set(FEATURE_OPS.filter(op => op.kind !== 'transform').map(op => op.kind));
+const INLINE_CREATION_KINDS = INLINE_NODE_KINDS;
 
-const LABELS = Object.fromEntries(PRIMITIVES.map(item => [item.kind,item.labels]));
+const LABELS = Object.fromEntries(PRIMITIVES.map(item => [item.kind, item.labels]));
 const Values = createContext([]);
 const Navigate = createContext(() => {});
 // B1：节点计算状态徽标文案（与 workflow_engine.py 上报的 state 一一对应）
@@ -55,32 +41,6 @@ function NodeStateBadge({ id }) {
 }
 function Choice({ label, value, options, onChange }) {
   return <label className="field"><span>{label}</span><select aria-label={label} value={value} onChange={e => onChange(e.target.value)}>{options.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>;
-}
-function scrubNumeric(event, { value, onChange, step = 1, disabled = false }) {
-  if (disabled || event.button !== 0) return;
-  const startX = event.clientX;
-  const startValue = Number.isFinite(Number(value)) ? Number(value) : 0;
-  let moved = false;
-  const move = moveEvent => {
-    const dx = moveEvent.clientX - startX;
-    if (!moved && Math.abs(dx) < 4) return;
-    moved = true;
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-    const effectiveStep = moveEvent.shiftKey ? step * 0.1 : step;
-    const raw = startValue + Math.round(dx / 6) * effectiveStep;
-    onChange(Number(raw.toFixed(4)));
-  };
-  const up = () => {
-    window.removeEventListener('mousemove', move);
-    window.removeEventListener('mouseup', up);
-    if (moved) {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-  };
-  window.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', up);
 }
 
 function cardSummaryText(n, isValue, scene) {
@@ -110,7 +70,7 @@ function cardSummaryText(n, isValue, scene) {
 }
 
 function Numeric({ label, value, onChange, unit }) {
-  return <label className="field"><span className="scrub-label" title="左右拖动微调数值（按住 Shift 精细微调）" onMouseDown={e => scrubNumeric(e, { value, onChange, step: 0.1 })}>{label}{unit && ` / ${unit}`}</span><input type="number" step="any" aria-label={label} value={value ?? ''} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} /></label>;
+  return <label className="field"><span className="scrub-label" title="左右拖动微调数值（按住 Shift 精细微调）" onMouseDown={e => startNumberScrub(e, { value, onChange, step: 0.1, decimals: 4 })}>{label}{unit && ` / ${unit}`}</span><input type="number" step="any" aria-label={label} value={value ?? ''} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} /></label>;
 }
 
 function ParameterField({ node, target, label, value, unit = 'mm', patch, disabled = false }) {
@@ -130,7 +90,7 @@ function ParameterField({ node, target, label, value, unit = 'mm', patch, disabl
     patch({ expressions });
   }
   const canScrub = !bound && !disabled;
-  return <ReferenceInput target={{ kind: 'number', id: node.id, field: target }} label={label} disabled={disabled} className="parameter-binding"><div className="binding-heading"><span className={canScrub ? 'scrub-label' : ''} title={canScrub ? '左右拖动微调数值（按住 Shift 精细微调）' : undefined} onMouseDown={canScrub ? e => scrubNumeric(e, { value, onChange: setValue, step: unit === '°' ? 1 : 0.5 }) : undefined}>{label}{unit && ` / ${unit}`}</span><button type="button" disabled={disabled} className={bound ? 'binding-active' : ''} aria-label={`${label}使用表达式`} aria-pressed={bound} onClick={toggle}>fx</button></div>
+  return <ReferenceInput target={{ kind: 'number', id: node.id, field: target }} label={label} disabled={disabled} className="parameter-binding"><div className="binding-heading"><span className={canScrub ? 'scrub-label' : ''} title={canScrub ? '左右拖动微调数值（按住 Shift 精细微调）' : undefined} onMouseDown={canScrub ? e => startNumberScrub(e, { value, onChange: setValue, step: unit === '°' ? 1 : 0.5, decimals: 4 }) : undefined}>{label}{unit && ` / ${unit}`}</span><button type="button" disabled={disabled} className={bound ? 'binding-active' : ''} aria-label={`${label}使用表达式`} aria-pressed={bound} onClick={toggle}>fx</button></div>
     <input aria-label={label} disabled={disabled} type={bound ? 'text' : 'number'} step="any" spellCheck={false} value={bound ? node.expressions[target] : value ?? ''}
       onChange={e => bound ? patch({ expressions: { ...node.expressions, [target]: e.target.value } }) : setValue(e.target.value === '' ? '' : Number(e.target.value))} />
     {!!blocks.length && <select aria-label={`${label}参数引用`} disabled={disabled} value={reference ? node.expressions[target] : ''} onChange={e => { const expressions = { ...node.expressions }; if (e.target.value) expressions[target] = e.target.value; else delete expressions[target]; patch({ expressions }); }}><option value="">手动输入 / 自定义 fx</option>{blocks.map(b => <option key={b.id} value={b.symbol}>{b.name} · {b.symbol} · 数值</option>)}</select>}
@@ -397,7 +357,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
         })}
         {(node.kind === 'difference' || node.kind === 'smooth_difference') && <p className="hint">{node.kind === 'smooth_difference' ? 'A 为保留实体，B 为带平滑圆角过渡的减除实体。' : 'A 为保留实体，B 为要减去的实体。'}</p>}
         {LABELS[node.kind]?.map((label, i) => field(`dimensions.${i}`, label, node.dimensions[i]))}
-        {PRIMITIVES.find(item => item.kind === node.kind)?.hint && <p className="hint">{PRIMITIVES.find(item => item.kind === node.kind).hint}</p>}
+        {NODE_SPECS[node.kind]?.hint && NODE_SPECS[node.kind].category === 'primitive' && <p className="hint">{NODE_SPECS[node.kind].hint}</p>}
         {node.kind === 'tpms' && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} />}
         {(node.kind === 'smooth_union' || node.kind === 'smooth_difference') && <>
           {field('blend', '融合宽度', node.blend)}
@@ -504,9 +464,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     {settings && <section className="card-settings" aria-label="输出设置">
       <ReferenceInput target={{ kind: 'root' }} label="最终输出"><Choice label="输出节点" value={scene.root} options={scene.nodes.length ? scene.nodes.map(n => [n.id, n.name]) : [['', '先添加建模节点']]} onChange={v => commitScene({ ...scene, root: v })} /></ReferenceInput>
       <Numeric label="输出网格尺寸" value={scene.cell_size} unit="mm" onChange={v => onChange({ ...scene, cell_size: v })} />
-      {/* B4②：网格精度是互斥单选，改用 aria-current */}
-      <div className="mesh-presets" role="group" aria-label="网格精度预设">{[[0.6, '快速'], [0.3, '标准'], [0.15, '精细']].map(([size, name]) => <button type="button" key={size} disabled={busy} aria-current={scene.cell_size === size ? 'true' : undefined} onClick={() => onChange({ ...scene, cell_size: size })}>{name}<small>{size} mm</small></button>)}</div>
-      <p className="hint">尺寸越小，圆弧和细节越精细，计算量与文件大小增加。修改后重新生成工作流；旧项目保留原精度。全部实体布局使用独立精度，导出使用最终输出。</p>
+      <p className="hint">常用快速/标准/精细预设已常驻在左下角生成区；此处可自定义任意尺寸（mm）。修改后重新生成工作流生效。</p>
       {!!blocks.length && <button type="button" className="secondary full evaluate-values" disabled={busy} onClick={evaluateValues}>计算参数值</button>}
       <details className="workflow-inputs"><summary>共享常量 <small>{Object.keys(params).length} 个</small></summary>{Object.entries(params).map(([name, val]) => <div className="parameter-row" key={name}><Numeric label={name} value={val} onChange={v => onChange({ ...scene, parameters: { ...params, [name]: v } })} /><button type="button" aria-label={`删除参数 ${name}`} onClick={() => removeParameter(name)}><Trash2 size={16} aria-hidden="true" /></button></div>)}<div className="add-row"><input aria-label="新共享参数名称" placeholder="例如 wall" value={parameterName} onChange={e => setParameterName(e.target.value)} /><button type="button" className="secondary" onClick={addParameter} disabled={!parameterName.trim()}>添加参数</button></div></details>
       <details className="workflow-presets"><summary>示例工作流</summary>{[['sphere_hole', '球体减贯穿孔'], ['smooth', '双球平滑融合'], ['tpms_channel', '圆柱 TPMS 减流道']].map(([id, name]) => <button type="button" key={id} className="secondary full" disabled={!available || busy} onClick={() => loadPreset(id)}>{name}</button>)}</details>

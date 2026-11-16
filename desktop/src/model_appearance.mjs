@@ -43,7 +43,7 @@ export const OVERLAY_COLORS = Object.freeze({
   markerPlate: Object.freeze({ dark: '#172536', light: '#1b3a56' }),
   // 轴标底衬圆盘：半透明，保证轴标压在模型表面时依然可读
   axisPlate: Object.freeze({ dark: 'rgba(16,21,28,.72)', light: 'rgba(232,238,244,.78)' }),
-  // 视口背景，必须与 native.css 的 --viewport 保持同值（Three.js 用 JS 值绘制，CSS 变量只管兜底底色）
+  // 视口背景，必须与 style.css 的 --viewport 保持同值（Three.js 用 JS 值绘制，CSS 变量只管兜底底色）
   viewport: Object.freeze({ dark: '#0b0d12', light: '#eaedf3' }),
 });
 

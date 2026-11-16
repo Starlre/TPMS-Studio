@@ -30,3 +30,14 @@ test('approximate primitives support smooth fusion even through transforms',asyn
     for (const operation of ['union','intersection','difference','smooth_difference']) {smooth.kind=operation;assert.deepEqual(graphErrors(scene),{});}
   }
 });
+
+test('unified node catalog drives NODE_KINDS, ARITY, DIMENSIONS and inline choices consistently', async () => {
+  const { NODE_CATALOG, NODE_SPECS, INLINE_NODE_KINDS } = await import('../src/primitive_catalog.mjs');
+  const { NODE_KINDS, ARITY, DIMENSIONS } = await import('../src/node_graph.mjs');
+  assert.deepEqual(Object.keys(NODE_KINDS), NODE_CATALOG.map(spec => spec.kind));
+  for (const item of INLINE_NODE_KINDS) {
+    assert.ok(NODE_SPECS[item.id], `missing NODE_SPECS entry for inline kind ${item.id}`);
+    assert.equal(Boolean(ARITY[item.id]), NODE_SPECS[item.id].arity > 0);
+    assert.deepEqual(DIMENSIONS[item.id], NODE_SPECS[item.id].dimensions || []);
+  }
+});

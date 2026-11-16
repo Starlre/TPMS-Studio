@@ -1,15 +1,10 @@
 // The scene is a DAG: card order is presentation, inputs determine computation.
-import { PRIMITIVES } from './primitive_catalog.mjs';
-export const NODE_KINDS = { sphere: '球体', box: '长方体', cylinder: '圆柱', torus: '圆环', tpms: 'TPMS',
-  union: '并集', intersection: '交集', difference: '差集 A−B', smooth_union: '平滑融合', smooth_difference: '平滑差集',
-  transform: '变换', shell: '抽壳', offset: '偏置', mirror: '镜像', linear_pattern: '线性阵列', circular_pattern: '圆周阵列', tpms_infill: 'TPMS 填充' };
-export const ARITY = { union: 2, intersection: 2, difference: 2, smooth_union: 2, smooth_difference: 2,
-  transform: 1, shell: 1, offset: 1, mirror: 1, linear_pattern: 1, circular_pattern: 1, tpms_infill: 1 };
-export const APPROXIMATE_PRIMITIVES = new Set(['cone','frustum','ellipsoid']);
-export const EXACT_SDF_PRIMITIVES = new Set(['sphere','box','cube','rounded_box','cylinder','rounded_cylinder','capsule','torus']);
-export const DIMENSIONS = { sphere: [8], box: [16, 16, 16], cylinder: [6, 24], torus: [10, 3], tpms: [],
-  shell: [1], offset: [1], mirror: [], linear_pattern: [3, 1, 1, 16, 16, 16], circular_pattern: [6, 360], tpms_infill: [8, 0, 0] };
-for (const item of PRIMITIVES) { NODE_KINDS[item.kind] = item.name; DIMENSIONS[item.kind] = item.dimensions; }
+import { NODE_CATALOG, NODE_SPECS } from './primitive_catalog.mjs';
+export const NODE_KINDS = Object.fromEntries(NODE_CATALOG.map(item => [item.kind, item.nodeName]));
+export const ARITY = Object.fromEntries(NODE_CATALOG.filter(item => item.arity > 0).map(item => [item.kind, item.arity]));
+export const APPROXIMATE_PRIMITIVES = new Set(['cone', 'frustum', 'ellipsoid']);
+export const EXACT_SDF_PRIMITIVES = new Set(['sphere', 'box', 'cube', 'rounded_box', 'cylinder', 'rounded_cylinder', 'capsule', 'torus']);
+export const DIMENSIONS = Object.fromEntries(NODE_CATALOG.map(item => [item.kind, item.dimensions || []]));
 
 function treeCost(nodes, nodeId, visiting = new Set()) {
   if (!nodeId || visiting.has(nodeId)) return 1;
@@ -109,21 +104,17 @@ export function orderedNodes(nodes) {
 }
 
 export function createNode(scene, kind, parameters, selected) {
-  if (!(kind in NODE_KINDS)) throw new Error('不支持的节点类型');
+  const spec = NODE_SPECS[kind];
+  if (!spec) throw new Error('不支持的节点类型');
   let index = 1;
   while (scene.nodes.some(n => n.id === `n${index}`)) index++;
   const first = scene.nodes.find(n => n.id === selected) || scene.nodes.find(n => n.id === scene.root) || scene.nodes.at(-1);
   const other = scene.nodes.find(n => n.id !== first?.id);
-  const opDefaults = kind === 'shell' ? { operation: { opening: 'closed' } }
-    : kind === 'mirror' ? { operation: { axis: 'X', keep_original: true } }
-    : kind === 'linear_pattern' ? { operation: { centered: false } }
-    : kind === 'circular_pattern' ? { operation: { axis: 'Z' } }
-    : kind === 'tpms_infill' ? { operation: { openings: [] } }
-    : {};
+  const opDefaults = spec.operation ? { operation: structuredClone(spec.operation) } : {};
   return { id: `n${index}`, name: `${NODE_KINDS[kind]} ${index}`, kind,
     dimensions: [...(DIMENSIONS[kind] || [])], position: [0, 0, 0], rotation: [0, 0, 0],
     inputs: ARITY[kind] === 2 ? [first?.id || '', other?.id || ''] : ARITY[kind] === 1 ? [first?.id || ''] : [],
-    blend: 2, tpms: (kind === 'tpms' || kind === 'tpms_infill') ? { ...parameters, tubular_enabled: false } : null, expressions: {},
+    blend: 2, tpms: spec.needsTpms ? { ...parameters, tubular_enabled: false } : null, expressions: {},
     ...opDefaults };
 }
 
