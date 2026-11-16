@@ -253,7 +253,7 @@ export function connectReference(scene, payload, target) {
       patch = { vector_inputs: { ...node.vector_inputs, [target.field]: source.id }, expressions: Object.fromEntries(Object.entries(node.expressions || {}).filter(([k]) => !k.startsWith(target.field + '.'))) };
     } else if (target.kind === 'number') {
       const [field, component] = (target.field || '').split('.');
-      const valid = ['dimensions', 'position', 'rotation'].includes(field) ? /^\d$/.test(component || '') && Number(component) < node[field]?.length : field === 'tpms' ? !!node.tpms && numericTPMS.has(component) : target.field === 'blend' && node.kind === 'smooth_union';
+      const valid = ['dimensions', 'position', 'rotation'].includes(field) ? /^\d$/.test(component || '') && Number(component) < node[field]?.length : field === 'tpms' ? !!node.tpms && numericTPMS.has(component) : target.field === 'blend' && ['smooth_union', 'smooth_difference'].includes(node.kind);
       if (!valid) throw new Error('该字段不接受数值引用');
       if (node.vector_inputs?.[field]) throw new Error('请先解除整向量引用，再连接单个分量');
       patch = { expressions: { ...node.expressions, [target.field]: source.symbol } };
@@ -263,7 +263,7 @@ export function connectReference(scene, payload, target) {
       const previous = graphErrors(scene);
       for (const [id, error] of Object.entries(graphErrors(next))) if (error !== '请选择完整的上游输入' && previous[id] !== error) throw new Error(error);
       // Check incomplete smooth unions as well as downstream unions masked by other errors.
-      for (const n of next.nodes) if (n.kind === 'smooth_union' && [...ancestors(next.nodes, n.id)].some(id => next.nodes.find(b => b.id === id)?.kind === 'tpms')) throw new Error('TPMS 不支持平滑融合，请使用普通布尔运算');
+      for (const n of next.nodes) if (['smooth_union', 'smooth_difference'].includes(n.kind) && [...ancestors(next.nodes, n.id)].some(id => next.nodes.find(b => b.id === id)?.kind === 'tpms')) throw new Error('TPMS 不支持平滑融合，请使用普通布尔运算');
     }
     return { scene: Object.entries(patch).every(([k, v]) => JSON.stringify(node[k]) === JSON.stringify(v)) ? scene : next };
   } catch (error) { return { error: error.message }; }

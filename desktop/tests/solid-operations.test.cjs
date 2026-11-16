@@ -39,3 +39,40 @@ test('removed operations cannot be created and legacy nodes have explicit errors
     assert.match(graphErrors(scene).old,/拉伸和切除操作已移除/);
   }
 });
+
+test('new P0 feature nodes expose valid defaults, arity and upstream validation', async () => {
+  const { createNode, graphErrors, affectedNodes, ARITY } = await import('../src/node_graph.mjs');
+  const scene = { nodes: [], root: '' };
+  const cyl = createNode(scene, 'cylinder', {});
+  scene.nodes.push(cyl);
+  for (const kind of ['offset', 'mirror', 'linear_pattern', 'circular_pattern']) {
+    assert.equal(ARITY[kind], 1);
+    const node = createNode(scene, kind, {}, cyl.id);
+    scene.nodes.push(node);
+    assert.deepEqual(graphErrors(scene), {});
+  }
+  const box = createNode(scene, 'box', {});
+  scene.nodes.push(box);
+  const sdiff = createNode(scene, 'smooth_difference', {}, box.id);
+  sdiff.inputs = [box.id, cyl.id];
+  scene.nodes.push(sdiff);
+  assert.deepEqual(graphErrors(scene), {});
+
+  // Invalid offset = 0 and linear total > 64 are caught immediately in graphErrors.
+  const bad = structuredClone(scene);
+  bad.nodes[1].dimensions = [0];
+  bad.nodes[3].dimensions = [10, 10, 1, 10, 10, 10];
+  const errs = graphErrors(bad);
+  assert.match(errs[bad.nodes[1].id], /偏置/);
+  assert.match(errs[bad.nodes[3].id], /64/);
+
+  // Smooth difference respects smooth incompatibility just like smooth union.
+  const tpmsScene = { nodes: [box] };
+  const tpms = createNode(tpmsScene, 'tpms', {});
+  tpmsScene.nodes.push(tpms);
+  const sdiff2 = createNode(tpmsScene, 'smooth_difference', {});
+  sdiff2.inputs = [tpms.id, box.id];
+  tpmsScene.nodes.push(sdiff2);
+  assert.match(graphErrors(tpmsScene)[sdiff2.id], /TPMS/);
+  assert.ok(affectedNodes(scene, bad).has(bad.nodes[1].id));
+});

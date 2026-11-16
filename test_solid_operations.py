@@ -157,3 +157,80 @@ def test_shell_cannot_participate_in_smooth_union():
     scene.add('smooth_union', inputs=(shell.id, sphere.id))
     with pytest.raises(ValueError, match='抽壳结果'):
         scene.validate()
+
+
+@native
+def test_shell_outward_symmetric_and_multi_openings():
+    scene = SolidScene(cell_size=.3)
+    box = scene.add('box', dimensions=(10, 10, 10))
+    out_shell = scene.add('shell', inputs=(box.id,), dimensions=(1.0,), operation={'direction': 'outward'})
+    mesh = generate_solid(scene).mesh
+    # True Euclidean outward offset rounds the 12 edges and 8 corners by r = 1.0 mm.
+    expanded = 10**3 + 6 * 10**2 * 1.0 + 3 * math.pi * 10 * 1.0**2 + 4 / 3 * math.pi * 1.0**3
+    assert mesh.is_watertight and mesh.volume == pytest.approx(expanded - 10**3, rel=.015)
+    assert np.allclose(mesh.bounds, [[-6, -6, -6], [6, 6, 6]], atol=.02)
+
+    sym_scene = SolidScene(cell_size=.3)
+    s_box = sym_scene.add('box', dimensions=(10, 10, 10))
+    sym_scene.add('shell', inputs=(s_box.id,), dimensions=(2.0,), operation={'direction': 'symmetric'})
+    sym_mesh = generate_solid(sym_scene).mesh
+    assert sym_mesh.is_watertight and sym_mesh.volume == pytest.approx(expanded - 8**3, rel=.015)
+
+    tube_scene = SolidScene(cell_size=.3)
+    t_box = tube_scene.add('box', dimensions=(12, 12, 10))
+    tube_scene.add('shell', inputs=(t_box.id,), dimensions=(1.0,), operation={'opening': 'closed', 'openings': ['+Z', '-Z']})
+    tube_mesh = generate_solid(tube_scene).mesh
+    assert tube_mesh.is_watertight and tube_mesh.volume == pytest.approx((12**2 - 10**2) * 8, rel=.015)
+    assert np.allclose(tube_mesh.bounds, [[-6, -6, -4], [6, 6, 4]], atol=.02)
+
+
+@native
+def test_offset_and_smooth_difference_real_geometry():
+    scene = SolidScene(cell_size=.3)
+    sph = scene.add('sphere', dimensions=(6.0,))
+    off = scene.add('offset', inputs=(sph.id,), dimensions=(2.0,))
+    mesh = generate_solid(scene).mesh
+    assert mesh.is_watertight and mesh.volume == pytest.approx(4 / 3 * math.pi * 8**3, rel=.025)
+    assert np.allclose(mesh.bounds, [[-8, -8, -8], [8, 8, 8]], atol=.05)
+
+    scene2 = SolidScene(cell_size=.3)
+    sph2 = scene2.add('sphere', dimensions=(6.0,))
+    scene2.add('offset', inputs=(sph2.id,), dimensions=(-2.0,))
+    mesh2 = generate_solid(scene2).mesh
+    assert mesh2.is_watertight and mesh2.volume == pytest.approx(4 / 3 * math.pi * 4**3, rel=.025)
+
+    scene3 = SolidScene(cell_size=.3)
+    b = scene3.add('box', dimensions=(16, 16, 10))
+    c = scene3.add('cylinder', dimensions=(3, 14))
+    scene3.add('difference', inputs=(b.id, c.id))
+    sharp = generate_solid(scene3).mesh
+
+    scene4 = SolidScene(cell_size=.3)
+    b4 = scene4.add('box', dimensions=(16, 16, 10))
+    c4 = scene4.add('cylinder', dimensions=(3, 14))
+    scene4.add('smooth_difference', inputs=(b4.id, c4.id), blend=3.0)
+    smooth = generate_solid(scene4).mesh
+    assert smooth.is_watertight and smooth.volume < sharp.volume
+
+
+@native
+def test_mirror_linear_and_circular_patterns():
+    scene = SolidScene(cell_size=.3)
+    sph = scene.add('sphere', dimensions=(4.0,), position=(10, 0, 0))
+    scene.add('mirror', inputs=(sph.id,), operation={'axis': 'X', 'keep_original': True})
+    mir = generate_solid(scene).mesh
+    assert mir.is_watertight and mir.volume == pytest.approx(2 * 4 / 3 * math.pi * 64, rel=.025)
+    assert np.allclose(mir.bounds, [[-14, -4, -4], [14, 4, 4]], atol=.05)
+
+    l_scene = SolidScene(cell_size=.35)
+    lsph = l_scene.add('sphere', dimensions=(3.0,))
+    l_scene.add('linear_pattern', inputs=(lsph.id,), dimensions=(3, 2, 1, 12, 10, 10))
+    l_mesh = generate_solid(l_scene).mesh
+    assert l_mesh.is_watertight and l_mesh.volume == pytest.approx(6 * 4 / 3 * math.pi * 27, rel=.03)
+    assert np.allclose(l_mesh.bounds, [[-3, -3, -3], [27, 13, 3]], atol=.05)
+
+    c_scene = SolidScene(cell_size=.35)
+    ccyl = c_scene.add('cylinder', dimensions=(2.0, 8.0), position=(10, 0, 0))
+    c_scene.add('circular_pattern', inputs=(ccyl.id,), dimensions=(6, 360.0), operation={'axis': 'Z'})
+    c_mesh = generate_solid(c_scene).mesh
+    assert c_mesh.is_watertight and c_mesh.volume == pytest.approx(6 * math.pi * 4 * 8, rel=.03)

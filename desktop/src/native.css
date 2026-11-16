@@ -455,6 +455,10 @@ input[type=range] { border:0; background:transparent; box-shadow:none; }
 .nested-promote,.nested-demote { font-size:12px; min-height:26px; padding:2px 9px; gap:4px; border-radius:var(--r-pill); }
 .symbol-sync-row { margin:-2px 0 6px 118px; display:flex; justify-content:flex-start; }
 .inline-sync-btn { font-size:12px; min-height:26px; padding:2px 10px; gap:4px; color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%,transparent); background:var(--selected); }
+.shell-openings-grid { margin:4px 0 6px 118px; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:4px; }
+.nested-editor .shell-openings-grid { margin-left:98px; }
+.shell-openings-grid button { min-height:28px; padding:2px 4px; font-size:12px; border-radius:var(--r-sm); border:1px solid var(--divider); background:var(--raised); color:var(--muted); }
+.shell-openings-grid button[aria-pressed=true] { border-color:var(--accent); background:var(--selected); color:var(--accent); font-weight:600; }
 
 @media(max-width:1350px) {
   .workspace,.workspace.inspection-workspace { grid-template-columns:var(--left-col,300px) minmax(240px,1fr) var(--right-col,256px); }

@@ -112,7 +112,7 @@ class SolidPanel(QWidget):
         self.combine_a = QComboBox()
         self.combine_b = QComboBox()
         self.operation_combo = QComboBox()
-        for operation in ("union", "intersection", "difference", "smooth_union"):
+        for operation in ("union", "intersection", "difference", "smooth_union", "smooth_difference"):
             self.operation_combo.addItem(KINDS[operation], operation)
         combine_layout.addRow("对象 A", self.combine_a)
         combine_layout.addRow("对象 B", self.combine_b)
@@ -120,7 +120,7 @@ class SolidPanel(QWidget):
         self.new_blend_spin = self._spin(0.001, 100, 2, " mm")
         combine_layout.addRow("融合宽度", self.new_blend_spin)
         self.operation_combo.currentIndexChanged.connect(lambda: self.new_blend_spin.setEnabled(
-            self.operation_combo.currentData() == "smooth_union"))
+            self.operation_combo.currentData() in ("smooth_union", "smooth_difference")))
         self.new_blend_spin.setEnabled(False)
         combine_button = QPushButton("创建组合")
         combine_button.clicked.connect(self.combine)
@@ -251,8 +251,8 @@ class SolidPanel(QWidget):
             combo.setVisible(node.kind in OPERATIONS)
             self.form.labelForField(combo).setVisible(node.kind in OPERATIONS)
         self.blend_spin.setValue(node.blend)
-        self.blend_spin.setVisible(node.kind == "smooth_union")
-        self.form.labelForField(self.blend_spin).setVisible(node.kind == "smooth_union")
+        self.blend_spin.setVisible(node.kind in ("smooth_union", "smooth_difference"))
+        self.form.labelForField(self.blend_spin).setVisible(node.kind in ("smooth_union", "smooth_difference"))
         self.tpms_update.setVisible(node.kind == "tpms")
         self.tpms_label.setVisible(node.kind == "tpms")
         if node.tpms:

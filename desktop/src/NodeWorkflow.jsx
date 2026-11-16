@@ -15,6 +15,7 @@ import { PRIMITIVES } from './primitive_catalog.mjs';
 import { useNodeState } from './ui_status.mjs';
 
 const EXACT_SHELL_KINDS = new Set(['sphere', 'box', 'cube', 'rounded_box', 'cylinder', 'rounded_cylinder', 'capsule', 'torus', 'transform']);
+const OPERATION_KINDS = new Set(['shell', 'offset', 'mirror', 'linear_pattern', 'circular_pattern']);
 const INLINE_CREATION_KINDS = [
   ...PRIMITIVES.map(p => ({ id: p.kind, name: p.name, group: '基本体' })),
   { id: 'tpms', name: 'TPMS', group: '场/结构' },
@@ -22,8 +23,13 @@ const INLINE_CREATION_KINDS = [
   { id: 'intersection', name: '交集', group: '布尔' },
   { id: 'difference', name: '差集', group: '布尔' },
   { id: 'smooth_union', name: '平滑融合', group: '布尔' },
+  { id: 'smooth_difference', name: '平滑差集', group: '布尔' },
   { id: 'transform', name: '变换', group: '操作' },
-  { id: 'shell', name: '抽壳', group: '操作' }
+  { id: 'shell', name: '抽壳', group: '操作' },
+  { id: 'offset', name: '偏置', group: '操作' },
+  { id: 'mirror', name: '镜像', group: '操作' },
+  { id: 'linear_pattern', name: '线性阵列', group: '操作' },
+  { id: 'circular_pattern', name: '圆周阵列', group: '操作' }
 ];
 
 const LABELS = Object.fromEntries(PRIMITIVES.map(item => [item.kind,item.labels]));
@@ -85,9 +91,13 @@ function cardSummaryText(n, isValue, scene) {
     if (n.kind === 'vector') return `${n.symbol || 'vec'} = [${(n.components || [0, 0, 0]).join(', ')}]`;
     return '';
   }
+  if (n.kind === 'offset') return `${(n.dimensions?.[0] ?? 0) >= 0 ? '+' : ''}${n.dimensions?.[0] ?? 1} mm`;
+  if (n.kind === 'mirror') return `${n.operation?.axis || 'X'} 镜像${n.operation?.keep_original !== false ? ' · 对称' : ''}`;
+  if (n.kind === 'linear_pattern') return `${n.dimensions?.[0] ?? 3}×${n.dimensions?.[1] ?? 1}×${n.dimensions?.[2] ?? 1} 阵列`;
+  if (n.kind === 'circular_pattern') return `${n.operation?.axis || 'Z'}轴 ${n.dimensions?.[0] ?? 6} 份`;
   if (ARITY[n.kind]) {
     const names = (n.inputs || []).filter(Boolean).map(id => scene.nodes.find(x => x.id === id)?.name || id);
-    return names.length ? names.join(n.kind === 'difference' ? ' − ' : ' · ') : '未连接输入';
+    return names.length ? names.join(n.kind === 'difference' || n.kind === 'smooth_difference' ? ' − ' : ' · ') : '未连接输入';
   }
   if (n.kind === 'tpms') return `${n.tpms?.surface || 'Gyroid'} · ${n.tpms?.size_x ?? 40}×${n.tpms?.size_y ?? 40}×${n.tpms?.size_z ?? 40}`;
   if (n.kind === 'sphere') return `Ø ${(Number(n.dimensions?.[0] ?? 0) * 2).toFixed(1).replace(/\.0$/, '')} mm`;
@@ -332,8 +342,8 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     onChange({ ...scene, parameters: Object.fromEntries(Object.entries(params).filter(([key]) => key !== name)) });
   }
   function isSlotCompatible(parentKind, childKind) {
-    if (parentKind === 'shell') return EXACT_SHELL_KINDS.has(childKind);
-    if (parentKind === 'smooth_union') return !['tpms', 'shell', ...APPROXIMATE_PRIMITIVES].includes(childKind);
+    if (parentKind === 'shell' || parentKind === 'offset') return EXACT_SHELL_KINDS.has(childKind);
+    if (parentKind === 'smooth_union' || parentKind === 'smooth_difference') return !['tpms', 'shell', 'offset', ...APPROXIMATE_PRIMITIVES].includes(childKind);
     return true;
   }
   function renderEditor(node, path = []) {
@@ -379,15 +389,50 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
             {input && path.length < 3 && ![...path, node.id].includes(input.id) && <details className="nested-reference" open={nestedOpened.has(nestedKey)} onToggle={e => { const open = e.currentTarget.open; setNestedOpened(old => { if (old.has(nestedKey) === open) return old; const next = new Set(old); if (open) next.add(nestedKey); else next.delete(nestedKey); return next; }); }}><summary>展开 {input.name}</summary>{nestedOpened.has(nestedKey) && <div className="nested-editor"><div className="nested-toolbar">{childInline ? <button type="button" className="secondary nested-promote" onClick={() => promoteToTop(input.id, path[0] || node.id)}><ArrowUpRight size={13} aria-hidden="true" />提升为独立卡片</button> : scene.root !== input.id && <button type="button" className="secondary nested-demote" onClick={() => demoteToSlot(input.id)}><Minimize2 size={13} aria-hidden="true" />转为内嵌子块</button>}</div>{renderEditor(input, [...path, node.id])}</div>}</details>}
           </ReferenceInput>;
         })}
-        {node.kind === 'difference' && <p className="hint">A 为保留实体，B 为要减去的实体。</p>}
+        {(node.kind === 'difference' || node.kind === 'smooth_difference') && <p className="hint">{node.kind === 'smooth_difference' ? 'A 为保留实体，B 为带平滑圆角过渡的减除实体。' : 'A 为保留实体，B 为要减去的实体。'}</p>}
         {LABELS[node.kind]?.map((label, i) => field(`dimensions.${i}`, label, node.dimensions[i]))}
         {PRIMITIVES.find(item => item.kind === node.kind)?.hint && <p className="hint">{PRIMITIVES.find(item => item.kind === node.kind).hint}</p>}
         {node.kind === 'tpms' && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} />}
-        {node.kind === 'smooth_union' && field('blend', '融合宽度', node.blend)}
-        {node.kind === 'shell' && <>
-          {field('dimensions.0', '壳体壁厚', node.dimensions[0])}
-          <Choice label="开口方向" value={node.operation?.opening || 'closed'} options={[["closed","封闭壳体"], ...['+X','-X','+Y','-Y','+Z','-Z'].map(axis => [axis, `${axis} 方向开口`])]} onChange={opening => patch(node.id, {operation: {...node.operation, opening}})} />
-          <p className="hint">向内抽壳，保持外表面。支持距离函数基本体及其变换；先抽壳，再组合或填充。开口按输入世界坐标包围盒端部截去一个壁厚，曲面开口为平面截口。网格尺寸不超过壁厚的一半。</p>
+        {(node.kind === 'smooth_union' || node.kind === 'smooth_difference') && field('blend', '融合宽度', node.blend)}
+        {node.kind === 'shell' && (() => {
+          const op = node.operation || {};
+          const hasMulti = Array.isArray(op.openings);
+          const openingSelect = hasMulti ? 'custom' : (op.opening || 'closed');
+          const activeOpenings = hasMulti ? op.openings : (op.opening && op.opening !== 'closed' ? [op.opening] : []);
+          const toggleFace = face => {
+            const next = activeOpenings.includes(face) ? activeOpenings.filter(f => f !== face) : [...activeOpenings, face];
+            patch(node.id, { operation: { ...op, opening: 'closed', openings: next } });
+          };
+          return <>
+            {field('dimensions.0', '壳体壁厚', node.dimensions[0])}
+            <Choice label="抽壳方向" value={op.direction || 'inward'} options={[['inward', '向内抽壳（保持外表面）'], ['outward', '向外包壳（保持内腔）'], ['symmetric', '两侧对称抽壳']]} onChange={direction => patch(node.id, { operation: { ...op, direction } })} />
+            <Choice label="开口方向" value={openingSelect} options={[["closed","封闭壳体"], ...['+X','-X','+Y','-Y','+Z','-Z'].map(axis => [axis, `${axis} 方向开口`]), ["custom", "多方向组合开口…"]]} onChange={val => {
+              if (val === 'custom') patch(node.id, { operation: { ...op, opening: 'closed', openings: activeOpenings.length ? activeOpenings : ['+Z', '-Z'] } });
+              else { const nextOp = { ...op, opening: val }; delete nextOp.openings; patch(node.id, { operation: nextOp }); }
+            }} />
+            {hasMulti && <div className="shell-openings-grid" role="group" aria-label="多方向开口">{['+X','-X','+Y','-Y','+Z','-Z'].map(face => <button type="button" key={face} aria-pressed={activeOpenings.includes(face)} onClick={() => toggleFace(face)}>{face}</button>)}</div>}
+            <p className="hint">支持向内、向外及对称等壁厚抽壳与多方向组合开口。当前支持距离函数基本体及其变换。网格尺寸不超过壁厚的一半。</p>
+          </>;
+        })()}
+        {node.kind === 'offset' && <>
+          {field('dimensions.0', '偏置距离', node.dimensions[0])}
+          <p className="hint">正值向外加厚扩边，负值向内收缩；当前支持距离函数基本体及其独立变换。</p>
+        </>}
+        {node.kind === 'mirror' && <>
+          <Choice label="镜像平面" value={node.operation?.axis || 'X'} options={[['X', 'YZ 平面（沿 X 翻转）'], ['Y', 'XZ 平面（沿 Y 翻转）'], ['Z', 'XY 平面（沿 Z 翻转）']]} onChange={axis => patch(node.id, { operation: { ...node.operation, axis } })} />
+          <label className="toggle"><input type="checkbox" checked={node.operation?.keep_original !== false} onChange={e => patch(node.id, { operation: { ...node.operation, keep_original: e.target.checked } })} /><span>保留原实体（对称合并）</span></label>
+          <p className="hint">按世界原点对应的坐标平面对称镜像，兼容实体、组合布尔和 TPMS。</p>
+        </>}
+        {node.kind === 'linear_pattern' && <>
+          <div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`dimensions.${i}`, `${axis} 数量`, node.dimensions[i], ''))}</div>
+          <div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`dimensions.${i + 3}`, `${axis} 间距`, node.dimensions[i + 3], 'mm'))}</div>
+          <label className="toggle"><input type="checkbox" checked={!!node.operation?.centered} onChange={e => patch(node.id, { operation: { ...node.operation, centered: e.target.checked } })} /><span>以原位置居中对称阵列</span></label>
+          <p className="hint">每轴数量 1–32，总实例数不超过 64；支持与参数/公式联动。</p>
+        </>}
+        {node.kind === 'circular_pattern' && <>
+          <Choice label="旋转轴" value={node.operation?.axis || 'Z'} options={[['Z', '绕 Z 轴'], ['X', '绕 X 轴'], ['Y', '绕 Y 轴']]} onChange={axis => patch(node.id, { operation: { ...node.operation, axis } })} />
+          <div className="double">{field('dimensions.0', '阵列数量', node.dimensions[0], '')}{field('dimensions.1', '总角度', node.dimensions[1], '°')}</div>
+          <p className="hint">绕局部原点指定轴旋转复制；总角度 360° 时均匀铺满整圈，小于 360° 时按圆弧均匀分布。</p>
         </>}
       </section>
       <details key={node.id} className="editor-section editor-transforms" open={node.kind === 'transform' || undefined}><summary>位置与旋转</summary>{vectorSelector('position', '位置')}<div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`position.${i}`, `${axis} 位置`, node.position[i]))}</div>{vectorSelector('rotation', '旋转')}<div className="triple">{['X', 'Y', 'Z'].map((axis, i) => field(`rotation.${i}`, `${axis} 旋转`, node.rotation[i], '°'))}</div></details>
@@ -455,7 +500,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
       const value = id.startsWith('value:'), n = value ? blocks.find(b => `value:${b.id}` === id) : scene.nodes.find(b => b.id === id);
       const open = expanded.has(id), issue = !value && issues[id];
       const type = value ? n.kind === 'vector' ? '向量' : n.kind === 'formula' ? '公式' : '数值' : NODE_KINDS[n.kind];
-      const category = value ? `value-${n.kind}` : n.kind === 'tpms' ? 'tpms' : n.kind === 'shell' ? 'operation' : ARITY[n.kind] ? 'boolean' : 'primitive';
+      const category = value ? `value-${n.kind}` : n.kind === 'tpms' ? 'tpms' : OPERATION_KINDS.has(n.kind) ? 'operation' : ARITY[n.kind] ? 'boolean' : 'primitive';
       const summary = !open && !issue ? cardSummaryText(n, value, scene) : '';
       const highlightLinks = enter => {
         for (const el of entries.current.values()) el.classList.remove('is-upstream', 'is-downstream');

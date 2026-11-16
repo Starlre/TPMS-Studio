@@ -22,11 +22,13 @@ KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
          "cube": "立方体", "rounded_box": "圆角方盒", "rounded_cylinder": "圆角圆柱",
          "capsule": "胶囊体", "cone": "圆锥", "frustum": "圆台", "ellipsoid": "椭球体",
          "tpms": "TPMS", "union": "并集", "intersection": "交集",
-         "difference": "差集 A−B", "smooth_union": "平滑融合", "transform": "变换"}
-KINDS.update({"shell": "抽壳"})
+         "difference": "差集 A−B", "smooth_union": "平滑融合", "smooth_difference": "平滑差集",
+         "transform": "变换", "shell": "抽壳", "offset": "偏置", "mirror": "镜像",
+         "linear_pattern": "线性阵列", "circular_pattern": "圆周阵列"}
 REMOVED_OPERATIONS = {"extrude", "extrude_cut"}
 REMOVED_MESSAGE = "拉伸和切除操作已移除，当前保留抽壳；含这类节点的旧项目不再支持，请使用基本体和布尔差集重新建模"
-OPERATIONS = {"union", "intersection", "difference", "smooth_union"}
+OPERATIONS = {"union", "intersection", "difference", "smooth_union", "smooth_difference"}
+SMOOTH_OPERATIONS = {"smooth_union", "smooth_difference"}
 PRIMITIVE_DIMENSIONS = {"sphere": (8,), "box": (16, 16, 16), "cylinder": (6, 24), "torus": (10, 3),
                         "cube": (16,), "rounded_box": (16, 20, 12, 2), "rounded_cylinder": (6, 24, 2),
                         "capsule": (6, 24), "cone": (8, 20), "frustum": (8, 4, 20), "ellipsoid": (10, 6, 8)}
@@ -91,7 +93,7 @@ class SolidScene:
                 try:
                     value = evaluate_expression(expression, values)
                     parts = target.split(".")
-                    if target == "blend" and node.kind == "smooth_union":
+                    if target == "blend" and node.kind in SMOOTH_OPERATIONS:
                         args["blend"] = value
                     elif len(parts) == 2 and parts[0] in {"dimensions", "position", "rotation"} and parts[1] in {str(i) for i in range(len(args[parts[0]]))}:
                         args[parts[0]][int(parts[1])] = value
@@ -172,9 +174,9 @@ class SolidScene:
                     raise ValueError("组合需要两个不同对象")
                 for child in node.inputs:
                     self.by_id(child)
-                if node.kind == "smooth_union" and (not math.isfinite(node.blend) or not 0.001 <= node.blend <= 100):
+                if node.kind in SMOOTH_OPERATIONS and (not math.isfinite(node.blend) or not 0.001 <= node.blend <= 100):
                     raise ValueError("融合宽度须在 0.001–100 mm 之间")
-            elif node.kind in {"transform", "shell"}:
+            elif node.kind == "transform" or node.kind in OP_DEFAULTS:
                 if len(node.inputs) != 1:
                     raise ValueError(f"{KINDS[node.kind]}节点需要一个上游实体")
                 self.by_id(node.inputs[0])
@@ -188,7 +190,7 @@ class SolidScene:
                 node.tpms.validate()
                 if node.tpms.tubular_enabled:
                     raise ValueError("实体组合暂不支持管状卷绕 TPMS")
-            elif node.kind not in OPERATIONS and node.kind not in {"transform", "shell"}:
+            elif node.kind not in OPERATIONS and node.kind != "transform" and node.kind not in OP_DEFAULTS:
                 counts = {kind: len(values) for kind, values in PRIMITIVE_DIMENSIONS.items()}
                 if len(node.dimensions) != counts[node.kind] or not all(
                     math.isfinite(value) and 0 < value <= 2000 for value in node.dimensions):
@@ -215,12 +217,12 @@ class SolidScene:
         for identifier in ids:
             visit(identifier)
         for node in self.nodes:
-            if node.kind == "smooth_union" and self.contains_tpms(node.id):
+            if node.kind in SMOOTH_OPERATIONS and self.contains_tpms(node.id):
                 raise ValueError("TPMS 场不是精确距离场；平滑融合目前仅支持基本实体组合")
-            if node.kind == "smooth_union" and self.contains_approximate_primitive(node.id):
+            if node.kind in SMOOTH_OPERATIONS and self.contains_approximate_primitive(node.id):
                 raise ValueError("圆锥、圆台、椭球体当前使用距离近似，暂不支持平滑融合；请使用普通布尔运算")
-            if node.kind == "smooth_union" and self.contains_operation(node.id):
-                raise ValueError("抽壳结果暂不参与平滑融合，请使用普通布尔运算")
+            if node.kind in SMOOTH_OPERATIONS and self.contains_operation(node.id):
+                raise ValueError("抽壳结果（及偏置）暂不参与平滑融合，请使用普通布尔运算")
 
     def contains_operation(self, identifier):
         pending, seen = [identifier], set()
@@ -230,7 +232,7 @@ class SolidScene:
                 continue
             seen.add(current)
             node = self.by_id(current)
-            if node.kind in OP_DEFAULTS:
+            if node.kind in {"shell", "offset"}:
                 return True
             pending.extend(node.inputs)
         return False
@@ -275,7 +277,7 @@ class SolidScene:
             bounds = self.bounds(node.inputs[0], _cache)
         elif node.kind in OPERATIONS:
             a, b = [self.bounds(child, _cache) for child in node.inputs]
-            if node.kind == "difference":
+            if node.kind in {"difference", "smooth_difference"}:
                 bounds = a
             elif node.kind == "intersection":
                 bounds = np.array([np.maximum(a[0], b[0]), np.minimum(a[1], b[1])])
@@ -420,6 +422,9 @@ def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict,
             tree = op("max", a, b)
         elif node.kind == "difference":
             tree = op("max", a, -b)
+        elif node.kind == "smooth_difference":
+            h = op("max", node.blend - op("abs", a + b), 0) / node.blend
+            tree = op("max", a, -b) + h ** 2 * (node.blend / 4)
         else:
             # Polynomial smooth minimum, with a blend width in mm.
             h = op("max", node.blend - op("abs", a - b), 0) / node.blend
