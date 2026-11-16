@@ -14,7 +14,6 @@ import { WorkflowDrag, SortHeading, SortHandle, SortButtons, ReferenceOutput, Re
 import { PRIMITIVES } from './primitive_catalog.mjs';
 import { useNodeState } from './ui_status.mjs';
 
-const EXACT_SHELL_KINDS = new Set(['sphere', 'box', 'cube', 'rounded_box', 'cylinder', 'rounded_cylinder', 'capsule', 'torus', 'transform']);
 const OPERATION_KINDS = new Set(['shell', 'offset', 'mirror', 'linear_pattern', 'circular_pattern']);
 const INLINE_CREATION_KINDS = [
   ...PRIMITIVES.map(p => ({ id: p.kind, name: p.name, group: '基本体' })),
@@ -342,7 +341,6 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     onChange({ ...scene, parameters: Object.fromEntries(Object.entries(params).filter(([key]) => key !== name)) });
   }
   function isSlotCompatible(parentKind, childKind) {
-    if (parentKind === 'shell' || parentKind === 'offset') return EXACT_SHELL_KINDS.has(childKind);
     if (parentKind === 'smooth_union' || parentKind === 'smooth_difference') return !['tpms', 'shell', 'offset', ...APPROXIMATE_PRIMITIVES].includes(childKind);
     return true;
   }
@@ -411,12 +409,12 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
               else { const nextOp = { ...op, opening: val }; delete nextOp.openings; patch(node.id, { operation: nextOp }); }
             }} />
             {hasMulti && <div className="shell-openings-grid" role="group" aria-label="多方向开口">{['+X','-X','+Y','-Y','+Z','-Z'].map(face => <button type="button" key={face} aria-pressed={activeOpenings.includes(face)} onClick={() => toggleFace(face)}>{face}</button>)}</div>}
-            <p className="hint">支持向内、向外及对称等壁厚抽壳与多方向组合开口。当前支持距离函数基本体及其变换。网格尺寸不超过壁厚的一半。</p>
+            <p className="hint">支持向内、向外及对称等壁厚抽壳与多方向组合开口；支持所有基本体、圆锥/圆台/椭球、布尔组合与 TPMS。网格尺寸不超过壁厚的一半。</p>
           </>;
         })()}
         {node.kind === 'offset' && <>
           {field('dimensions.0', '偏置距离', node.dimensions[0])}
-          <p className="hint">正值向外加厚扩边，负值向内收缩；当前支持距离函数基本体及其独立变换。</p>
+          <p className="hint">正值向外加厚扩边，负值向内收缩；支持任意基本体、布尔组合与 TPMS。</p>
         </>}
         {node.kind === 'mirror' && <>
           <Choice label="镜像平面" value={node.operation?.axis || 'X'} options={[['X', 'YZ 平面（沿 X 翻转）'], ['Y', 'XZ 平面（沿 Y 翻转）'], ['Z', 'XY 平面（沿 Z 翻转）']]} onChange={axis => patch(node.id, { operation: { ...node.operation, axis } })} />

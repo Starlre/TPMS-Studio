@@ -241,29 +241,31 @@ def _field_tree(arena: _TreeArena, p: TPMSParameters) -> _Tree:
             **dict(zip(("x", "y", "z"), coords)), "pi": math.pi, **aliases})
     else:
         field = aliases[p.surface.lower().replace("-", "_")]
-    if p.mode == "solid":
+    if p.mode == "solid" and p.surface == CUSTOM_SURFACE:
         material = p.iso_level - field
     else:
-        # Same central difference spacing as the NumPy field. Multiplying
-        # through by the positive gradient norm avoids interval division by
-        # zero while retaining the zero set and material sign.
+        # Central-difference gradient normalization preserves the zero set and
+        # converts built-in periodic fields (sheet & solid) to approximate mm units.
         gradients = []
         for axis, (size, count) in enumerate(zip(sizes, cells)):
             step = size / (count * p.samples_per_cell)
             plus, minus = list(coords), list(coords)
             plus[axis], minus[axis] = coords[axis] + step, coords[axis] - step
             gradients.append((field.remap(plus) - field.remap(minus)) / (2 * step))
-        norm = arena.op("max", arena.op("sqrt", sum(g ** 2 for g in gradients)), 1e-6)
-        thickness = p.thickness
-        if p.gradient_enabled:
-            index = "XYZ".index(p.gradient_axis)
-            u = arena.op("min", 1, arena.op("max", 0, coords[index] / sizes[index] + 0.5))
-            thickness = p.gradient_thickness_start + (
-                p.gradient_thickness_end - p.gradient_thickness_start) * u
-        material = arena.op("abs", field) - 0.5 * thickness * norm
-    box = arena.op("abs", coords[0]) - sizes[0] / 2
-    for coord, size in zip(coords[1:], sizes[1:]):
-        box = arena.op("max", box, arena.op("abs", coord) - size / 2)
+        norm = arena.op("max", arena.op("sqrt", sum(g ** 2 for g in gradients)), 0.05)
+        if p.mode == "solid":
+            material = (p.iso_level - field) / norm
+        else:
+            thickness = p.thickness
+            if p.gradient_enabled:
+                index = "XYZ".index(p.gradient_axis)
+                u = arena.op("min", 1, arena.op("max", 0, coords[index] / sizes[index] + 0.5))
+                thickness = p.gradient_thickness_start + (
+                    p.gradient_thickness_end - p.gradient_thickness_start) * u
+            material = arena.op("abs", field) / norm - 0.5 * thickness
+    q = [arena.op("abs", coord) - size / 2 for coord, size in zip(coords, sizes)]
+    box = arena.op("sqrt", sum(arena.op("max", v, 0) ** 2 for v in q)) + arena.op(
+        "min", arena.op("max", q[0], arena.op("max", q[1], q[2])), 0)
     return arena.op("max", material, box)
 
 

@@ -521,8 +521,8 @@ function App() {
       ] }
     ] },
     { id: 'operations', label: '操作', workspaces: ['nodes'], groups: [
-      { label: '操作', palette: true, paletteId: 'solid-operation-palette', common: ['shell'], footer: '先创建并选中距离函数基本体，再添加抽壳', tools: [
-        { id: 'shell', label: '抽壳', icon: Box, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('shell'), hint: scene.nodes.length ? '向内、向外或对称等壁厚抽壳，支持多向开口' : '先在建模选项卡创建距离函数基本体' }
+      { label: '操作', palette: true, paletteId: 'solid-operation-palette', common: ['shell'], footer: '支持基本体、布尔组合、圆锥/圆台/椭球及 TPMS 等壁厚抽壳', tools: [
+        { id: 'shell', label: '抽壳', icon: Box, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('shell'), hint: scene.nodes.length ? '向内、向外或对称等壁厚抽壳，支持多向开口与任意上游实体' : '先创建任意几何实体' }
       ] },
       { label: '特征与阵列', tools: [
         { label: '偏置', icon: Expand, disabled: noEntity || !scene.nodes.length, onClick: () => ribbonNode('offset'), hint: '对基本体做等距膨胀或收缩' },

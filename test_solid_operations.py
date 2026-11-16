@@ -81,22 +81,65 @@ def test_shell_parameter_save_cache_and_boolean():
     finally:
         engine.close()
 
-def test_invalid_shell_sources_and_thickness():
-    for kind in ['cone','frustum','ellipsoid','tpms']:
-        scene = SolidScene()
-        from tpms_core import TPMSParameters
-        body = scene.add(kind,**({'tpms':TPMSParameters()} if kind=='tpms' else {}))
-        scene.add('shell',inputs=(body.id,))
-        with pytest.raises(ValueError,match='抽壳'):
-            scene.validate()
+def test_invalid_shell_thickness_and_nesting_cost():
     scene = SolidScene()
-    body = scene.add('sphere',dimensions=(4,))
-    scene.add('shell',inputs=(body.id,),dimensions=(4,))
-    with pytest.raises(ValueError,match='内腔消失'):
+    body = scene.add('sphere', dimensions=(4,))
+    scene.add('shell', inputs=(body.id,), dimensions=(4,))
+    with pytest.raises(ValueError, match='内腔消失'):
         scene.validate()
-    scene.nodes[-1] = replace(scene.nodes[-1],dimensions=(.2,))
-    with pytest.raises(ValueError,match='网格过粗'):
+    scene.nodes[-1] = replace(scene.nodes[-1], dimensions=(.2,))
+    with pytest.raises(ValueError, match='网格过粗'):
         scene.validate()
+
+    # Excessive fanout (pattern * pattern) is blocked cleanly before evaluation.
+    heavy = SolidScene(cell_size=.5)
+    c = heavy.add('cone', dimensions=(6.0, 12.0))
+    p = heavy.add('linear_pattern', inputs=(c.id,), dimensions=(6, 6, 1, 14, 14, 14))
+    p2 = heavy.add('circular_pattern', inputs=(p.id,), dimensions=(2, 180.0))
+    heavy.add('shell', inputs=(p2.id,), dimensions=(1.0,))
+    with pytest.raises(ValueError, match='扇出'):
+        heavy.validate()
+
+
+@native
+def test_p1_normalized_shell_and_offset_on_approximate_and_boolean():
+    # Ellipsoid inward shell uses 1st-order Quilez SDF for uniform wall thickness.
+    scene = SolidScene(cell_size=.35)
+    el = scene.add('ellipsoid', dimensions=(10.0, 6.0, 8.0))
+    full_vol = generate_solid(SolidScene(cell_size=.35, nodes=list(scene.nodes), root=el.id)).mesh.volume
+    scene.add('shell', inputs=(el.id,), dimensions=(1.5,))
+    sh_mesh = generate_solid(scene).mesh
+    assert sh_mesh.is_watertight and sh_mesh.volume < full_vol
+    expected = 4 / 3 * math.pi * (10 * 6 * 8 - 8.5 * 4.5 * 6.5)
+    assert sh_mesh.volume == pytest.approx(expected, rel=.025)
+
+    # Boolean combination (box union cylinder) -> shell & offset
+    bscene = SolidScene(cell_size=.35)
+    bx = bscene.add('box', dimensions=(12, 12, 12))
+    cy = bscene.add('cylinder', dimensions=(4, 20))
+    u = bscene.add('union', inputs=(bx.id, cy.id))
+    u_vol = generate_solid(SolidScene(cell_size=.35, nodes=list(bscene.nodes), root=u.id)).mesh.volume
+    bscene.add('shell', inputs=(u.id,), dimensions=(1.2,))
+    u_shell = generate_solid(bscene).mesh
+    assert u_shell.is_watertight and 0 < u_shell.volume < u_vol
+
+    off_scene = SolidScene(cell_size=.35)
+    cn = off_scene.add('cone', dimensions=(6.0, 14.0))
+    off_scene.add('offset', inputs=(cn.id,), dimensions=(1.5,))
+    off_mesh = generate_solid(off_scene).mesh
+    assert off_mesh.is_watertight and off_mesh.volume > (math.pi * 36 * 14 / 3)
+
+    tscene = SolidScene(cell_size=.3)
+    tp = tscene.add('tpms', tpms=TPMSParameters(surface='Gyroid', mode='solid', size_x=16, size_y=16, size_z=16, cells_x=1, cells_y=1, cells_z=1, iso_level=0.0, samples_per_cell=16))
+    tscene.add('shell', inputs=(tp.id,), dimensions=(0.8,), operation={'direction': 'inward'})
+    tp_shell = generate_solid(tscene).mesh
+    assert tp_shell.is_watertight and tp_shell.volume > 0
+
+    toff = SolidScene(cell_size=.35)
+    tp2 = toff.add('tpms', tpms=TPMSParameters(surface='Gyroid', mode='sheet', size_x=16, size_y=16, size_z=16, cells_x=1, cells_y=1, cells_z=1, thickness=1.5, samples_per_cell=16))
+    toff.add('offset', inputs=(tp2.id,), dimensions=(0.5,))
+    tp_off = generate_solid(toff).mesh
+    assert tp_off.is_watertight and tp_off.volume > 0
 
 @native
 def test_shell_transformed_source():

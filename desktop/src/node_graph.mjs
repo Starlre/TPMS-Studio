@@ -11,14 +11,27 @@ export const DIMENSIONS = { sphere: [8], box: [16, 16, 16], cylinder: [6, 24], t
   shell: [1], offset: [1], mirror: [], linear_pattern: [3, 1, 1, 16, 16, 16], circular_pattern: [6, 360] };
 for (const item of PRIMITIVES) { NODE_KINDS[item.kind] = item.name; DIMENSIONS[item.kind] = item.dimensions; }
 
-function exactSdfSource(nodes, inputId) {
-  let source = nodes.find(c => c.id === inputId);
-  const seen = new Set();
-  while (source?.kind === 'transform' && !seen.has(source.id)) {
-    seen.add(source.id);
-    source = nodes.find(c => c.id === source.inputs[0]);
+function treeCost(nodes, nodeId, visiting = new Set()) {
+  if (!nodeId || visiting.has(nodeId)) return 1;
+  const n = nodes.find(c => c.id === nodeId);
+  if (!n) return 1;
+  visiting.add(nodeId);
+  let cost = 1;
+  if (!n.inputs?.length) {
+    cost = n.kind === 'tpms' && n.tpms?.surface !== 'Custom' ? 5 : 1;
+  } else if (n.kind === 'linear_pattern') {
+    const d = n.dimensions || [1, 1, 1];
+    cost = Math.min(256, Math.max(1, Math.round((d[0] || 1) * (d[1] || 1) * (d[2] || 1))) * treeCost(nodes, n.inputs[0], visiting));
+  } else if (n.kind === 'circular_pattern') {
+    cost = Math.min(256, Math.max(1, Math.round(n.dimensions?.[0] || 1)) * treeCost(nodes, n.inputs[0], visiting));
+  } else if (n.kind === 'mirror') {
+    const mult = n.operation?.keep_original !== false ? 2 : 1;
+    cost = Math.min(256, mult * treeCost(nodes, n.inputs[0], visiting));
+  } else {
+    cost = Math.min(256, n.inputs.reduce((sum, cid) => sum + treeCost(nodes, cid, visiting), 0));
   }
-  return source && EXACT_SDF_PRIMITIVES.has(source.kind) ? source : null;
+  visiting.delete(nodeId);
+  return cost;
 }
 
 export function smoothIssueReason(nodes, nodeId) {
@@ -55,9 +68,10 @@ export function graphErrors(scene) {
       const reason = smoothIssueReason(scene.nodes, n.id);
       if (reason) errors[n.id] = reason;
     } else if (n.kind === 'shell') {
-      if (!exactSdfSource(scene.nodes, n.inputs[0])) errors[n.id] = '先对距离函数基本体抽壳，再做布尔或 TPMS 填充；复杂组合、TPMS、圆锥、圆台、椭球体暂不支持抽壳';
+      if (treeCost(scene.nodes, n.id) > 64) errors[n.id] = '抽壳嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级';
+      else if (!Object.hasOwn(n.expressions || {}, 'dimensions.0') && (!Number.isFinite(n.dimensions?.[0]) || n.dimensions[0] <= 0 || n.dimensions[0] > 200)) errors[n.id] = '抽壳壁厚须大于 0 且不超过 200 mm';
     } else if (n.kind === 'offset') {
-      if (!exactSdfSource(scene.nodes, n.inputs[0])) errors[n.id] = '偏置目前支持距离函数基本体及其独立变换';
+      if (treeCost(scene.nodes, n.id) > 64) errors[n.id] = '偏置嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级';
       else if (!Object.hasOwn(n.expressions || {}, 'dimensions.0') && (!Number.isFinite(n.dimensions?.[0]) || n.dimensions[0] === 0 || Math.abs(n.dimensions[0]) > 500)) errors[n.id] = '偏置距离不能为 0，且绝对值不超过 500 mm';
     } else if (n.kind === 'linear_pattern') {
       const d = n.dimensions || [], expr = n.expressions || {};

@@ -16,17 +16,29 @@ test('operation nodes bind selected sources, have independent parameters and inv
   changed.nodes[2].inputs=[cut.id];assert.match(graphErrors(changed)[cut.id],/循环/);
 });
 
-test('shell inputs reject approximate fields and combinations but accept analytic transformed solids', async () => {
-  const {createNode,graphErrors} = await import('../src/node_graph.mjs');
-  for(const kind of ['tpms','cone','frustum','ellipsoid','union']) {
-    const scene={nodes:[],root:''};const body=createNode(scene,kind,{});scene.nodes.push(body);
-    const shell=createNode(scene,'shell',{},body.id);scene.nodes.push(shell);
-    assert.match(graphErrors(scene)[shell.id],/先对距离函数基本体抽壳/);
+test('shell and offset accept approximate primitives, combinations and TPMS while guarding excessive fanout', async () => {
+  const { createNode, graphErrors } = await import('../src/node_graph.mjs');
+  for (const kind of ['tpms', 'cone', 'frustum', 'ellipsoid']) {
+    const scene = { nodes: [], root: '' };
+    const body = createNode(scene, kind, {});
+    scene.nodes.push(body);
+    const shell = createNode(scene, 'shell', {}, body.id);
+    scene.nodes.push(shell);
+    assert.deepEqual(graphErrors(scene), {});
   }
-  const scene={nodes:[],root:''};const body=createNode(scene,'cylinder',{});scene.nodes.push(body);
-  const transform=createNode(scene,'transform',{},body.id);scene.nodes.push(transform);
-  const shell=createNode(scene,'shell',{},transform.id);scene.nodes.push(shell);
-  assert.deepEqual(graphErrors(scene),{});
+  const bscene = { nodes: [], root: '' };
+  const bx = createNode(bscene, 'box', {}); bscene.nodes.push(bx);
+  const cy = createNode(bscene, 'cylinder', {}); bscene.nodes.push(cy);
+  const un = createNode(bscene, 'union', {}, bx.id); un.inputs = [bx.id, cy.id]; bscene.nodes.push(un);
+  const sh = createNode(bscene, 'shell', {}, un.id); bscene.nodes.push(sh);
+  assert.deepEqual(graphErrors(bscene), {});
+
+  const heavy = { nodes: [], root: '' };
+  const cn = createNode(heavy, 'cone', {}); heavy.nodes.push(cn);
+  const pat = createNode(heavy, 'linear_pattern', {}, cn.id); pat.dimensions = [6, 6, 1, 14, 14, 14]; heavy.nodes.push(pat);
+  const pat2 = createNode(heavy, 'circular_pattern', {}, pat.id); pat2.dimensions = [2, 180]; heavy.nodes.push(pat2);
+  const hsh = createNode(heavy, 'shell', {}, pat2.id); heavy.nodes.push(hsh);
+  assert.match(graphErrors(heavy)[hsh.id], /扇出/);
 });
 
 test('removed operations cannot be created and legacy nodes have explicit errors', async () => {

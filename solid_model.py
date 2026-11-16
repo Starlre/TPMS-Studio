@@ -397,10 +397,13 @@ def _scene_tree(arena, scene: SolidScene, identifier: str, cache: dict,
         bottom, top, height = (d[0], 0, d[1]) if node.kind == "cone" else d
         slope = (top - bottom) / height
         side = (length(x, y) - (bottom + top) / 2 - slope * z) / math.sqrt(1 + slope ** 2)
-        tree = op("max", side, op("abs", z) - height / 2)
+        cap = op("abs", z) - height / 2
+        tree = op("sqrt", op("max", side, 0) ** 2 + op("max", cap, 0) ** 2) + op("min", op("max", side, cap), 0)
     elif node.kind == "ellipsoid":
-        # Correct zero surface; this is a scaled implicit field, not an exact SDF.
-        tree = (length(*(coord / radius for coord, radius in zip(coords, d))) - 1) * min(d)
+        # First-order Quilez ellipsoid SDF: zero set matches exact radii with unit surface slope.
+        k0 = length(*(coord / radius for coord, radius in zip(coords, d)))
+        k1 = op("max", length(*(coord / (radius * radius) for coord, radius in zip(coords, d))), 1e-6)
+        tree = (k0 - 1) * k0 / k1
     elif node.kind == "torus":
         tree = length(length(x, y) - d[0], z) - d[1]
     elif node.kind == "tpms":

@@ -46,24 +46,74 @@ def _shell_config(options):
     return direction, openings
 
 
-def _exact_source(scene, node, label='抽壳'):
-    current, seen = scene.by_id(node.inputs[0]), {node.id}
-    while current.kind == 'transform':
-        if current.id in seen or len(current.inputs) != 1:
-            raise ValueError(f'{label}输入引用无效或存在循环')
-        seen.add(current.id)
+def _exact_primitive(scene, start_id, seen=None):
+    visiting = set(seen) if seen else set()
+    current = scene.by_id(start_id)
+    while current.kind == 'transform' or (current.kind == 'mirror' and not current.operation.get('keep_original', True)):
+        if current.id in visiting or len(current.inputs) != 1:
+            raise ValueError('输入引用无效或存在循环')
+        visiting.add(current.id)
         current = scene.by_id(current.inputs[0])
-    if current.id in seen:
-        raise ValueError(f'{label}输入引用存在循环')
-    if current.kind not in EXACT_SOURCES:
-        if label == '抽壳':
-            raise ValueError('抽壳目前支持距离函数基本体及其独立变换；请先抽壳，再做布尔或 TPMS 填充。复杂组合、TPMS、圆锥、圆台、椭球体尚不支持等壁厚抽壳')
-        raise ValueError(f'{label}目前支持距离函数基本体及其独立变换')
-    return current
+    if current.id in visiting:
+        raise ValueError('输入引用存在循环')
+    return current if current.kind in EXACT_SOURCES else None
+
+
+def is_exact_sdf(scene, node_id):
+    return _exact_primitive(scene, node_id) is not None
 
 
 def shell_source(scene, node):
-    return _exact_source(scene, node, '抽壳')
+    return _exact_primitive(scene, node.inputs[0], {node.id})
+
+
+def _tree_cost(scene, node_id, visiting=None):
+    seen = set(visiting) if visiting else set()
+    if node_id in seen:
+        raise ValueError('输入引用存在循环')
+    node = scene.by_id(node_id)
+    seen.add(node_id)
+    if not node.inputs:
+        return 5 if (node.kind == 'tpms' and node.tpms and not node.tpms.surface == 'Custom') else 1
+    if node.kind == 'linear_pattern':
+        mult = int(node.dimensions[0]) * int(node.dimensions[1]) * int(node.dimensions[2])
+        return min(256, mult * _tree_cost(scene, node.inputs[0], seen))
+    if node.kind == 'circular_pattern':
+        return min(256, int(node.dimensions[0]) * _tree_cost(scene, node.inputs[0], seen))
+    if node.kind == 'mirror':
+        mult = 2 if node.operation.get('keep_original', True) else 1
+        return min(256, mult * _tree_cost(scene, node.inputs[0], seen))
+    return min(256, sum(_tree_cost(scene, cid, seen) for cid in node.inputs))
+
+
+def _outward_slope_margin(scene, node_id, out_pad):
+    """Extra radial margin for outward-expanded cones/frustums under Euclidean cap join."""
+    if out_pad <= 0:
+        return 0.0
+    max_slope = 0.0
+    pending, seen = [node_id], set()
+    while pending:
+        cid = pending.pop()
+        if cid in seen:
+            continue
+        seen.add(cid)
+        n = scene.by_id(cid)
+        if n.kind == 'cone':
+            max_slope = max(max_slope, abs(n.dimensions[0] / n.dimensions[1]))
+        elif n.kind == 'frustum':
+            max_slope = max(max_slope, abs((n.dimensions[1] - n.dimensions[0]) / n.dimensions[2]))
+        pending.extend(n.inputs)
+    if max_slope <= 0:
+        return 0.0
+    return out_pad * (math.sqrt(1.0 + 2.0 * max_slope ** 2) - 1.0)
+
+
+def _inward_thickness_limit(scene, node):
+    exact = _exact_primitive(scene, node.inputs[0], {node.id})
+    if exact is not None:
+        return _exact_inward_limit(exact)
+    bounds = scene.bounds(node.inputs[0])
+    return float(np.min(bounds[1] - bounds[0]) / 2.0)
 
 
 def _exact_inward_limit(source):
@@ -124,12 +174,13 @@ def validate_operation(scene, node):
     if node.kind == 'shell':
         _check_finite_numbers(d, 1, node.name)
         direction, openings = _shell_config(options)
-        source = shell_source(scene, node)
+        if _tree_cost(scene, node.id) > 64:
+            raise ValueError('抽壳嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级')
         wall = float(d[0])
         if wall <= 0 or wall > 200:
             raise ValueError('抽壳壁厚须大于 0 且不超过 200 mm')
         in_pad = wall if direction == 'inward' else 0.0 if direction == 'outward' else wall / 2.0
-        limit = _exact_inward_limit(source)
+        limit = _inward_thickness_limit(scene, node)
         if in_pad > 0 and in_pad >= limit:
             max_wall = limit if direction == 'inward' else limit * 2
             raise ValueError(f'抽壳壁厚须为正数且小于 {max_wall:g} mm，否则内腔消失')
@@ -144,12 +195,13 @@ def validate_operation(scene, node):
         _check_finite_numbers(d, 1, node.name)
         if options:
             raise ValueError('偏置节点不支持额外设置项')
-        source = _exact_source(scene, node, '偏置')
+        if _tree_cost(scene, node.id) > 64:
+            raise ValueError('偏置嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级')
         distance = float(d[0])
         if distance == 0 or abs(distance) > 500:
             raise ValueError('偏置距离不能为 0，且绝对值不超过 500 mm')
         if distance < 0:
-            limit = _exact_inward_limit(source)
+            limit = _inward_thickness_limit(scene, node)
             if abs(distance) >= limit:
                 raise ValueError(f'向内收缩距离须小于 {limit:g} mm，否则实体消失')
     elif node.kind == 'mirror':
@@ -191,9 +243,10 @@ def operation_bounds(scene, node, cache, rotation_matrix):
         direction, openings = _shell_config(options)
         out_pad = 0.0 if direction == 'inward' else wall if direction == 'outward' else wall / 2.0
         in_pad = wall if direction == 'inward' else 0.0 if direction == 'outward' else wall / 2.0
+        slope_pad = _outward_slope_margin(scene, node.inputs[0], out_pad)
         orig_lo, orig_hi = bounds[0].copy(), bounds[1].copy()
-        bounds[0] = orig_lo - out_pad
-        bounds[1] = orig_hi + out_pad
+        bounds[0] = orig_lo - (out_pad + slope_pad)
+        bounds[1] = orig_hi + (out_pad + slope_pad)
         for opening in openings:
             axis = 'XYZ'.index(opening[1])
             if opening[0] == '+':
@@ -203,7 +256,8 @@ def operation_bounds(scene, node, cache, rotation_matrix):
         return bounds
     if node.kind == 'offset':
         distance = float(d[0])
-        return np.array([bounds[0] - distance, bounds[1] + distance])
+        pad = distance + (_outward_slope_margin(scene, node.inputs[0], distance) if distance > 0 else 0.0)
+        return np.array([bounds[0] - pad, bounds[1] + pad])
     if node.kind == 'mirror':
         idx = 'XYZ'.index(options.get('axis', 'X'))
         keep_original = options.get('keep_original', True)
