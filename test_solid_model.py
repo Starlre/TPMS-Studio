@@ -76,13 +76,12 @@ def test_rounded_box_fourth_dimension_binding_and_project_roundtrip(tmp_path):
 
 
 @pytest.mark.parametrize('kind',['cone','frustum','ellipsoid'])
-def test_approximate_primitives_reject_smooth_union(kind):
+def test_approximate_primitives_support_smooth_union(kind):
     scene = SolidScene()
     a = scene.add(kind)
     b = scene.add('sphere')
     scene.add('smooth_union',inputs=(a.id,b.id))
-    with pytest.raises(ValueError,match='距离近似'):
-        scene.validate()
+    scene.validate()
 
 
 @native
@@ -169,8 +168,7 @@ def test_malformed_scene_is_rejected(data):
         scene.validate()
     scene = demo_scene()
     scene.nodes[-1] = replace(scene.nodes[-1], kind="smooth_union")
-    with pytest.raises(ValueError, match="距离场"):
-        scene.validate()
+    scene.validate()
 
 
 @native

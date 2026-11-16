@@ -340,8 +340,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     if (referenced.length) return reportError(`参数 ${name} 被 ${referenced.map(n => n.name).join('、')} 引用，请先移除表达式。`);
     onChange({ ...scene, parameters: Object.fromEntries(Object.entries(params).filter(([key]) => key !== name)) });
   }
-  function isSlotCompatible(parentKind, childKind) {
-    if (parentKind === 'smooth_union' || parentKind === 'smooth_difference') return !['tpms', 'shell', 'offset', ...APPROXIMATE_PRIMITIVES].includes(childKind);
+  function isSlotCompatible(_parentKind, _childKind) {
     return true;
   }
   function renderEditor(node, path = []) {
@@ -391,7 +390,10 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
         {LABELS[node.kind]?.map((label, i) => field(`dimensions.${i}`, label, node.dimensions[i]))}
         {PRIMITIVES.find(item => item.kind === node.kind)?.hint && <p className="hint">{PRIMITIVES.find(item => item.kind === node.kind).hint}</p>}
         {node.kind === 'tpms' && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} />}
-        {(node.kind === 'smooth_union' || node.kind === 'smooth_difference') && field('blend', '融合宽度', node.blend)}
+        {(node.kind === 'smooth_union' || node.kind === 'smooth_difference') && <>
+          {field('blend', '融合宽度', node.blend)}
+          <p className="hint">支持与基本体、圆锥/圆台/椭球、抽壳/偏置及 TPMS 平滑过渡；对薄壁抽壳体建议融合宽度不超过壁厚的 1.5 倍。</p>
+        </>}
         {node.kind === 'shell' && (() => {
           const op = node.operation || {};
           const hasMulti = Array.isArray(op.openings);

@@ -20,7 +20,7 @@ test('references are acyclic, topologically ordered and output-scoped', async ()
   assert.match(graphErrors(scene).n3, /上游/);
 });
 
-test('TPMS smooth union is rejected through transform dependencies', async () => {
+test('smooth_union and smooth_difference support TPMS and transforms while guarding heavy fanout', async () => {
   const { graphErrors } = await import('../src/node_graph.mjs');
   const nodes = [
     { id: 'n1', name: 'TPMS', kind: 'tpms', inputs: [] },
@@ -28,5 +28,13 @@ test('TPMS smooth union is rejected through transform dependencies', async () =>
     { id: 'n3', name: '球体', kind: 'sphere', inputs: [] },
     { id: 'n4', name: '融合', kind: 'smooth_union', inputs: ['n2', 'n3'] },
   ];
-  assert.match(graphErrors({ nodes }).n4, /TPMS/);
+  assert.deepEqual(graphErrors({ nodes }), {});
+  const heavy = [
+    { id: 's', name: '球', kind: 'sphere', inputs: [] },
+    { id: 'p1', name: '阵列1', kind: 'linear_pattern', dimensions: [8, 8, 1, 10, 10, 10], inputs: ['s'] },
+    { id: 'p2', name: '阵列2', kind: 'circular_pattern', dimensions: [2, 180], inputs: ['p1'] },
+    { id: 'b', name: '盒', kind: 'box', inputs: [] },
+    { id: 'u', name: '平滑差集', kind: 'smooth_difference', inputs: ['p2', 'b'] },
+  ];
+  assert.match(graphErrors({ nodes: heavy }).u, /扇出/);
 });

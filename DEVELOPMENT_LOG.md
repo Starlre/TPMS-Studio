@@ -149,6 +149,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-097 | 旧桌面 UI 对比度调整历史 | 2026-10-13 23:13:11：旧主题文字、控件边界、节点选中与禁用配色优化；同步时补入原项目记录 | 历史记录保留 |
 | R-105 | 现代曜石黑/浅灰白界面与分栏交互 | 26-11-16 09:54:09：曜石黑/浅灰白配色、透明画布径向背景、Bento 双栏统计、分栏拖拽与数值拖动微调 | 已完成 |
 | R-106 | 近期 nTop 风格 Notebook 改进 | 26-11-16 10:37:00：槽位就地新建与匿名内嵌子块、章节分组注释与折叠、符号重命名同步、`I/V` 视口快捷键 | 已完成 |
+| R-107 | 通用特征工具与放开抽壳/偏置/平滑布尔限制 | 26-11-16 11:32:00：P0（偏置/平滑差集/镜像/线性与圆周阵列/多方向增强抽壳）、P1（一阶/归一化SDF放开抽壳与偏置）、P2（放开平滑融合/差集限制） | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -610,6 +611,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 涉及文件：`desktop/src/workflow_drag.mjs`、`desktop/src/ValueBlocks.jsx`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`desktop/src/native.css`、`desktop/tests/workflow-drag.test.cjs`、`desktop/tests/notebook-ntop-ui.cjs`。
 - 验证：`vite build` 通过；`npm test` 24/24 通过；Electron 全部 5 项界面测试（`notebook-ntop-ui.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`）全部通过，零页面错误；更新 `docs/` 实机截图。
 - 状态：本地实现与验证完成，提交至 `完善建模功能和UI分支`。
+
+### R-107：26-11-16 11:32:00（Asia/Shanghai），补齐通用特征工具并放开抽壳 / 偏置 / 平滑布尔限制（P0–P2）
+
+- 需求与原因：工作流缺少常用特征与阵列节点（偏置、平滑差集、镜像、线性/圆周阵列），且抽壳与平滑融合长期受限于简单解析体或不含 TPMS/布尔/非精确基本体的输入，无法直接完成 TPMS 与开孔套筒平滑融合、圆周阵列孔平滑减除等实际工程建模。
+- 实现：
+  - **P0（提交 `50cbc9e`）**：新增 `offset`（均匀内外偏置 + Minkowski 包围盒计算）、`smooth_difference`、`mirror`、`linear_pattern`（总实例 $\le 64$）与 `circular_pattern`（总实例 $\le 64$）；增强 `shell` 支持 `direction`（`inward`/`outward`/`symmetric`）与 `openings` 多方向同时开口，同时保持默认 `{ opening: 'closed' }` 兼容；顶部 Ribbon（`特征与阵列`、`布尔与融合`）与卡片编辑器同步上线。
+  - **P1（提交 `620b6f2`）**：将 `ellipsoid` 升级为 Quilez 一阶解析 SDF，`cone`/`frustum` 升级为欧氏角连接 + Cauchy-Schwarz 外扩余量，`libfive_backend.py` 内置 TPMS 场升级为梯度归一化毫米尺度距离场与欧氏 `sdBox`；放开 `shell` 与 `offset` 上游限制，统一受 `_tree_cost <= 64` 扇出上限保护。
+  - **P2**：在 `solid_operations.py` 导出 `tree_cost`，移除 `solid_model.py` 与前端 `node_graph.mjs`、`workflow_drag.mjs`、`NodeWorkflow.jsx`、`main.jsx` 中对 `SMOOTH_OPERATIONS` 的 `TPMS` / 近似基本体 / 上游操作限制，保留 `tree_cost <= 64` 扇出保护，打通 `TPMS + 开孔抽壳` 的 `smooth_union` 与 `圆周阵列 + shell` 的 `smooth_difference` 水密生成，并补充 `desktop/tests/features-ui.cjs` 端到端测试。
+- 涉及文件：`solid_operations.py`、`solid_model.py`、`libfive_backend.py`、`solid_panel.py`、`desktop/src/node_graph.mjs`、`desktop/src/workflow_drag.mjs`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`desktop/src/native.css`、`test_solid_model.py`、`test_solid_operations.py`、`desktop/tests/solid-operations.test.cjs`、`desktop/tests/node-graph.test.cjs`、`desktop/tests/primitive-catalog.test.cjs`、`desktop/tests/workflow-drag.test.cjs`、`desktop/tests/ribbon-ui.cjs`、`desktop/tests/features-ui.cjs`、`docs/electron-features-p0-p2-dark.png`（及 UI 测试刷新的 `docs/*.png`）。
+- 验证：Python 6 个测试套件 `149 passed`（`test_tpms_core.py`、`test_libfive_backend.py`、`test_solid_model.py`、`test_solid_operations.py`、`test_node_workflow.py`、`test_workflow_optimization.py`）；前端 `npx vite build` 通过；`npm test` `25/25` 通过；Electron UI 7 项测试中，`features-ui.cjs`、`operations-ui.cjs`、`ribbon-ui.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`ui-smoke.cjs` 通过，`notebook-ntop-ui.cjs` 在首次串联批跑第 53 行出现过 1 次按钮失焦后 DOM 分离超时、单独重跑一次通过；实机截图 [electron-features-p0-p2-dark.png](docs/electron-features-p0-p2-dark.png) 视觉检查显示 6 孔 `圆周阵列 + 平滑差集` 法兰呈 `封闭 / 水密`（14,788 三角面、7,384 顶点）。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定
 

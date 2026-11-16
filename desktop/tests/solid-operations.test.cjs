@@ -78,13 +78,25 @@ test('new P0 feature nodes expose valid defaults, arity and upstream validation'
   assert.match(errs[bad.nodes[1].id], /偏置/);
   assert.match(errs[bad.nodes[3].id], /64/);
 
-  // Smooth difference respects smooth incompatibility just like smooth union.
+  // Under P2, smooth_difference supports TPMS/shells while guarding excessive fanout.
   const tpmsScene = { nodes: [box] };
   const tpms = createNode(tpmsScene, 'tpms', {});
   tpmsScene.nodes.push(tpms);
   const sdiff2 = createNode(tpmsScene, 'smooth_difference', {});
   sdiff2.inputs = [tpms.id, box.id];
   tpmsScene.nodes.push(sdiff2);
-  assert.match(graphErrors(tpmsScene)[sdiff2.id], /TPMS/);
+  assert.deepEqual(graphErrors(tpmsScene), {});
+
+  const heavySmooth = { nodes: [box] };
+  const hPat = createNode(heavySmooth, 'linear_pattern', {}, box.id);
+  hPat.dimensions = [6, 6, 1, 14, 14, 14];
+  heavySmooth.nodes.push(hPat);
+  const hPat2 = createNode(heavySmooth, 'circular_pattern', {}, hPat.id);
+  hPat2.dimensions = [2, 180];
+  heavySmooth.nodes.push(hPat2);
+  const hDiff = createNode(heavySmooth, 'smooth_difference', {});
+  hDiff.inputs = [hPat2.id, box.id];
+  heavySmooth.nodes.push(hDiff);
+  assert.match(graphErrors(heavySmooth)[hDiff.id], /扇出/);
   assert.ok(affectedNodes(scene, bad).has(bad.nodes[1].id));
 });

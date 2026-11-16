@@ -262,8 +262,6 @@ export function connectReference(scene, payload, target) {
     if (target.kind === 'body') {
       const previous = graphErrors(scene);
       for (const [id, error] of Object.entries(graphErrors(next))) if (error !== '请选择完整的上游输入' && previous[id] !== error) throw new Error(error);
-      // Check incomplete smooth unions as well as downstream unions masked by other errors.
-      for (const n of next.nodes) if (['smooth_union', 'smooth_difference'].includes(n.kind) && [...ancestors(next.nodes, n.id)].some(id => next.nodes.find(b => b.id === id)?.kind === 'tpms')) throw new Error('TPMS 不支持平滑融合，请使用普通布尔运算');
     }
     return { scene: Object.entries(patch).every(([k, v]) => JSON.stringify(node[k]) === JSON.stringify(v)) ? scene : next };
   } catch (error) { return { error: error.message }; }

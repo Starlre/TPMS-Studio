@@ -108,6 +108,10 @@ def _outward_slope_margin(scene, node_id, out_pad):
     return out_pad * (math.sqrt(1.0 + 2.0 * max_slope ** 2) - 1.0)
 
 
+def tree_cost(scene, node_id, visiting=None):
+    return _tree_cost(scene, node_id, visiting)
+
+
 def _inward_thickness_limit(scene, node):
     exact = _exact_primitive(scene, node.inputs[0], {node.id})
     if exact is not None:

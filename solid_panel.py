@@ -125,7 +125,7 @@ class SolidPanel(QWidget):
         combine_button = QPushButton("创建组合")
         combine_button.clicked.connect(self.combine)
         combine_layout.addRow(combine_button)
-        note = QLabel("差集为 A 减去 B。交集可用实体裁剪 TPMS。平滑融合仅适用于基本实体组合。")
+        note = QLabel("差集为 A 减去 B。交集可用实体裁剪 TPMS。平滑融合与平滑差集支持基本体、抽壳及 TPMS 组合。")
         note.setWordWrap(True)
         note.setStyleSheet("font-size:16px; color:#475569;")
         combine_layout.addRow(note)

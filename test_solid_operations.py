@@ -192,14 +192,46 @@ def test_removed_operations_rejected_at_creation_validation_and_load(kind):
         SolidScene.from_dict(scene.to_dict())
 
 
-def test_shell_cannot_participate_in_smooth_union():
-    scene = SolidScene()
-    body = scene.add('box')
-    shell = scene.add('shell', inputs=(body.id,))
-    sphere = scene.add('sphere')
-    scene.add('smooth_union', inputs=(shell.id, sphere.id))
-    with pytest.raises(ValueError, match='抽壳结果'):
-        scene.validate()
+@native
+def test_p2_smooth_boolean_supports_shell_tpms_and_cones():
+    # Hollow box shell + protruding sphere smoothed cleanly
+    scene = SolidScene(cell_size=.3)
+    body = scene.add('box', dimensions=(12, 12, 12))
+    shell = scene.add('shell', inputs=(body.id,), dimensions=(2.0,))
+    sphere = scene.add('sphere', dimensions=(4.0,), position=(6, 0, 0))
+    scene.add('smooth_union', inputs=(shell.id, sphere.id), blend=1.5)
+    mesh = generate_solid(scene).mesh
+    assert mesh.is_watertight and mesh.volume > 0
+
+    # Open cylinder shell + Gyroid infill smoothed cleanly
+    tscene = SolidScene(cell_size=.35)
+    tp = tscene.add('tpms', tpms=TPMSParameters(size_x=18, size_y=18, size_z=18, cells_x=1, cells_y=1, cells_z=1, thickness=1.8, samples_per_cell=20))
+    inner = tscene.add('cylinder', dimensions=(7.5, 18.0))
+    infill = tscene.add('intersection', inputs=(tp.id, inner.id))
+    outer = tscene.add('cylinder', dimensions=(9.0, 18.0))
+    tube = tscene.add('shell', inputs=(outer.id,), dimensions=(1.5,), operation={'opening': 'closed', 'openings': ['+Z', '-Z']})
+    tscene.add('smooth_union', inputs=(infill.id, tube.id), blend=1.5)
+    t_mesh = generate_solid(tscene).mesh
+    assert t_mesh.is_watertight and t_mesh.volume > 0
+
+    # Shell minus cylinder with smooth_difference fillet
+    dscene = SolidScene(cell_size=.3)
+    db = dscene.add('box', dimensions=(12, 12, 12))
+    dsh = dscene.add('shell', inputs=(db.id,), dimensions=(1.5,))
+    dc = dscene.add('cylinder', dimensions=(2.5, 16.0))
+    dscene.add('smooth_difference', inputs=(dsh.id, dc.id), blend=1.5)
+    d_mesh = generate_solid(dscene).mesh
+    assert d_mesh.is_watertight and d_mesh.volume > 0
+
+    # Fanout guard still protects deeply nested pattern smooth unions
+    heavy = SolidScene(cell_size=.5)
+    c1 = heavy.add('cone', dimensions=(6, 12))
+    p1 = heavy.add('linear_pattern', inputs=(c1.id,), dimensions=(8, 8, 1, 14, 14, 14))
+    sp = heavy.add('sphere')
+    p2 = heavy.add('circular_pattern', inputs=(sp.id,), dimensions=(2, 180))
+    heavy.add('smooth_union', inputs=(p1.id, p2.id))
+    with pytest.raises(ValueError, match='扇出'):
+        heavy.validate()
 
 
 @native

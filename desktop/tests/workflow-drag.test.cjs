@@ -37,7 +37,7 @@ test('mixed notebook ordering stays independent of computation and ignores stale
   assert.deepEqual(next.nodes.find(n => n.id === 'n4').inputs, ['n3']);
   assert.equal(reorderScene(before, 'notebook', 'absent', 'n1'), before);
 });
-test('body links reject cycles, duplicate inputs, missing sources and TPMS smooth unions atomically', async () => {
+test('body links reject cycles, duplicate inputs, missing sources atomically while allowing TPMS smooth union', async () => {
   const { connectReference } = await import('../src/workflow_drag.mjs'); const before = scene(), original = JSON.stringify(before);
   for (const [target, source, text] of [
     [{ kind: 'body', id: 'n4', index: 0 }, 'n4', /循环/],
@@ -50,7 +50,7 @@ test('body links reject cycles, duplicate inputs, missing sources and TPMS smoot
   assert.deepEqual(next.nodes[3].inputs, ['n2']); assert.deepEqual(before.nodes[3].inputs, ['n3']);
   assert.equal(connectReference(before, ref('body', 'n1'), { kind: 'root' }).scene.root, 'n1');
   const mixed = scene(); mixed.nodes[0].kind = 'tpms'; mixed.nodes[2].kind = 'smooth_union'; mixed.nodes[2].inputs = ['', ''];
-  assert.match(connectReference(mixed, ref('body', 'n1'), { kind: 'body', id: 'n3', index: 0 }).error, /TPMS/);
+  assert.ok(connectReference(mixed, ref('body', 'n1'), { kind: 'body', id: 'n3', index: 0 }).scene);
 });
 test('typed links set scalar/vector bindings and enforce value graph cycles and symbol conflicts', async () => {
   const { connectReference } = await import('../src/workflow_drag.mjs'); const before = scene();

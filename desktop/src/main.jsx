@@ -502,17 +502,11 @@ function App() {
   const noEntity = busy || !info?.libfive || scene.nodes.length >= 64;
   const noParameter = busy || !info || (scene.value_nodes || []).length >= 32;
   // 性能：平滑融合可用性检查需要克隆节点并递归遍历祖先链，缓存后仅在场景/参数/选中项变化时重算
-  const smoothBlocked = useMemo(() => {
-    const combination = createNode(scene, 'smooth_union', p, selected);
-    const hasTpms = combination.inputs.some(id => scene.nodes.some(n => n.kind === 'tpms' && (n.id === id || ancestors(scene.nodes, id).has(n.id))));
-    const hasApproximate = combination.inputs.some(id => scene.nodes.some(n => APPROXIMATE_PRIMITIVES.has(n.kind) && ancestors(scene.nodes, id).has(n.id)));
-    const hasOperation = combination.inputs.some(id => scene.nodes.some(n => ['shell', 'offset'].includes(n.kind) && ancestors(scene.nodes, id).has(n.id)));
-    return hasTpms || hasApproximate || hasOperation;
-  }, [scene, p, selected]);
+  const smoothBlocked = false;
   const ribbonCategories = [
     { id: 'model', label: '建模', workspaces: ['nodes'], groups: [
       { label: '基本体', palette:true, common:COMMON_PRIMITIVES, tools:PRIMITIVES.map(item => ({ id:item.kind, label:`创建${item.name}`, icon:props => <PrimitiveIcon {...props} kind={item.kind}/>, disabled:noEntity, onClick:() => ribbonNode(item.kind), hint:item.hint })) },
-      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles],['smooth_difference','平滑差集',MinusCircle]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || ((kind === 'smooth_union' || kind === 'smooth_difference') && smoothBlocked), onClick:() => ribbonNode(kind), hint:(kind === 'smooth_union' || kind === 'smooth_difference') && smoothBlocked ? 'TPMS、距离近似基本体与抽壳/偏置结果暂不支持平滑布尔；请使用普通布尔运算' : '选中实体作为 A，在节点内编辑 A/B 引用' })) },
+      { label: '布尔与融合', tools: [['union','并集',GitMerge],['intersection','交集',GitCompare],['difference','差集',Minus],['smooth_union','平滑融合',Sparkles],['smooth_difference','平滑差集',MinusCircle]].map(([kind,label,icon]) => ({ label:`添加${label}`, icon, disabled:noEntity || scene.nodes.length < 2 || ((kind === 'smooth_union' || kind === 'smooth_difference') && smoothBlocked), onClick:() => ribbonNode(kind), hint:'选中实体作为 A，在节点内编辑 A/B 引用；平滑布尔现已支持基本体、抽壳与 TPMS 过渡' })) },
       { label: '节点操作', tools: [
         {label:'独立变换',icon:Move3D,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('transform')},
         {label:'复制实体',icon:Copy,disabled:noEntity || !node,onClick:() => { duplicateNode(); setMode('nodes'); setInspectorTab('model'); }},

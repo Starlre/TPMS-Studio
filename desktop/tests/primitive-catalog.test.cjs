@@ -18,7 +18,7 @@ test('new primitive defaults are independent and every dimension supports parame
   }
 });
 
-test('approximate primitives are blocked from smooth fusion even through transforms',async()=>{
+test('approximate primitives support smooth fusion even through transforms',async()=>{
   const {createNode,graphErrors} = await import('../src/node_graph.mjs');
   for (const kind of ['cone','frustum','ellipsoid']) {
     const scene={nodes:[]};
@@ -26,7 +26,7 @@ test('approximate primitives are blocked from smooth fusion even through transfo
     const b=createNode(scene,'transform',{},a.id);scene.nodes.push(b);
     const c=createNode(scene,'sphere',{});scene.nodes.push(c);
     const smooth=createNode(scene,'smooth_union',{},b.id);smooth.inputs=[b.id,c.id];scene.nodes.push(smooth);
-    assert.match(graphErrors(scene)[smooth.id],/平滑融合/);
-    for (const operation of ['union','intersection','difference']) {smooth.kind=operation;assert.deepEqual(graphErrors(scene),{});}
+    assert.deepEqual(graphErrors(scene),{});
+    for (const operation of ['union','intersection','difference','smooth_difference']) {smooth.kind=operation;assert.deepEqual(graphErrors(scene),{});}
   }
 });

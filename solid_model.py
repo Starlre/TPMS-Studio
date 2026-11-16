@@ -16,7 +16,7 @@ from libfive_backend import (NativeKernel, _TreeArena, _field_tree, _Region,
 from tpms_core import TPMSParameters, _material_scalar_field
 from parametric import TPMS_FIELDS, evaluate_expression, validate_parameters
 from workflow_values import resolve_values, copy_value_nodes
-from solid_operations import OP_DEFAULTS, validate_operation, operation_bounds, operation_tree
+from solid_operations import OP_DEFAULTS, validate_operation, operation_bounds, operation_tree, tree_cost
 
 KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
          "cube": "立方体", "rounded_box": "圆角方盒", "rounded_cylinder": "圆角圆柱",
@@ -217,12 +217,8 @@ class SolidScene:
         for identifier in ids:
             visit(identifier)
         for node in self.nodes:
-            if node.kind in SMOOTH_OPERATIONS and self.contains_tpms(node.id):
-                raise ValueError("TPMS 场不是精确距离场；平滑融合目前仅支持基本实体组合")
-            if node.kind in SMOOTH_OPERATIONS and self.contains_approximate_primitive(node.id):
-                raise ValueError("圆锥、圆台、椭球体当前使用距离近似，暂不支持平滑融合；请使用普通布尔运算")
-            if node.kind in SMOOTH_OPERATIONS and self.contains_operation(node.id):
-                raise ValueError("抽壳结果（及偏置）暂不参与平滑融合，请使用普通布尔运算")
+            if node.kind in SMOOTH_OPERATIONS and tree_cost(self, node.id) > 64:
+                raise ValueError("平滑布尔上游嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级")
 
     def contains_operation(self, identifier):
         pending, seen = [identifier], set()

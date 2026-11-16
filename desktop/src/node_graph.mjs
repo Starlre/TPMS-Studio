@@ -35,10 +35,7 @@ function treeCost(nodes, nodeId, visiting = new Set()) {
 }
 
 export function smoothIssueReason(nodes, nodeId) {
-  const deps = [...ancestors(nodes, nodeId)];
-  if (deps.some(i => nodes.find(c => c.id === i)?.kind === 'tpms')) return 'TPMS 不支持平滑融合，请使用普通布尔运算';
-  if (deps.some(i => APPROXIMATE_PRIMITIVES.has(nodes.find(c => c.id === i)?.kind))) return '圆锥、圆台、椭球体暂不支持平滑融合，请使用普通布尔运算';
-  if (deps.some(i => ['shell', 'offset'].includes(nodes.find(c => c.id === i)?.kind))) return '操作结果暂不支持平滑融合，请使用普通布尔运算';
+  if (treeCost(nodes, nodeId) > 64) return '平滑布尔上游嵌套或阵列层级过多（计算扇出超过上限），请简化上游层级';
   return '';
 }
 

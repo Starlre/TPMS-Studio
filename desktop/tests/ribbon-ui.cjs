@@ -116,7 +116,8 @@ async function main() {
     await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(1520,980));
     await choose('建模'); await capture('electron-ribbon-nodes.png');
     await choose('TPMS 节点'); await click('添加 TPMS'); await choose('建模');
-    assert.ok(await ribbon.getByRole('button',{name:'添加平滑融合',exact:true}).isDisabled());
+    assert.ok(await ribbon.getByRole('button',{name:'添加平滑融合',exact:true}).isEnabled());
+    assert.ok(await ribbon.getByRole('button',{name:'添加平滑差集',exact:true}).isEnabled());
     await choose('TPMS 节点'); await click('添加隐式公式');
     assert.equal(await page.locator('[data-node-id]').count(),6);
     // Both legacy Electron envelopes and raw Qt scene JSON enter the unified workspace.
