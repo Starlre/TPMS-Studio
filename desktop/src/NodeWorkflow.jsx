@@ -1,14 +1,30 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { createValueBlock, ValueEditor } from './ValueBlocks';
 import CardMenu from './CardMenu';
-import { notebookOrder } from './workflow_drag.mjs';
-import { MoreHorizontal, Settings2, Search } from 'lucide-react';
-import { valueConsumers } from './node_graph.mjs';
+import {
+  notebookOrder, notebookSections, isInlineNode, pruneInlineNodes,
+  createSection, updateSection, removeSection, createInlineInputNode,
+  promoteInlineNode, demoteToInlineNode
+} from './workflow_drag.mjs';
+import { MoreHorizontal, Settings2, Search, FolderPlus, Folder, FolderOpen, ArrowUpRight, Minimize2, MessageSquarePlus } from 'lucide-react';
+import { valueConsumers, APPROXIMATE_PRIMITIVES } from './node_graph.mjs';
 import { Plus, Box, Move3D, Trash2, Undo2, Redo2, ArrowDownToLine, Eye, ChevronRight, ChevronsDownUp, Hash } from 'lucide-react';
 import { NODE_KINDS, ARITY, inputOptions, graphErrors, createNode } from './node_graph.mjs';
 import { WorkflowDrag, SortHeading, SortHandle, SortButtons, ReferenceOutput, ReferenceInput, DragSource } from './WorkflowDrag';
 import { PRIMITIVES } from './primitive_catalog.mjs';
 import { useNodeState } from './ui_status.mjs';
+
+const EXACT_SHELL_KINDS = new Set(['sphere', 'box', 'cube', 'rounded_box', 'cylinder', 'rounded_cylinder', 'capsule', 'torus', 'transform']);
+const INLINE_CREATION_KINDS = [
+  ...PRIMITIVES.map(p => ({ id: p.kind, name: p.name, group: '基本体' })),
+  { id: 'tpms', name: 'TPMS', group: '场/结构' },
+  { id: 'union', name: '并集', group: '布尔' },
+  { id: 'intersection', name: '交集', group: '布尔' },
+  { id: 'difference', name: '差集', group: '布尔' },
+  { id: 'smooth_union', name: '平滑融合', group: '布尔' },
+  { id: 'transform', name: '变换', group: '操作' },
+  { id: 'shell', name: '抽壳', group: '操作' }
+];
 
 const LABELS = Object.fromEntries(PRIMITIVES.map(item => [item.kind,item.labels]));
 const Values = createContext([]);
@@ -144,16 +160,77 @@ function TPMSFields({ node, patch, currentParameters }) {
 export default function NodeWorkflow({ scene, onChange, currentParameters, selected, onSelect, dirty, busy, inputsLocked = false, available, error, reportError, undo, redo, canUndo, canRedo, loadPreset, valueOutputs = {}, previewNode, evaluateValues, cacheSummary, activePreviewNode, allEntities, hiddenEntities = [], toggleEntity }) {
   const [expanded, setExpanded] = useState(() => new Set(selected ? [selected] : []));
   const [nestedOpened, setNestedOpened] = useState(new Set());
+  const [slotPicker, setSlotPicker] = useState(null), [slotQuery, setSlotQuery] = useState('');
   const [adding, setAdding] = useState(false), [query, setQuery] = useState('');
   const [settings, setSettings] = useState(false), [menu, setMenu] = useState(null);
+  const [editingSection, setEditingSection] = useState(null), [noteOpened, setNoteOpened] = useState(() => new Set());
   const entries = useRef(new Map()), addButton = useRef(null);
   const [parameterName, setParameterName] = useState('wall');
   // 性能：节点图错误检查需要递归遍历祖先链，按场景缓存，避免父级重渲染时重复计算
   const issues = useMemo(() => graphErrors(scene), [scene]);
   const params = scene.parameters || {}, blocks = scene.value_nodes || [];
+  const sections = useMemo(() => notebookSections(scene), [scene]);
+  const sectionById = useMemo(() => new Map(sections.map(s => [s.id, s])), [sections]);
   const order = useMemo(() => notebookOrder(scene), [scene]);
+  const orderMeta = useMemo(() => {
+    const ownerOf = new Map();
+    const statsOf = new Map();
+    let activeSection = null;
+    for (const id of order) {
+      if (id.startsWith('section:')) {
+        const sid = id.slice(8);
+        activeSection = sectionById.get(sid) || null;
+        if (activeSection) statsOf.set(sid, { count: 0, hasError: false, hasOutput: false });
+      } else {
+        ownerOf.set(id, activeSection);
+        if (activeSection) {
+          const stat = statsOf.get(activeSection.id);
+          stat.count += 1;
+          if (!id.startsWith('value:') && issues[id]) stat.hasError = true;
+          if (scene.root === id) stat.hasOutput = true;
+        }
+      }
+    }
+    return { ownerOf, statsOf };
+  }, [order, sectionById, issues, scene.root]);
+  function findHostChain(targetId) {
+    if (!targetId || targetId.startsWith('value:') || !isInlineNode(scene, targetId)) return null;
+    const queue = [[targetId]];
+    const seen = new Set([targetId]);
+    while (queue.length) {
+      const chain = queue.shift();
+      const head = chain[0];
+      if (!isInlineNode(scene, head) && chain.length > 1) return chain;
+      if (chain.length > 4) continue;
+      for (const parent of scene.nodes) {
+        if ((parent.inputs || []).includes(head) && !seen.has(parent.id)) {
+          seen.add(parent.id);
+          queue.push([parent.id, ...chain]);
+        }
+      }
+    }
+    return null;
+  }
   useEffect(() => {
     if (!selected) return;
+    const chain = findHostChain(selected);
+    if (chain) {
+      const topId = chain[0];
+      setExpanded(old => new Set([...old, topId]));
+      setNestedOpened(old => {
+        const next = new Set(old);
+        const path = [];
+        for (let k = 0; k < chain.length - 1; k++) {
+          const parent = scene.nodes.find(n => n.id === chain[k]);
+          const slot = (parent?.inputs || []).indexOf(chain[k + 1]);
+          if (slot >= 0) next.add([...path, chain[k], slot, chain[k + 1]].join('/'));
+          path.push(chain[k]);
+        }
+        return next;
+      });
+      const frame = requestAnimationFrame(() => entries.current.get(topId)?.querySelector('.notebook-node-heading')?.scrollIntoView({ block: 'nearest' }));
+      return () => cancelAnimationFrame(frame);
+    }
     setExpanded(old => new Set([...old, selected]));
     const frame = requestAnimationFrame(() => entries.current.get(selected)?.querySelector('.notebook-node-heading')?.scrollIntoView({ block: 'nearest' }));
     return () => cancelAnimationFrame(frame);
@@ -161,10 +238,19 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
   useEffect(() => {
     const ids = new Set(order);
     setExpanded(old => [...old].some(id => !ids.has(id)) ? new Set([...old].filter(id => ids.has(id))) : old);
-  }, [scene.nodes, blocks]);
+  }, [scene.nodes, blocks, sections]);
+  function commitScene(next) {
+    const pruned = pruneInlineNodes(next);
+    const cleaned = { ...next };
+    if (pruned.length) cleaned.inline_nodes = pruned;
+    else delete cleaned.inline_nodes;
+    onChange(cleaned);
+  }
   function select(id) {
     onSelect(id);
     if (!id) return;
+    const owner = orderMeta.ownerOf.get(id);
+    if (owner?.collapsed) onChange(updateSection(scene, owner.id, { collapsed: false }));
     setExpanded(old => new Set([...old, id]));
     requestAnimationFrame(() => {
       const heading = entries.current.get(id)?.querySelector('.notebook-node-heading');
@@ -178,8 +264,15 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     const anchor = event.currentTarget, rect = anchor.getBoundingClientRect();
     setMenu({ id, anchor, x: event.type === 'contextmenu' ? event.clientX : rect.right, y: event.type === 'contextmenu' ? event.clientY : rect.bottom });
   }
-  function patch(id, values) { onChange({ ...scene, nodes: scene.nodes.map(n => n.id === id ? { ...n, ...values } : n) }); }
-  function add(kind, value = false) {
+  function patch(id, values) { commitScene({ ...scene, nodes: scene.nodes.map(n => n.id === id ? { ...n, ...values } : n) }); }
+  function addSection(insertBeforeId = '') {
+    const created = createSection(scene, '', insertBeforeId);
+    onChange(created.scene);
+    setEditingSection(created.section.id);
+    setAdding(false); setQuery('');
+  }
+  function add(kind, value = false, section = false) {
+    if (section) { addSection(); return; }
     if (value) {
       if (blocks.length >= 32) return reportError('最多支持 32 个参数节点');
       const block = createValueBlock(scene, kind), id = `value:${block.id}`;
@@ -190,6 +283,30 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     const node = createNode(scene, kind, currentParameters, selected);
     onChange({ ...scene, nodes: [...scene.nodes, node], root: node.id, notebook_order: [...order, node.id] }); select(node.id); setAdding(false); setQuery('');
   }
+  function addInline(parentId, slotIndex, path, kind) {
+    if (scene.nodes.length >= 64) return reportError('最多支持 64 个节点');
+    const child = createNode(scene, kind, currentParameters, '');
+    if (ARITY[kind]) child.inputs = Array.from({ length: ARITY[kind] }, () => '');
+    const next = createInlineInputNode(scene, parentId, slotIndex, child);
+    const key = [...path, parentId, slotIndex, child.id].join('/');
+    commitScene(next);
+    setNestedOpened(old => new Set([...old, key]));
+    setSlotPicker(null); setSlotQuery('');
+  }
+  function promoteToTop(childId, beforeParentId) {
+    const next = promoteInlineNode(scene, childId, beforeParentId);
+    onChange(next);
+    select(childId);
+  }
+  function demoteToSlot(childId) {
+    const res = demoteToInlineNode(scene, childId);
+    if (res.error) return reportError(res.error);
+    if (selected === childId) {
+      const host = scene.nodes.find(n => (n.inputs || []).includes(childId));
+      if (host) onSelect(host.id);
+    }
+    commitScene(res.scene);
+  }
   function duplicate(node) {
     if (scene.nodes.length >= 64) return reportError('最多支持 64 个节点');
     const copy = { ...structuredClone(node), id: createNode(scene, node.kind, currentParameters).id, name: `${node.name} 副本` };
@@ -199,7 +316,7 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     const children = scene.nodes.filter(n => n.inputs.includes(node.id));
     if (children.length) return reportError(`${node.name} 被 ${children.map(n => n.name).join('、')} 引用，请先更换输入或删除下游节点。`);
     const nodes = scene.nodes.filter(n => n.id !== node.id);
-    onChange({ ...scene, nodes, root: scene.root === node.id ? nodes.at(-1)?.id || '' : scene.root });
+    commitScene({ ...scene, nodes, root: scene.root === node.id ? nodes.at(-1)?.id || '' : scene.root });
     if (selected === node.id) select(nodes.at(-1)?.id || '');
   }
   function addParameter() {
@@ -213,6 +330,11 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     const referenced = [...scene.nodes, ...(scene.value_nodes || [])].filter(n => [...Object.values(n.expressions || {}), n.expression, ...(n.components || [])].some(v => String(v).match(/[A-Za-z_][A-Za-z_0-9]*/g)?.includes(name)));
     if (referenced.length) return reportError(`参数 ${name} 被 ${referenced.map(n => n.name).join('、')} 引用，请先移除表达式。`);
     onChange({ ...scene, parameters: Object.fromEntries(Object.entries(params).filter(([key]) => key !== name)) });
+  }
+  function isSlotCompatible(parentKind, childKind) {
+    if (parentKind === 'shell') return EXACT_SHELL_KINDS.has(childKind);
+    if (parentKind === 'smooth_union') return !['tpms', 'shell', ...APPROXIMATE_PRIMITIVES].includes(childKind);
+    return true;
   }
   function renderEditor(node, path = []) {
     const options = [['', '选择上游实体…'], ...inputOptions(scene.nodes, node.id).map(n => [n.id, n.name])];
@@ -234,7 +356,28 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
         {ARITY[node.kind] && Array.from({ length: ARITY[node.kind] }, (_, i) => {
           const input = scene.nodes.find(n => n.id === node.inputs[i]);
           const nestedKey = [...path, node.id, i, input?.id].join('/');
-          return <ReferenceInput className="notebook-input" key={i} target={{ kind: 'body', id: node.id, index: i }} label={ARITY[node.kind] === 1 ? '输入实体' : `输入 ${i === 0 ? 'A' : 'B'}`}><Choice label={ARITY[node.kind] === 1 ? '输入实体' : `输入 ${i === 0 ? 'A' : 'B'}`} value={node.inputs[i] || ''} options={options} onChange={v => patch(node.id, { inputs: Array.from({ length: ARITY[node.kind] }, (_, j) => i === j ? v : node.inputs[j] || '') })} />{input && <><Reference id={input.id} name={input.name} onClick={() => select(input.id)} />{path.length < 3 && ![...path, node.id].includes(input.id) && <details className="nested-reference" open={nestedOpened.has(nestedKey)} onToggle={e => { const open = e.currentTarget.open; setNestedOpened(old => { if (old.has(nestedKey) === open) return old; const next = new Set(old); if (open) next.add(nestedKey); else next.delete(nestedKey); return next; }); }}><summary>展开 {input.name}</summary>{nestedOpened.has(nestedKey) && <div className="nested-editor">{renderEditor(input, [...path, node.id])}</div>}</details>}</>}</ReferenceInput>;
+          const slotId = [...path, node.id, i].join(':');
+          const childInline = input ? isInlineNode(scene, input.id) : false;
+          const pickerOpen = slotPicker === slotId;
+          const slotMatches = INLINE_CREATION_KINDS.filter(k => k.name.toLowerCase().includes(slotQuery.trim().toLowerCase()));
+          return <ReferenceInput className="notebook-input" key={i} target={{ kind: 'body', id: node.id, index: i }} label={ARITY[node.kind] === 1 ? '输入实体' : `输入 ${i === 0 ? 'A' : 'B'}`}><Choice label={ARITY[node.kind] === 1 ? '输入实体' : `输入 ${i === 0 ? 'A' : 'B'}`} value={node.inputs[i] || ''} options={options} onChange={v => patch(node.id, { inputs: Array.from({ length: ARITY[node.kind] }, (_, j) => i === j ? v : node.inputs[j] || '') })} />
+            <div className="slot-actions">
+              {input && <Reference id={input.id} name={input.name} onClick={() => {
+                if (childInline) setNestedOpened(old => new Set([...old, nestedKey]));
+                else select(input.id);
+              }} />}
+              {childInline && <span className="inline-badge">内嵌子块</span>}
+              {path.length < 3 && <button type="button" className="slot-create-trigger" disabled={inputsLocked || !available || scene.nodes.length >= 64} aria-expanded={pickerOpen} onClick={() => { setSlotPicker(old => old === slotId ? null : slotId); setSlotQuery(''); }}><Plus size={13} aria-hidden="true" />{input ? '替换新建' : '就地新建'}</button>}
+            </div>
+            {pickerOpen && <div className="slot-inline-picker" role="region" aria-label="就地新建子块" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setSlotPicker(null); } }}>
+              <label className="slot-picker-search"><Search size={14} aria-hidden="true" /><input autoFocus aria-label="筛选子块类型" placeholder="筛选基本体 / 操作…" value={slotQuery} onChange={e => setSlotQuery(e.target.value)} /></label>
+              <div className="slot-picker-grid">{slotMatches.map(item => {
+                const ok = isSlotCompatible(node.kind, item.id);
+                return <button type="button" key={item.id} disabled={!ok || scene.nodes.length >= 64} title={ok ? `就地创建 ${item.name}` : `${NODE_KINDS[node.kind]}暂不支持此上游类型`} onClick={() => addInline(node.id, i, path, item.id)}>{item.name}</button>;
+              })}{!slotMatches.length && <span className="hint">无匹配类型</span>}</div>
+            </div>}
+            {input && path.length < 3 && ![...path, node.id].includes(input.id) && <details className="nested-reference" open={nestedOpened.has(nestedKey)} onToggle={e => { const open = e.currentTarget.open; setNestedOpened(old => { if (old.has(nestedKey) === open) return old; const next = new Set(old); if (open) next.add(nestedKey); else next.delete(nestedKey); return next; }); }}><summary>展开 {input.name}</summary>{nestedOpened.has(nestedKey) && <div className="nested-editor"><div className="nested-toolbar">{childInline ? <button type="button" className="secondary nested-promote" onClick={() => promoteToTop(input.id, path[0] || node.id)}><ArrowUpRight size={13} aria-hidden="true" />提升为独立卡片</button> : scene.root !== input.id && <button type="button" className="secondary nested-demote" onClick={() => demoteToSlot(input.id)}><Minimize2 size={13} aria-hidden="true" />转为内嵌子块</button>}</div>{renderEditor(input, [...path, node.id])}</div>}</details>}
+          </ReferenceInput>;
         })}
         {node.kind === 'difference' && <p className="hint">A 为保留实体，B 为要减去的实体。</p>}
         {LABELS[node.kind]?.map((label, i) => field(`dimensions.${i}`, label, node.dimensions[i]))}
@@ -263,16 +406,18 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
     onChange({ ...scene, value_nodes: [...blocks, copy], notebook_order: [...order, `value:${copy.id}`] });
     select(`value:${copy.id}`);
   }
+  const menuSection = menu?.id?.startsWith('section:') ? sectionById.get(menu.id.slice(8)) : null;
   const menuNode = scene.nodes.find(n => n.id === menu?.id);
   const menuValue = blocks.find(b => `value:${b.id}` === menu?.id);
   const creations = [
-    ...Object.entries(NODE_KINDS).map(([id, name]) => ({ id, name: id === 'difference' ? '差集' : name, value: false, group: ARITY[id] ? '操作' : '实体' })),
-    ...[['number', '数值参数'], ['formula', '公式参数'], ['vector', '向量参数']].map(([id, name]) => ({ id, name, value: true, group: '参数' }))
+    ...Object.entries(NODE_KINDS).map(([id, name]) => ({ id, name: id === 'difference' ? '差集' : name, value: false, section: false, group: ARITY[id] ? '操作' : '实体' })),
+    ...[['number', '数值参数'], ['formula', '公式参数'], ['vector', '向量参数']].map(([id, name]) => ({ id, name, value: true, section: false, group: '参数' })),
+    { id: 'section', name: '章节分组', value: false, section: true, group: '组织' }
   ].filter(item => item.name.toLowerCase().includes(query.trim().toLowerCase()));
   return <Values.Provider value={blocks}><Navigate.Provider value={select}><WorkflowDrag scene={scene} onChange={onChange} busy={busy} reportError={reportError}><div className="node-workflow workflow-browser notebook card-workflow" aria-busy={busy}>
-    {!!order.length && <div className="workflow-tools card-tools"><div><button type="button" aria-label="收起所有节点" title="收起所有节点" onClick={() => setExpanded(new Set())}><ChevronsDownUp size={18} aria-hidden="true" /></button><button type="button" aria-label="撤销节点修改" title="撤销 Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={18} aria-hidden="true" /></button><button type="button" aria-label="重做节点修改" title="重做 Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={18} aria-hidden="true" /></button></div><button type="button" aria-label="输出设置" aria-expanded={settings} onClick={() => setSettings(old => !old)}><Settings2 size={18} aria-hidden="true" />设置</button></div>}
+    {!!order.length && <div className="workflow-tools card-tools"><div><button type="button" aria-label="收起所有节点" title="收起所有节点" onClick={() => setExpanded(new Set())}><ChevronsDownUp size={18} aria-hidden="true" /></button><button type="button" aria-label="新建章节" title="新建章节分组" disabled={busy} onClick={() => addSection()}><FolderPlus size={18} aria-hidden="true" /></button><button type="button" aria-label="撤销节点修改" title="撤销 Ctrl+Z" disabled={!canUndo} onClick={undo}><Undo2 size={18} aria-hidden="true" /></button><button type="button" aria-label="重做节点修改" title="重做 Ctrl+Shift+Z" disabled={!canRedo} onClick={redo}><Redo2 size={18} aria-hidden="true" /></button></div><button type="button" aria-label="输出设置" aria-expanded={settings} onClick={() => setSettings(old => !old)}><Settings2 size={18} aria-hidden="true" />设置</button></div>}
     {settings && <section className="card-settings" aria-label="输出设置">
-      <ReferenceInput target={{ kind: 'root' }} label="最终输出"><Choice label="输出节点" value={scene.root} options={scene.nodes.length ? scene.nodes.map(n => [n.id, n.name]) : [['', '先添加建模节点']]} onChange={v => onChange({ ...scene, root: v })} /></ReferenceInput>
+      <ReferenceInput target={{ kind: 'root' }} label="最终输出"><Choice label="输出节点" value={scene.root} options={scene.nodes.length ? scene.nodes.map(n => [n.id, n.name]) : [['', '先添加建模节点']]} onChange={v => commitScene({ ...scene, root: v })} /></ReferenceInput>
       <Numeric label="输出网格尺寸" value={scene.cell_size} unit="mm" onChange={v => onChange({ ...scene, cell_size: v })} />
       {/* B4②：网格精度是互斥单选，改用 aria-current */}
       <div className="mesh-presets" role="group" aria-label="网格精度预设">{[[0.6, '快速'], [0.3, '标准'], [0.15, '精细']].map(([size, name]) => <button type="button" key={size} disabled={busy} aria-current={scene.cell_size === size ? 'true' : undefined} onClick={() => onChange({ ...scene, cell_size: size })}>{name}<small>{size} mm</small></button>)}</div>
@@ -283,6 +428,30 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
       {cacheSummary && <p className="cache-summary" role="status">{cacheSummary}</p>}
     </section>}
     <ol className="notebook-nodes card-list" aria-label="建模节点树">{order.map(id => {
+      if (id.startsWith('section:')) {
+        const sec = sectionById.get(id.slice(8));
+        if (!sec) return null;
+        const stats = orderMeta.statsOf.get(sec.id) || { count: 0, hasError: false, hasOutput: false };
+        const showNote = noteOpened.has(sec.id) || !!sec.note?.trim();
+        return <li key={id} data-section-id={sec.id} className={`notebook-section-item ${sec.collapsed ? 'collapsed' : ''}`}>
+          <SortHeading group="notebook" id={id} onContextMenu={e => showMenu(e, id)}>
+            <SortHandle group="notebook" id={id} name={sec.name} />
+            <button type="button" className="notebook-disclosure" aria-label={`${sec.collapsed ? '展开' : '收起'}章节 ${sec.name}`} aria-expanded={!sec.collapsed} onClick={() => onChange(updateSection(scene, sec.id, { collapsed: !sec.collapsed }))}><ChevronRight size={16} className={sec.collapsed ? '' : 'expanded'} aria-hidden="true" /></button>
+            <span className="section-icon" aria-hidden="true">{sec.collapsed ? <Folder size={15} /> : <FolderOpen size={15} />}</span>
+            {editingSection === sec.id ? <input autoFocus aria-label="章节名称" className="section-title-input" value={sec.name} onChange={e => onChange(updateSection(scene, sec.id, { name: e.target.value }))} onBlur={() => setEditingSection(null)} onKeyDown={e => { if (['Enter', 'Escape'].includes(e.key)) setEditingSection(null); }} />
+              : <button type="button" className="section-title-btn" title="双击或点击重命名章节" onDoubleClick={() => setEditingSection(sec.id)} onClick={() => onChange(updateSection(scene, sec.id, { collapsed: !sec.collapsed }))}><strong>{sec.name}</strong></button>}
+            <span className="section-badges">
+              <small className="section-count">{stats.count} 项</small>
+              {sec.collapsed && stats.hasOutput && <small className="section-output-pill">含输出</small>}
+              {sec.collapsed && stats.hasError && <small className="section-error-pill">待修正</small>}
+            </span>
+            <button type="button" className="section-action-btn" title="添加或编辑章节注释" aria-label={`编辑章节 ${sec.name} 注释`} onClick={() => setNoteOpened(old => { const next = new Set(old); if (next.has(sec.id)) next.delete(sec.id); else next.add(sec.id); return next; })}><MessageSquarePlus size={15} aria-hidden="true" /></button>
+            <button type="button" className="card-menu-trigger" aria-label={`章节操作 ${sec.name}`} aria-expanded={menu?.id === id} onClick={e => showMenu(e, id)}><MoreHorizontal size={18} aria-hidden="true" /></button>
+          </SortHeading>
+          {showNote && <div className="section-note-wrap"><textarea aria-label={`章节 ${sec.name} 注释`} rows={2} placeholder="记录本章节建模思路、壁厚约束或工艺备注…" value={sec.note || ''} onChange={e => onChange(updateSection(scene, sec.id, { note: e.target.value }))} /></div>}
+        </li>;
+      }
+      if (orderMeta.ownerOf.get(id)?.collapsed) return null;
       const value = id.startsWith('value:'), n = value ? blocks.find(b => `value:${b.id}` === id) : scene.nodes.find(b => b.id === id);
       const open = expanded.has(id), issue = !value && issues[id];
       const type = value ? n.kind === 'vector' ? '向量' : n.kind === 'formula' ? '公式' : '数值' : NODE_KINDS[n.kind];
@@ -311,15 +480,20 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
       </li>;
     })}</ol>
     <button ref={addButton} type="button" className="card-add" aria-expanded={adding} disabled={busy} onClick={() => { setAdding(old => !old); setQuery(''); }}><Plus size={19} aria-hidden="true" />新节点</button>
-    {adding && <section className="node-picker" aria-label="创建节点" onKeyDown={e => { if (e.key === 'Escape') { setAdding(false); addButton.current?.focus(); } }}><label className="node-search"><Search size={17} aria-hidden="true" /><input autoFocus aria-label="搜索节点" placeholder="搜索实体、操作或参数…" value={query} onChange={e => setQuery(e.target.value)} /></label>{['实体', '操作', '参数'].map(group => <div key={group}>{creations.some(item => item.group === group) && <h3>{group}</h3>}{creations.filter(item => item.group === group).map(item => <button type="button" key={item.id} disabled={busy || (!item.value && !available) || (item.value ? blocks.length >= 32 : scene.nodes.length >= 64)} onClick={() => add(item.id, item.value)}>{item.name}</button>)}</div>)}{!creations.length && <p className="hint">没有匹配的节点</p>}<details className="workflow-presets"><summary>从示例开始</summary>{[['sphere_hole', '球体减贯穿孔'], ['smooth', '双球平滑融合'], ['tpms_channel', '圆柱 TPMS 减流道']].map(([id, name]) => <button type="button" key={id} disabled={!available || busy} onClick={() => { setAdding(false); loadPreset(id); }}>{name}</button>)}</details></section>}
-    {menu && (menuNode || menuValue) && <CardMenu position={menu} onClose={() => setMenu(null)}>{menuNode ? <>
+    {adding && <section className="node-picker" aria-label="创建节点" onKeyDown={e => { if (e.key === 'Escape') { setAdding(false); addButton.current?.focus(); } }}><label className="node-search"><Search size={17} aria-hidden="true" /><input autoFocus aria-label="搜索节点" placeholder="搜索实体、操作或参数…" value={query} onChange={e => setQuery(e.target.value)} /></label>{['实体', '操作', '参数', '组织'].map(group => <div key={group}>{creations.some(item => item.group === group) && <h3>{group}</h3>}{creations.filter(item => item.group === group).map(item => <button type="button" key={item.id} disabled={busy || (!item.value && !item.section && !available) || (item.value ? blocks.length >= 32 : !item.section && scene.nodes.length >= 64)} onClick={() => add(item.id, item.value, item.section)}>{item.name}</button>)}</div>)}{!creations.length && <p className="hint">没有匹配的节点</p>}<details className="workflow-presets"><summary>从示例开始</summary>{[['sphere_hole', '球体减贯穿孔'], ['smooth', '双球平滑融合'], ['tpms_channel', '圆柱 TPMS 减流道']].map(([id, name]) => <button type="button" key={id} disabled={!available || busy} onClick={() => { setAdding(false); loadPreset(id); }}>{name}</button>)}</details></section>}
+    {menu && (menuNode || menuValue || menuSection) && <CardMenu position={menu} onClose={() => setMenu(null)}>{menuNode ? <>
       <button type="button" disabled={busy || !!issues[menuNode.id] || !available} onClick={() => { previewNode(menuNode.id); setMenu(null); }}>单独预览</button>
-      <button type="button" disabled={busy || !!issues[menuNode.id] || scene.root === menuNode.id} onClick={() => { onChange({ ...scene, root: menuNode.id }); setMenu(null); }}>设为输出</button>
+      <button type="button" disabled={busy || !!issues[menuNode.id] || scene.root === menuNode.id} onClick={() => { commitScene({ ...scene, root: menuNode.id }); setMenu(null); }}>设为输出</button>
+      {scene.root !== menuNode.id && (scene.nodes || []).some(n => (n.inputs || []).includes(menuNode.id)) && <button type="button" disabled={busy} onClick={() => { demoteToSlot(menuNode.id); setMenu(null); }}>内嵌到引用处</button>}
       <button type="button" disabled={busy || scene.nodes.length >= 64} onClick={() => { duplicate(menuNode); setMenu(null); }}>复制节点</button>
       <button type="button" className="text-danger" disabled={busy} onClick={() => { remove(menuNode); setMenu(null); }}>删除节点</button>
-    </> : <>
+    </> : menuValue ? <>
       <button type="button" disabled={busy || blocks.length >= 32} onClick={() => { duplicateValue(menuValue); setMenu(null); }}>复制参数</button>
       <button type="button" className="text-danger" disabled={busy} onClick={() => { removeValue(menuValue); setMenu(null); }}>删除参数</button>
-    </>}<SortButtons group="notebook" id={menu.id} name={(menuNode || menuValue).name} /></CardMenu>}
+    </> : <>
+      <button type="button" disabled={busy} onClick={() => { setEditingSection(menuSection.id); setMenu(null); }}>重命名章节</button>
+      <button type="button" disabled={busy} onClick={() => { setNoteOpened(old => new Set([...old, menuSection.id])); setMenu(null); }}>编辑注释</button>
+      <button type="button" className="text-danger" disabled={busy} onClick={() => { onChange(removeSection(scene, menuSection.id)); setMenu(null); }}>删除章节（保留节点）</button>
+    </>}<SortButtons group="notebook" id={menu.id} name={(menuNode || menuValue || menuSection).name} /></CardMenu>}
   </div></WorkflowDrag></Navigate.Provider></Values.Provider>;
 }

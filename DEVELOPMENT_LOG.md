@@ -147,6 +147,8 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-095 | Windows 原生风格桌面界面 | 2026-10-14 19:23:19：分层文件与工作区导航、紧凑参数、中性明暗主题及扩大的模型预览，保持 Electron 架构 | 本地实现与验证完成 |
 | R-096 | Magpie 青绿色风格与顶部导航 | 2026-10-14 20:35:31：浅青背景、圆角面板、紫色操作、墨绿色暗色主题，工作区和分析入口放回顶部 | 本地实现与验证完成 |
 | R-097 | 旧桌面 UI 对比度调整历史 | 2026-10-13 23:13:11：旧主题文字、控件边界、节点选中与禁用配色优化；同步时补入原项目记录 | 历史记录保留 |
+| R-105 | 现代曜石黑/浅灰白界面与分栏交互 | 26-11-16 09:54:09：曜石黑/浅灰白配色、透明画布径向背景、Bento 双栏统计、分栏拖拽与数值拖动微调 | 已完成 |
+| R-106 | 近期 nTop 风格 Notebook 改进 | 26-11-16 10:37:00：槽位就地新建与匿名内嵌子块、章节分组注释与折叠、符号重命名同步、`I/V` 视口快捷键 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -592,6 +594,22 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 范围：保留界面配色、圆角、布局、字号和交互；不启用阴影贴图、泛光或额外反射渲染。更新当前配色说明、首页与主要桌面和网页预览截图，并同步 G 盘。
 - 验证：桌面和网页生产构建通过；真实 Electron 验证 GPU/网格的明暗主题，圆角、布局和字体与基线一致；浏览器验收模型、剖切测量、下载和手机布局通过，STL 字节与哈希不变，页面错误为零。
 - 状态：本地实现与验证完成。
+
+### R-105：26-11-16 09:54:09（Asia/Shanghai），现代曜石黑/浅灰白界面与交互微调
+
+- 需求与原因：优化工程工作台现代质感，减少旧版廉价观感并提升左右分栏和数值调节手感。
+- 实现：恢复高对比中性曜石黑 `#090a0d` 与浅灰白 `#eef1f6` 配色变量、胶囊导航、Bento 双栏几何统计网格与节点分类色条；WebGL 画布启用 `alpha: true` 透出径向舞台背景；增加左右面板 `.pane-resizer` 宽度拖拽、数值标签左右拖动微调与空白工程初始状态保护；同步修复 `ui-smoke.cjs` 的超时参数传递。
+- 涉及文件：`desktop/src/native.css`、`desktop/src/Viewport.jsx`、`desktop/src/main.jsx`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/model_appearance.mjs`、`desktop/main.cjs`、`desktop/tests/ui-smoke.cjs`。
+- 验证：前端 `vite build` 通过；`npm test` 21/21 通过；`ribbon-ui.cjs`、`notebook-cards.cjs`、`ui-smoke.cjs` 全通过，零页面错误（提交 `96eaa41`）。
+- 状态：已提交至 `新增建模功能`。
+
+### R-106：26-11-16 10:37:00（Asia/Shanghai），近期 Notebook 工作流机制升级
+
+- 需求与原因：参考 nTop Notebook 工作流机制，缓解大量辅助基本体刷屏、缺乏逻辑分段与参数改名易断链的问题。
+- 实现：在保持 `solid_model.py` 纯净数据结构兼容的前提下，于 `scene` 顶层维护 `notebook_sections` 与 `inline_nodes`；在输入槽新增`就地新建 / 替换新建`与匿名内嵌子块，并支持`提升为独立卡片` / `转为内嵌子块` 双向切换；支持章节创建、重命名、折叠统计、多行注释及顺序无关哈希隔离（`sceneSignature`）；新增 `renameValueSymbol` 实现跨节点表达式、公式与向量 `_x/_y/_z` 别名的全工作流原子重命名；新增非编辑态快捷键 `I`（孤立预览）与 `V`（布局显隐）。
+- 涉及文件：`desktop/src/workflow_drag.mjs`、`desktop/src/ValueBlocks.jsx`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`desktop/src/native.css`、`desktop/tests/workflow-drag.test.cjs`、`desktop/tests/notebook-ntop-ui.cjs`。
+- 验证：`vite build` 通过；`npm test` 24/24 通过；Electron 全部 5 项界面测试（`notebook-ntop-ui.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`）全部通过，零页面错误；更新 `docs/` 实机截图。
+- 状态：本地实现与验证完成，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定
 

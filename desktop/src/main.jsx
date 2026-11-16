@@ -438,6 +438,7 @@ function App() {
   const shortcuts = useRef(null);
   shortcuts.current = event => {
     const editing = event.target instanceof HTMLElement && (event.target.matches('input,textarea,select') || event.target.isContentEditable);
+    const inModal = event.target instanceof HTMLElement && !!event.target.closest('dialog[open]');
     if (mode === 'nodes' && !editing && (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
       event.preventDefault(); travelHistory(event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo');
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') {
@@ -446,6 +447,17 @@ function App() {
       event.preventDefault(); if (!busy) { if (event.shiftKey && canModel) exportModel(); else if (!event.shiftKey) saveProject(); }
     } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault(); if (!busy && info && (mode === 'cad' && cad || mode === 'tpms' || (info.libfive && scene.nodes.length))) generate();
+    } else if (mode === 'nodes' && !editing && !inModal && !event.ctrlKey && !event.metaKey && !event.altKey && !busyRef.current) {
+      const lower = event.key.toLowerCase();
+      const selNode = scene.nodes.find(n => n.id === selected);
+      if (lower === 'i' && selNode && !workflowErrors[selNode.id] && info?.libfive) {
+        event.preventDefault();
+        if (previewResult?.node_id === selNode.id) returnOutput();
+        else previewNode(selNode.id);
+      } else if (lower === 'v' && selNode && allEntities) {
+        event.preventDefault();
+        toggleEntity(selNode.id);
+      }
     }
   };
   useEffect(() => {

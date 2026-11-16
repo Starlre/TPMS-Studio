@@ -75,3 +75,60 @@ test('external, malformed or sorting drag data cannot become a reference', async
   for (const text of ['', '{', '{}', 'null', '{"action":"file","id":"n1"}']) assert.equal(readDrag({ getData: () => text }), null);
   assert.match(connectReference(scene(), { action: 'sort', id: 'n1' }, { kind: 'root' }).error, /类型按钮/);
 });
+test('sections organize mixed notebook cards without altering geometry hashes', async () => {
+  const { createSection, updateSection, removeSection, reorderScene, notebookOrder, onlyOrderChanged } = await import('../src/workflow_drag.mjs');
+  const base = scene();
+  const { section, scene: withSec } = createSection(base, '基础参数', 'value:p1');
+  assert.equal(section.id, 's1');
+  assert.equal(onlyOrderChanged(base, withSec), true);
+  assert.equal(notebookOrder(withSec)[0], 'section:s1');
+  const edited = updateSection(withSec, 's1', { collapsed: true, note: '壁厚与孔径参数' });
+  assert.equal(onlyOrderChanged(base, edited), true);
+  const moved = reorderScene(edited, 'notebook', 'section:s1', 'n3', 'before');
+  assert.equal(onlyOrderChanged(base, moved), true);
+  const removed = removeSection(moved, 's1');
+  assert.equal(removed.nodes.length, base.nodes.length);
+  assert.equal(removed.value_nodes.length, base.value_nodes.length);
+  assert.equal(onlyOrderChanged(base, removed), true);
+});
+test('inline child blocks hide from top-level notebook, survive unlinking, and support promote/demote', async () => {
+  const { createInlineInputNode, promoteInlineNode, demoteToInlineNode, notebookOrder, isInlineNode, onlyOrderChanged } = await import('../src/workflow_drag.mjs');
+  const base = scene();
+  const cutter = { id: 'n5', kind: 'cylinder', name: '内嵌孔', dimensions: [2, 12], position: [0, 0, 0], rotation: [0, 0, 0], inputs: [], expressions: {} };
+  const inlined = createInlineInputNode(base, 'n3', 1, cutter);
+  assert.equal(inlined.root, 'n4');
+  assert.equal(inlined.nodes.find(n => n.id === 'n3').inputs[1], 'n5');
+  assert.equal(isInlineNode(inlined, 'n5'), true);
+  assert.equal(notebookOrder(inlined).includes('n5'), false);
+  assert.equal(notebookOrder(inlined).includes('n2'), true); // orphaned n2 stays visible at top level
+  const promoted = promoteInlineNode(inlined, 'n5', 'n3');
+  assert.equal(isInlineNode(promoted, 'n5'), false);
+  const ord = notebookOrder(promoted);
+  assert.equal(ord.indexOf('n5') + 1, ord.indexOf('n3'));
+  assert.equal(onlyOrderChanged(inlined, promoted), true);
+  assert.match(demoteToInlineNode(promoted, 'n4').error, /最终输出/);
+  assert.match(demoteToInlineNode(promoted, 'n2').error, /尚未被/);
+  const demoted = demoteToInlineNode(promoted, 'n5');
+  assert.equal(isInlineNode(demoted.scene, 'n5'), true);
+});
+test('renaming a value symbol updates node expressions, formulas and vector components atomically', async () => {
+  const { renameValueSymbol } = await import('../src/workflow_drag.mjs');
+  const base = scene();
+  base.parameters = { wall: 2 };
+  base.nodes[0].expressions = { 'dimensions.0': 'radius + 1' };
+  base.value_nodes.push({ id: 'p4', kind: 'number', name: '内径', symbol: 'radius_inner', value: 1 });
+  base.value_nodes.push({ id: 'p5', kind: 'formula', name: '局部检查', symbol: 'check_r', expression: 'radius + radius_inner + offset_x' });
+  const res = renameValueSymbol(base, 'p1', 'outer_r');
+  assert.equal(res.error, undefined);
+  assert.equal(res.scene.value_nodes[0].symbol, 'outer_r');
+  assert.equal(res.scene.value_nodes[1].expression, 'outer_r * 2');
+  assert.equal(res.scene.nodes[0].expressions['dimensions.0'], 'outer_r + 1');
+  // Prefix-similar identifier radius_inner must remain untouched.
+  assert.equal(res.scene.value_nodes[4].expression, 'outer_r + radius_inner + offset_x');
+  // Renaming vector updates component aliases cleanly.
+  const vecRes = renameValueSymbol(res.scene, 'p3', 'shift');
+  assert.equal(vecRes.scene.value_nodes[4].expression, 'outer_r + radius_inner + shift_x');
+  assert.match(renameValueSymbol(base, 'p1', 'wall').error, /冲突/);
+  assert.match(renameValueSymbol(base, 'p1', 'diameter').error, /冲突/);
+  assert.match(renameValueSymbol(base, 'p1', 'sqrt').error, /标识符/);
+});
