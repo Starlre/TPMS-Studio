@@ -8,7 +8,8 @@ import json
 import math
 
 from libfive_backend import NativeKernel, _TreeArena, _Region, _Interval, render_tree_mesh
-from solid_model import SolidScene, SolidResult, _scene_tree
+from sdf_grid import evaluate_sdf_scene
+from solid_model import SolidScene, SolidResult, _scene_tree, rotation_matrix
 from workflow_values import resolve_values
 
 
@@ -34,11 +35,13 @@ class WorkflowEngine:
     def __init__(self, max_mesh_bytes=96 * 1024 * 1024, max_meshes=8, max_fields=192):
         self.kernel = self.arena = None
         self.fields = {}
+        self.sdf_volumes = {}
         self.meshes = OrderedDict()
         self.max_mesh_bytes, self.max_meshes, self.max_fields = max_mesh_bytes, max_meshes, max_fields
 
     def close(self):
         self.fields.clear()
+        self.sdf_volumes.clear()
         if self.arena is not None:
             self.arena.__exit__(None, None, None)
         self.arena = self.kernel = None
@@ -61,10 +64,12 @@ class WorkflowEngine:
         scene.root = target
         bounds = scene.bounds()
         size = bounds[1] - bounds[0]
-        margin = scene.cell_size * 2
-        levels = max(0, math.ceil(math.log2((min(size) + 2 * margin) / scene.cell_size)))
-        if 8 ** levels > 16_777_216:
-            raise ValueError('网格尺寸过小：潜在八叉树超过 1677 万叶节点，请增大网格尺寸')
+        uses_sdf = scene.uses_imported_solid(target)
+        if not uses_sdf:
+            margin = scene.cell_size * 2
+            levels = max(0, math.ceil(math.log2((min(size) + 2 * margin) / scene.cell_size)))
+            if 8 ** levels > 16_777_216:
+                raise ValueError('网格尺寸过小：潜在八叉树超过 1677 万叶节点，请增大网格尺寸')
         if scene.cell_size > min(size) / 4:
             raise ValueError('网格尺寸过粗，请设置不超过最小外形尺寸的四分之一')
         keys = field_keys(scene)
@@ -87,12 +92,28 @@ class WorkflowEngine:
                 for child in scene.by_id(node_id).inputs: reused_branch(child)
             reused_branch(target)
         else:
-            self._arena()
             try:
-                tree = _scene_tree(self.arena, scene, target, {}, self.fields, keys, report)
-                report(target, 'meshing')
-                region = _Region(*[_Interval(float(lo - margin), float(hi + margin)) for lo, hi in zip(*bounds)])
-                mesh = render_tree_mesh(self.kernel, tree, region, scene.cell_size)
+                if uses_sdf:
+                    def mark_branch(node_id):
+                        if node_id in states:
+                            return
+                        for child in scene.by_id(node_id).inputs:
+                            mark_branch(child)
+                        report(node_id, 'evaluating')
+                    mark_branch(target)
+                    mesh = evaluate_sdf_scene(
+                        scene, target, scene.cell_size, rotation_matrix,
+                        sdf_cache=self.sdf_volumes,
+                        progress=(lambda msg: progress({'node_id': target, 'state': 'evaluating', 'message': msg})) if progress else None,
+                    )
+                    for nid in list(states):
+                        report(nid, 'ready')
+                else:
+                    self._arena()
+                    tree = _scene_tree(self.arena, scene, target, {}, self.fields, keys, report)
+                    report(target, 'meshing')
+                    region = _Region(*[_Interval(float(lo - margin), float(hi + margin)) for lo, hi in zip(*bounds)])
+                    mesh = render_tree_mesh(self.kernel, tree, region, scene.cell_size)
             except Exception:
                 report(target, 'error')
                 raise

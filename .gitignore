@@ -32,6 +32,7 @@ test-output/
 exports/
 *.stl
 !docs/gyroid_tpms.stl
+!examples/showcase/sneaker-midsole-blank.stl
 *.obj
 *.ply
 *.msh

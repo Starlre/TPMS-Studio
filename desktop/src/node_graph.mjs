@@ -59,7 +59,13 @@ export function graphErrors(scene) {
     else if (n.inputs.length !== arity || n.inputs.some(i => !ids.has(i))) errors[n.id] = '请选择完整的上游输入';
     else if (arity === 2 && n.inputs[0] === n.inputs[1]) errors[n.id] = '输入 A 与 B 必须是不同节点';
     else if (n.inputs.some(i => ancestors(scene.nodes, i).has(n.id))) errors[n.id] = '输入会形成循环引用';
-    else if (n.kind === 'smooth_union' || n.kind === 'smooth_difference') {
+    else if (n.kind === 'imported_solid') {
+      const expr = n.expressions || {};
+      if (!n.operation?.source?.trim()) errors[n.id] = '请先选择 STEP / STL / OBJ / PLY 实体文件';
+      else if (!Object.hasOwn(expr, 'dimensions.0') && (!Number.isFinite(n.dimensions?.[0]) || n.dimensions[0] < 0.001 || n.dimensions[0] > 1000)) {
+        errors[n.id] = '缩放比例须在 0.001–1000 之间';
+      }
+    } else if (n.kind === 'smooth_union' || n.kind === 'smooth_difference') {
       const reason = smoothIssueReason(scene.nodes, n.id);
       if (reason) errors[n.id] = reason;
     } else if (n.kind === 'shell') {

@@ -700,6 +700,18 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 验证：`pytest -q` `183 passed`（95.89s）；`desktop` 端 `npx vite build` 通过，`npm test` `27/27` 通过；端到端 `verify-ui`、`verify-ribbon`、`verify-notebook-cards` 全部通过（零页面报错）；独立启动验证 `TPMS_STARTUP_PROJECT=examples/showcase/gyroid-shoe-midsole.json` 自动进入 `实体建模` 并生成 `311,340` 面、`封闭 / 水密`（`bodies=1`）中底，三维/俯视/侧视/剖切视觉核验通过。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
+### R-115：26-11-16 18:16:00（Asia/Shanghai），支持外部 STEP/STL/OBJ/PLY 封闭轮廓直接转为隐式场并参与 TPMS 填充与布尔
+
+- 需求与原因：针对用户反馈“纯基本体+二元布尔凑复杂自由曲面（如 20 节点跑鞋鞋底）过于繁琐”，此前 `导入 STEP` 仅作只读参考预览且不能参与 `TPMS 填充`、抽壳或布尔组合。打通外部 CAD / 三角网格导入直接作为隐式节点后，复杂产品外轮廓可直接在专业 CAD/曲面软件完成设计后导入本工具，2 步完成共形晶格填充与水密 STL 导出。
+- 实现：
+  - **外部实体加载与拓扑校验**：新增 [mesh_source.py](mesh_source.py)，支持 `.step` / `.stp`（复用 `StepImporter`）及 `.stl` / `.obj` / `.ply` 封闭水密网格读取、`sha256` 校验、非封闭/开放曲面明确拦截、LRU 缓存、任意工作目录相对路径回退、均匀 `缩放比例`（支持公式参数绑定）及 `none / center / ground` 对齐。
+  - **混合隐式距离场求值器**：新增 [sdf_grid.py](sdf_grid.py)，采用坐标规范化 Simulation-of-Simplicity (SoS) Z 扫描线奇偶判定（消除网格边/顶点共面穿透伪影）+ Numba JIT 窄带精确点到三角面距离 + `distance_transform_edt` 全局欧氏距离场构建可复用的局部 `SdfVolume`；以内存限额（`MAX_SDF_VOXELS = 24_000_000`）与 X 向分块求值统一评估下游 `tpms_infill`（实体/片层/外蒙皮/梯度/自定义公式）、`shell`、`offset`、`mirror`、`linear_pattern`、`circular_pattern`、`transform` 及全部布尔/平滑融合，通过 `marching_cubes(..., gradient_direction='ascent')` 输出正向水密网格；纯解析工作流保持原生 `libfive` 路线不变。
+  - **引擎与桌面工作台集成**：扩展 [solid_model.py](solid_model.py)（新增 `imported_solid` 与 `uses_imported_solid()`）、[workflow_engine.py](workflow_engine.py)（新增 `sdf_volumes` 会话级缓存）、[electron_backend.py](electron_backend.py)（新增 `inspect_import` 并优化 `preview_scene` 瞬时预览）；扩展 [desktop/main.cjs](desktop/main.cjs)、[desktop/src/primitive_catalog.mjs](desktop/src/primitive_catalog.mjs)、[desktop/src/node_graph.mjs](desktop/src/node_graph.mjs)、[desktop/src/NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx) 与 [desktop/src/main.jsx](desktop/src/main.jsx)，新增 `建模` 栏 **`导入外部实体`** 快捷入口、节点内选文件/对齐/缩放编辑器以及 `CAD 参考模型` 面板的 **`转入实体建模（支持 TPMS 填充与布尔）`** 一键转换按钮。
+  - **2 节点晶格鞋底示例**：新增 [examples/showcase/sneaker-midsole-blank.stl](examples/showcase/sneaker-midsole-blank.stl) 与 [examples/showcase/stl-shoe-midsole.json](examples/showcase/stl-shoe-midsole.json)，并更新 [examples/showcase/README.md](examples/showcase/README.md)。
+- 涉及文件：`mesh_source.py`、`sdf_grid.py`、`solid_model.py`、`workflow_engine.py`、`electron_backend.py`、`test_imported_solid.py`、`desktop/main.cjs`、`desktop/package.json`、`desktop/src/primitive_catalog.mjs`、`desktop/src/node_graph.mjs`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`desktop/tests/primitive-catalog.test.cjs`、`desktop/tests/imported-solid-ui.cjs`、`examples/showcase/sneaker-midsole-blank.stl`、`examples/showcase/stl-shoe-midsole.json`、`examples/showcase/README.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：`pytest -q` **`187 passed`**（103.78s，含 `test_imported_solid.py` 对 STL/STEP 共形片层与实体填充、带开口抽壳、偏置、镜像及缓存复用的 4 项验证）；`desktop` 下 `npx vite build` 通过，`npm test` **`28/28`** 通过；`verify-ui`、`verify-ribbon`、`verify-step-import`、`verify-operations`、`verify-imported-solid` 与 `verify-notebook-cards` 全部通过（零页面报错）；2 节点 STL 跑鞋中底示例 [examples/showcase/stl-shoe-midsole.json](examples/showcase/stl-shoe-midsole.json) 在桌面实机直载通过，生成 `551,672` 面单连通封闭体（`bodies=1`，`136,027.6 mm³`）。
+- 状态：已完成实现与全量验证，提交至 `完善建模功能和UI分支`。
+
 ## 5. 技术约定
 
 

@@ -56,6 +56,7 @@ function cardSummaryText(n, isValue, scene) {
   if (n.kind === 'linear_pattern') return `${n.dimensions?.[0] ?? 3}×${n.dimensions?.[1] ?? 1}×${n.dimensions?.[2] ?? 1} 阵列`;
   if (n.kind === 'circular_pattern') return `${n.operation?.axis || 'Z'}轴 ${n.dimensions?.[0] ?? 6} 份`;
   if (n.kind === 'tpms_infill') return `${n.tpms?.surface || 'Gyroid'} · ${n.dimensions?.[0] ?? 8}mm${Number(n.dimensions?.[1] ?? 0) > 0 ? ` · 外皮 ${n.dimensions[1]}mm` : ' · 纯填充'}`;
+  if (n.kind === 'imported_solid') return n.operation?.source ? `${n.operation.source.split(/[\\/]/).at(-1)}${Number(n.dimensions?.[0] ?? 1) !== 1 ? ` · ×${n.dimensions[0]}` : ''}` : '未选择文件';
   if (ARITY[n.kind]) {
     const names = (n.inputs || []).filter(Boolean).map(id => scene.nodes.find(x => x.id === id)?.name || id);
     return names.length ? names.join(n.kind === 'difference' || n.kind === 'smooth_difference' ? ' − ' : ' · ') : '未连接输入';
@@ -135,7 +136,7 @@ function TPMSFields({ node, patch, currentParameters, infill = false }) {
   </>;
 }
 
-export default function NodeWorkflow({ scene, onChange, currentParameters, selected, onSelect, dirty, busy, inputsLocked = false, available, error, reportError, undo, redo, canUndo, canRedo, loadPreset, valueOutputs = {}, previewNode, evaluateValues, cacheSummary, activePreviewNode, allEntities, hiddenEntities = [], toggleEntity }) {
+export default function NodeWorkflow({ scene, onChange, currentParameters, selected, onSelect, dirty, busy, inputsLocked = false, available, error, reportError, undo, redo, canUndo, canRedo, loadPreset, pickImportModel, valueOutputs = {}, previewNode, evaluateValues, cacheSummary, activePreviewNode, allEntities, hiddenEntities = [], toggleEntity }) {
   const [expanded, setExpanded] = useState(() => new Set(selected ? [selected] : []));
   const [nestedOpened, setNestedOpened] = useState(new Set());
   const [slotPicker, setSlotPicker] = useState(null), [slotQuery, setSlotQuery] = useState('');
@@ -358,6 +359,38 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
         {(node.kind === 'difference' || node.kind === 'smooth_difference') && <p className="hint">{node.kind === 'smooth_difference' ? 'A 为保留实体，B 为带平滑圆角过渡的减除实体。' : 'A 为保留实体，B 为要减去的实体。'}</p>}
         {LABELS[node.kind]?.map((label, i) => field(`dimensions.${i}`, label, node.dimensions[i]))}
         {NODE_SPECS[node.kind]?.hint && NODE_SPECS[node.kind].category === 'primitive' && <p className="hint">{NODE_SPECS[node.kind].hint}</p>}
+        {node.kind === 'imported_solid' && (() => {
+          const op = node.operation || {};
+          const source = op.source || '';
+          const fileName = source ? source.split(/[\\/]/).at(-1) : '';
+          const isStep = /\.(step|stp)$/i.test(source);
+          return <>
+            <div className="field"><span>源文件</span><strong title={source}>{fileName || '尚未选择文件'}</strong></div>
+            <button type="button" className="secondary full" disabled={inputsLocked || !pickImportModel} onClick={async () => {
+              const info = await pickImportModel(op);
+              if (!info) return;
+              const stem = info.name.replace(/\.[^.]+$/, '');
+              const renameDefault = !source && /^外部实体\s+\d+$/.test(node.name);
+              patch(node.id, {
+                ...(renameDefault ? { name: stem } : {}),
+                operation: {
+                  ...op,
+                  source: info.source,
+                  sha256: info.sha256,
+                  align: op.align || 'none',
+                  deflection: info.deflection ?? op.deflection ?? 0.05,
+                  angular_deflection: info.angular_deflection ?? op.angular_deflection ?? 15,
+                },
+              });
+            }}>{fileName ? '更换 CAD / 网格文件…' : '选择 STEP / STL / OBJ / PLY 文件…'}</button>
+            <Choice label="位置对齐" value={op.align || 'none'} options={[['none', '保持原文件坐标'], ['center', '包围盒居中到原点'], ['ground', 'XY 居中 · 底面贴地 Z=0']]} onChange={align => patch(node.id, { operation: { ...op, align } })} />
+            {field('dimensions.0', '缩放比例', node.dimensions?.[0] ?? 1, '×')}
+            {isStep && <div className="double">
+              <Numeric label="曲面偏差" unit="mm" value={op.deflection ?? 0.05} onChange={deflection => patch(node.id, { operation: { ...op, deflection } })} />
+              <Numeric label="角度偏差" unit="°" value={op.angular_deflection ?? 15} onChange={angular_deflection => patch(node.id, { operation: { ...op, angular_deflection } })} />
+            </div>}
+          </>;
+        })()}
         {node.kind === 'tpms' && <TPMSFields node={node} patch={values => patch(node.id, values)} currentParameters={currentParameters} />}
         {(node.kind === 'smooth_union' || node.kind === 'smooth_difference') && <>
           {field('blend', '融合宽度', node.blend)}

@@ -22,7 +22,8 @@ import numpy as np
 from tpms_core import (TPMSParameters, MeshResult, generate_tpms,
                        prepare_export_mesh, PreviewMesh)
 from libfive_backend import backend_status, generate_libfive_mesh, suggested_cell_size
-from solid_model import SolidScene, generate_solid, demo_scene
+from mesh_source import canonical_imported_mesh, inspect_source_file
+from solid_model import SolidResult, SolidScene, generate_solid, demo_scene, rotation_matrix
 from workflow_engine import WorkflowEngine
 from cad_import import StepImporter, import_status, validate_settings
 from workflow_values import resolve_values
@@ -115,12 +116,21 @@ class Workbench:
                 for item in resolved.nodes:
                     if item.tpms:
                         parameters(asdict(item.tpms))
-                extent = resolved.bounds()[1] - resolved.bounds()[0]
-                # Layout resolution is independent of the user's final output precision.
-                if not any(item.tpms for item in resolved.nodes):
-                    snapshot.cell_size = min(max(snapshot.cell_size, float(max(extent)) / 144),
-                                             float(min(extent)) / 8)
-                result, _ = self.layout_workflow.generate(snapshot, node['id'])
+                if node['kind'] == 'imported_solid':
+                    target_node = resolved.by_id(node['id'])
+                    mesh, _meta, _key = canonical_imported_mesh(target_node)
+                    matrix = np.eye(4)
+                    matrix[:3, :3] = rotation_matrix(target_node.rotation)
+                    matrix[:3, 3] = target_node.position
+                    mesh.apply_transform(matrix)
+                    result = SolidResult(mesh, snapshot)
+                else:
+                    extent = resolved.bounds()[1] - resolved.bounds()[0]
+                    # Layout resolution is independent of the user's final output precision.
+                    if not any(item.tpms for item in resolved.nodes):
+                        snapshot.cell_size = min(max(snapshot.cell_size, float(max(extent)) / 144),
+                                                 float(min(extent)) / 8)
+                    result, _ = self.layout_workflow.generate(snapshot, node['id'])
                 size_bytes = result.mesh.vertices.nbytes + result.mesh.faces.nbytes
                 if total_bytes + size_bytes > 64 * 1024 * 1024:
                     raise ValueError('多实体预览超过 64 MiB，请简化场景或提高网格尺寸')
@@ -141,6 +151,8 @@ class Workbench:
         if method == 'import_step':
             imported = self.step_importer.load(payload['cad'], self.progress)
             return self.generated(imported, 'cad')
+        if method == 'inspect_import':
+            return inspect_source_file(payload['source'], payload.get('options'), self.progress)
         if method == 'preview_scene':
             return self.preview_scene(payload['scene'])
         if method == 'init':

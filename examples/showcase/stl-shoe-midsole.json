@@ -1,0 +1,138 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "solid",
+    "size_x": 40.0,
+    "size_y": 40.0,
+    "size_z": 40.0,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.7,
+    "iso_level": -0.08,
+    "samples_per_cell": 24,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1.0,
+    "gradient_thickness_end": 5.0,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10.0
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n2",
+    "cell_size": 0.65,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "单胞晶格周期 / mm",
+        "kind": "number",
+        "symbol": "cell_unit",
+        "value": 12.5
+      },
+      {
+        "id": "p2",
+        "name": "支柱饱满度偏移 (iso)",
+        "kind": "number",
+        "symbol": "cell_iso",
+        "value": -0.08
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "鞋底外轮廓 (STL)",
+        "kind": "imported_solid",
+        "dimensions": [
+          1.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [],
+        "blend": 2.0,
+        "tpms": null,
+        "expressions": {},
+        "vector_inputs": {},
+        "operation": {
+          "source": "examples/showcase/sneaker-midsole-blank.stl",
+          "sha256": "833462f06cb2238101b7c91784415a011800f579536a43701191713f58fc605d",
+          "align": "ground",
+          "deflection": 0.05,
+          "angular_deflection": 15.0
+        }
+      },
+      {
+        "id": "n2",
+        "name": "Gyroid 晶格中底",
+        "kind": "tpms_infill",
+        "dimensions": [
+          12.5,
+          0.0,
+          0.0
+        ],
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inputs": [
+          "n1"
+        ],
+        "blend": 2.0,
+        "tpms": {
+          "surface": "Gyroid",
+          "mode": "solid",
+          "size_x": 40.0,
+          "size_y": 40.0,
+          "size_z": 40.0,
+          "cells_x": 2,
+          "cells_y": 2,
+          "cells_z": 2,
+          "thickness": 1.2,
+          "iso_level": -0.08,
+          "samples_per_cell": 24,
+          "target_porosity": null,
+          "formula": "",
+          "gradient_enabled": false,
+          "gradient_axis": "Z",
+          "gradient_thickness_start": 1.0,
+          "gradient_thickness_end": 5.0,
+          "tubular_enabled": false,
+          "tubular_inner_radius": 10.0
+        },
+        "expressions": {
+          "dimensions.0": "cell_unit",
+          "tpms.iso_level": "cell_iso"
+        },
+        "vector_inputs": {},
+        "operation": {}
+      }
+    ],
+    "notebook_order": [
+      "value:p1",
+      "value:p2",
+      "n1",
+      "n2"
+    ]
+  }
+}

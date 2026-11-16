@@ -41,3 +41,19 @@ test('unified node catalog drives NODE_KINDS, ARITY, DIMENSIONS and inline choic
     assert.deepEqual(DIMENSIONS[item.id], NODE_SPECS[item.id].dimensions || []);
   }
 });
+
+test('imported_solid validates file source, scale bounds and parameter binding', async () => {
+  const { createNode, graphErrors } = await import('../src/node_graph.mjs');
+  const { connectReference } = await import('../src/workflow_drag.mjs');
+  const scene = { nodes: [], parameters: {}, value_nodes: [{ id: 'p1', kind: 'number', symbol: 'scale_k', name: '缩放系数', value: 1.1 }] };
+  const imp = createNode(scene, 'imported_solid', {});
+  scene.nodes.push(imp); scene.root = imp.id;
+  assert.match(graphErrors(scene)[imp.id], /选择.*文件/);
+  imp.operation.source = 'shoe.stl';
+  assert.deepEqual(graphErrors(scene), {});
+  imp.dimensions = [0];
+  assert.match(graphErrors(scene)[imp.id], /缩放比例/);
+  const bound = connectReference(scene, { action: 'reference', type: 'number', id: 'p1' }, { kind: 'number', id: imp.id, field: 'dimensions.0' });
+  assert.ok(bound.scene, bound.error);
+  assert.deepEqual(graphErrors(bound.scene), {});
+});

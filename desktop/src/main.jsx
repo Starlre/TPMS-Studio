@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState, useCallback, memo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, RotateCcw, Scan, ZoomIn, ZoomOut, Copy, CircleHelp, X, Check, LoaderCircle, Activity, Triangle, Workflow, ChevronRight } from 'lucide-react';
+import { Box, Layers3, FolderOpen, Save, Download, ChevronDown, Sun, Moon, RotateCcw, Scan, ZoomIn, ZoomOut, Copy, CircleHelp, X, Check, LoaderCircle, Activity, Triangle, Workflow, ChevronRight, FileBox } from 'lucide-react';
 import Viewport from './Viewport';
 import NodeWorkflow from './NodeWorkflow';
 import Ribbon from './Ribbon';
@@ -397,6 +397,40 @@ function App() {
     if (r && !r.canceled) acceptCAD(r);
     else if (r?.canceled) setMessage('已取消导入，当前模型保持不变');
   }
+  async function pickImportModel(options = {}) {
+    const r = await run('pick_import_model', { options });
+    if (!r) return null;
+    if (r.canceled) { setMessage('已取消导入外部实体'); return null; }
+    setMessage(`已读取外部实体：${r.imported.name} · ${format(r.imported.faces)} 个三角面`);
+    return r.imported;
+  }
+  function appendImportedSolid(infoRecord, transform = {}) {
+    const stem = infoRecord.name.replace(/\.[^.]+$/, '');
+    const created = createNode(scene, 'imported_solid', p, selected);
+    created.name = stem || created.name;
+    created.position = transform.position || [0, 0, 0];
+    created.rotation = transform.rotation || [0, 0, 0];
+    created.operation = {
+      source: infoRecord.source,
+      sha256: infoRecord.sha256,
+      align: transform.align || infoRecord.align || 'none',
+      deflection: infoRecord.deflection ?? 0.05,
+      angular_deflection: infoRecord.angular_deflection ?? 15,
+    };
+    const next = { ...scene, nodes: [...scene.nodes, created], root: created.id, notebook_order: [...notebookOrder(scene), created.id] };
+    updateScene(next); setSelected(created.id); setMode('nodes'); setInspectorTab('model');
+    setMessage(`已导入外部实体「${created.name}」，可直接添加 TPMS 填充、抽壳或布尔运算`);
+  }
+  async function importSolidNode() {
+    if (busyRef.current || !info?.libfive || scene.nodes.length >= 64) return;
+    const imported = await pickImportModel();
+    if (imported) appendImportedSolid(imported);
+  }
+  async function promoteCADToNode() {
+    if (!cad || busyRef.current || !info?.libfive || scene.nodes.length >= 64) return;
+    const inspected = await run('inspect_import', { source: cad.source, options: { deflection: cad.deflection, angular_deflection: cad.angular_deflection } });
+    if (inspected) appendImportedSolid(inspected, { position: [...cad.position], rotation: [...cad.rotation] });
+  }
   function updateCAD(key, value) {setCad(old=>({...old,[key]:value}));invalidate();}
   async function saveProject() {
     const r = await run('save_project', { project: { type: 'tpms-electron', version: 1, mode, parameters: p, scene:mode === 'cad' ? emptyScene() : scene, cfd, ...(mode === 'cad' ? {cad} : {}) } });
@@ -516,6 +550,7 @@ function App() {
       { label: '基本体', palette:true, common:COMMON_PRIMITIVES, tools:PRIMITIVES.map(item => ({ id:item.kind, label:`创建${item.name}`, icon:props => <PrimitiveIcon {...props} kind={item.kind}/>, disabled:noEntity, onClick:() => ribbonNode(item.kind), hint:item.hint })) },
       { label: '布尔与融合', tools: BOOLEAN_OPS.map(spec => ({ label: `添加${spec.name}`, icon: NODE_ICONS[spec.iconKey], disabled: noEntity || scene.nodes.length < 2 || ((spec.kind === 'smooth_union' || spec.kind === 'smooth_difference') && smoothBlocked), onClick: () => ribbonNode(spec.kind), hint: '选中实体作为 A，在节点内编辑 A/B 引用；平滑布尔现已支持基本体、抽壳与 TPMS 过渡' })) },
       { label: '节点操作', tools: [
+        {label:'导入外部实体',icon:FileBox,disabled:noEntity,onClick:importSolidNode,hint:'导入封闭 STEP / STL / OBJ / PLY 实体并转为隐式场，直接用于 TPMS 填充或布尔'},
         {label:'独立变换',icon:Move3D,disabled:noEntity || !scene.nodes.length,onClick:() => ribbonNode('transform')},
         {label:'复制实体',icon:Copy,disabled:noEntity || !node,onClick:() => { duplicateNode(); setMode('nodes'); setInspectorTab('model'); }},
         {label:'撤销编辑',icon:Undo2,disabled:busy || !sceneHistory.current.undo.length,onClick:() => travelHistory('undo')},
@@ -612,11 +647,12 @@ function App() {
         <div className="panel-scroll" key={mode}><fieldset disabled={busy && busySource !== 'auto'}>
         {/* B7：移除未使用的 hasResult prop；B1：节点状态徽标改由 store 订阅渲染，不再传递 nodeStates；
             B2：inputsLocked 区分手动/自动 busy，自动更新期间节点输入保持可编辑 */}
-        {mode === 'nodes' && <NodeWorkflow scene={scene} onChange={updateScene} currentParameters={p} selected={selected} onSelect={setSelected} dirty={dirty} busy={busy} inputsLocked={busy && busySource !== 'auto'} available={!!info?.libfive} error={error} reportError={setError} undo={() => travelHistory('undo')} redo={() => travelHistory('redo')} canUndo={sceneHistory.current.undo.length > 0} canRedo={sceneHistory.current.redo.length > 0} loadPreset={preset} valueOutputs={valueOutputs} previewNode={id => previewResult?.node_id === id ? returnOutput() : previewNode(id)} allEntities={layoutActive} hiddenEntities={hiddenEntities} toggleEntity={toggleEntity} evaluateValues={evaluateValues} cacheSummary={cacheSummary} activePreviewNode={previewResult?.node_id} />}
+        {mode === 'nodes' && <NodeWorkflow scene={scene} onChange={updateScene} currentParameters={p} selected={selected} onSelect={setSelected} dirty={dirty} busy={busy} inputsLocked={busy && busySource !== 'auto'} available={!!info?.libfive} error={error} reportError={setError} undo={() => travelHistory('undo')} redo={() => travelHistory('redo')} canUndo={sceneHistory.current.undo.length > 0} canRedo={sceneHistory.current.redo.length > 0} loadPreset={preset} pickImportModel={pickImportModel} valueOutputs={valueOutputs} previewNode={id => previewResult?.node_id === id ? returnOutput() : previewNode(id)} allEntities={layoutActive} hiddenEntities={hiddenEntities} toggleEntity={toggleEntity} evaluateValues={evaluateValues} cacheSummary={cacheSummary} activePreviewNode={previewResult?.node_id} />}
         {mode === 'cad' && cad && <>
           <Section title="源模型">
             <p>{cad.source.split(/[\\\\/]/).at(-1)}</p>
-            <p className="hint">STEP 作为参考模型显示，支持剖切、测量和网格导出。暂不参与节点布尔、TPMS 填充或抽壳。</p>
+            <p className="hint">参考预览支持剖切、测量与网格导出；点击下方按钮可直接转为实体节点参与 TPMS 填充、抽壳或布尔。</p>
+            <button type="button" className="secondary full" disabled={busy || !info?.libfive || scene.nodes.length >= 64} onClick={promoteCADToNode}>转入实体建模（支持 TPMS 填充与布尔）</button>
             <p className="hint">项目保存源文件引用；移动源文件后请重新导入。</p>
           </Section>
           <Section title="显示精度" hint="偏差越小，曲面越细，计算和显示成本越高。设置改变后点击更新预览。">

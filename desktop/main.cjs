@@ -8,7 +8,7 @@ let window;
 const bridge = new PythonBridge(root, message => {
   if (window && !window.isDestroyed()) window.webContents.send('tpms:progress', message);
 });
-const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_node', 'evaluate_values', 'preset', 'region', 'quality', 'low_quality']);
+const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_node', 'evaluate_values', 'preset', 'region', 'quality', 'low_quality', 'inspect_import']);
 // Layout rendering uses a separate worker so edits and final generation stay responsive.
 const layoutBridge = new PythonBridge(root);
 let layoutBusy = false;
@@ -79,6 +79,20 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
       const answer = await bridge.call('import_step', {cad:{source:result.filePaths[0],deflection:.1,angular_deflection:20,position:[0,0,0],rotation:[0,0,0]}});
       importedSource = answer.cad.source;
       return answer;
+    }
+    if (method === 'pick_import_model') {
+      const result = await dialog.showOpenDialog(window, {
+        title: '选择外部 CAD / 三角网格实体',
+        filters: [
+          { name: 'CAD 与三维实体 (STEP / STL / OBJ / PLY)', extensions: ['step', 'stp', 'stl', 'obj', 'ply'] },
+          { name: 'STEP CAD 文件', extensions: ['step', 'stp'] },
+          { name: '三角网格文件', extensions: ['stl', 'obj', 'ply'] },
+        ],
+        properties: ['openFile'],
+      });
+      if (result.canceled) return { canceled: true };
+      const imported = await bridge.call('inspect_import', { source: result.filePaths[0], options: payload.options || {} });
+      return { canceled: false, imported };
     }
     if (method === 'generate_cad') {
       if (!importedSource || payload.cad?.source !== importedSource) throw new Error('请先导入 STEP 模型或打开导入项目');

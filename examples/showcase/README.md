@@ -7,6 +7,7 @@
 | [Gyroid 双法兰](gyroid-flanged-core.json) | 19 / 3 | 圆柱点阵芯、共享法兰、四个安装孔和轴向流道 |
 | [三向开孔球壳](perforated-ring-sphere.json) | 11 / 3 | 空心球壳、赤道加强环和 XYZ 正交流道 |
 | [Gyroid 晶格跑鞋中底](gyroid-shoe-midsole.json) | 20 / 3 | 解剖学鞋楦外轮廓、9mm 跟趾落差与后跟环抱杯、实体模式 Gyroid 共形中底 |
+| [外部 STL 跑鞋中底（2 节点版）](stl-shoe-midsole.json) | 2 / 2 | 直接导入封闭 STL 鞋坯 `sneaker-midsole-blank.stl`，1 步 `TPMS 填充` 生成单连通 Gyroid 中底 |
 | [参数化八瓣花](../parametric-flower/eight-petal-flower.json) | 25 / 4 | 椭球母体、旋转复制、花茎与叶片组合 |
 
 ![暗色工作台中实际生成的双法兰模型](../../docs/showcase-gyroid-dark.png)

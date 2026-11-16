@@ -17,10 +17,12 @@ from tpms_core import TPMSParameters, _material_scalar_field
 from parametric import TPMS_FIELDS, evaluate_expression, validate_parameters
 from workflow_values import resolve_values, copy_value_nodes
 from solid_operations import OP_DEFAULTS, validate_operation, operation_bounds, operation_tree, tree_cost
+from mesh_source import validate_imported_node, imported_local_bounds
 
 KINDS = {"sphere": "球", "box": "盒", "cylinder": "圆柱", "torus": "圆环",
          "cube": "立方体", "rounded_box": "圆角方盒", "rounded_cylinder": "圆角圆柱",
          "capsule": "胶囊体", "cone": "圆锥", "frustum": "圆台", "ellipsoid": "椭球体",
+         "imported_solid": "外部实体",
          "tpms": "TPMS", "union": "并集", "intersection": "交集",
          "difference": "差集 A−B", "smooth_union": "平滑融合", "smooth_difference": "平滑差集",
          "transform": "变换", "shell": "抽壳", "offset": "偏置", "mirror": "镜像",
@@ -132,6 +134,8 @@ class SolidScene:
             kwargs.setdefault("dimensions", PRIMITIVE_DIMENSIONS[kind])
         if kind in OP_DEFAULTS:
             kwargs.setdefault("dimensions", OP_DEFAULTS[kind])
+        if kind == "imported_solid":
+            kwargs.setdefault("dimensions", (1.0,))
         if kind == "tpms_infill":
             kwargs.setdefault("tpms", TPMSParameters())
         node = SolidNode(id=f"n{index}", name=f"{KINDS[kind]} {index}", kind=kind, **kwargs)
@@ -192,6 +196,8 @@ class SolidScene:
                 node.tpms.validate()
                 if node.tpms.tubular_enabled:
                     raise ValueError("实体组合暂不支持管状卷绕 TPMS")
+            elif node.kind == "imported_solid":
+                validate_imported_node(node)
             elif node.kind not in OPERATIONS and node.kind != "transform" and node.kind not in OP_DEFAULTS:
                 counts = {kind: len(values) for kind, values in PRIMITIVE_DIMENSIONS.items()}
                 if len(node.dimensions) != counts[node.kind] or not all(
@@ -249,6 +255,12 @@ class SolidScene:
         return False
 
     def contains_tpms(self, identifier: str) -> bool:
+        return self._has_kind(identifier, {"tpms", "tpms_infill"})
+
+    def uses_imported_solid(self, identifier: str | None = None) -> bool:
+        return self._has_kind(identifier or self.root, {"imported_solid"})
+
+    def _has_kind(self, identifier: str, kinds: set[str]) -> bool:
         pending, seen = [identifier], set()
         while pending:
             current = pending.pop()
@@ -256,7 +268,7 @@ class SolidScene:
                 continue
             seen.add(current)
             node = self.by_id(current)
-            if node.kind in {"tpms", "tpms_infill"}:
+            if node.kind in kinds:
                 return True
             pending.extend(node.inputs)
         return False
@@ -285,6 +297,8 @@ class SolidScene:
                 bounds = np.array([np.minimum(a[0], b[0]), np.maximum(a[1], b[1])])
                 if node.kind == "smooth_union":
                     bounds += np.array([[-node.blend / 4] * 3, [node.blend / 4] * 3])
+        elif node.kind == "imported_solid":
+            bounds = imported_local_bounds(node)
         else:
             d = node.dimensions
             half = {"sphere": lambda: [d[0]] * 3,
@@ -452,6 +466,10 @@ def generate_solid(scene: SolidScene) -> SolidResult:
     snapshot = SolidScene.from_dict(scene.to_dict())  # retains editable bindings
     scene = snapshot.resolved()
     scene._validate_concrete()
+    if scene.uses_imported_solid():
+        from sdf_grid import evaluate_sdf_scene
+        mesh = evaluate_sdf_scene(scene, scene.root, scene.cell_size, rotation_matrix)
+        return SolidResult(mesh, snapshot)
     bounds = scene.bounds()
     size = bounds[1] - bounds[0]
     margin = scene.cell_size * 2

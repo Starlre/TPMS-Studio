@@ -37,8 +37,19 @@ export const FIELD_NODES = [
   { kind: 'tpms', name: 'TPMS', arity: 0, dimensions: [], needsTpms: true, category: 'tpms', inlineGroup: '场/结构' },
 ];
 
+export const EXTERNAL_NODES = [
+  {
+    kind: 'imported_solid', name: '外部实体', nodeName: '外部实体',
+    arity: 0, dimensions: [1], labels: ['缩放比例'],
+    operation: { source: '', sha256: '', align: 'none', deflection: 0.05, angular_deflection: 15 },
+    category: 'primitive', inlineGroup: '外部模型', iconKey: 'FileBox',
+    hint: '导入封闭 STEP / STL / OBJ / PLY 实体并转为隐式场，直接接入 TPMS 填充、抽壳或布尔',
+  },
+];
+
 export const NODE_CATALOG = [
   ...PRIMITIVES.map(item => ({ ...item, nodeName: item.name, arity: 0, category: 'primitive', inlineGroup: '基本体' })),
+  ...EXTERNAL_NODES,
   ...FIELD_NODES.map(item => ({ ...item, nodeName: item.name })),
   ...BOOLEAN_OPS.map(item => ({ ...item, dimensions: [] })),
   ...FEATURE_OPS.map(item => ({ ...item, nodeName: item.name })),
@@ -48,6 +59,7 @@ export const NODE_SPECS = Object.fromEntries(NODE_CATALOG.map(item => [item.kind
 
 export const INLINE_NODE_KINDS = [
   ...PRIMITIVES.map(item => ({ id: item.kind, name: item.name, group: '基本体' })),
+  { id: 'imported_solid', name: '外部实体', group: '外部模型' },
   { id: 'tpms', name: 'TPMS', group: '场/结构' },
   { id: 'tpms_infill', name: 'TPMS 填充', group: '操作' },
   ...BOOLEAN_OPS.map(item => ({ id: item.kind, name: item.name, group: '布尔' })),
