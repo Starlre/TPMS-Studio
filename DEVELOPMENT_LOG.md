@@ -31,8 +31,10 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | `tpms_core.py` | 隐式场、材料域/流体域、Marching Cubes、孔隙率求解、碎片清理 | NumPy、scikit-image、trimesh |
 | `gpu_preview.py` | GPU 隐式场判定、uniform 构建、GLSL 射线步进源码 | GLSL、Three.js / WebGL2 |
 | `comsol_mesh.py` | 连通流体域分解、四面体划分、边界分组、BDF/MSH/JSON 导出 | Gmsh、meshio |
+| `fea_mesh.py` | 封闭实体 FEA 四面体网格划分、SDF 重划分回退、质量检查与 MSH/BDF/VTU 导出 | Gmsh、meshio、Numba |
 | `test_tpms_core.py` | 封闭性、孔隙率、流体域回归测试 | pytest |
 | `test_comsol_mesh.py` | 真实体网格生成和格式回读测试 | pytest、Gmsh、meshio |
+| `test_fea_mesh.py` | 空腔保留、多域分离、组合晶格重划分与 FEA MSH/BDF 回读及 IPC 测试 | pytest、Gmsh、meshio |
 | `test_gpu_preview.py` | GPU 预览判定、uniform 与着色器回归测试 | pytest |
 
 ### 2.1 建模约定
@@ -712,6 +714,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 验证：`pytest -q` **`187 passed`**（103.78s，含 `test_imported_solid.py` 对 STL/STEP 共形片层与实体填充、带开口抽壳、偏置、镜像及缓存复用的 4 项验证）；`desktop` 下 `npx vite build` 通过，`npm test` **`28/28`** 通过；`verify-ui`、`verify-ribbon`、`verify-step-import`、`verify-operations`、`verify-imported-solid` 与 `verify-notebook-cards` 全部通过（零页面报错）；2 节点 STL 跑鞋中底示例 [examples/showcase/stl-shoe-midsole.json](examples/showcase/stl-shoe-midsole.json) 在桌面实机直载通过，生成 `551,672` 面单连通封闭体（`bodies=1`，`136,027.6 mm³`）。
 - 状态：已完成实现与全量验证，提交至 `完善建模功能和UI分支`。
 
+### R-116：26-11-16 20:52:00（Asia/Shanghai），新增结构有限元 (FEA) 四面体体网格划分、质量高亮与 MSH/BDF 导出
+
+- 需求与原因：此前体网格划分（[comsol_mesh.py](comsol_mesh.py)）仅面向规则外框内的 `TPMS 建模` 流体域，无法为 `实体建模` 中的布尔组合体、抽壳空腔体、`TPMS 填充` 晶格件或外部导入 `STL/STEP` 封闭实体生成固体域四面体网格。用户希望支持组合实体与复杂晶格件的 FEA 结构有限元前处理体网格划分与导出。
+- 实现：
+  - **FEA 四面体体网格引擎**：新增 [fea_mesh.py](fea_mesh.py)（复用 `comsol_mesh.py` 的 `_quality_statistics` / `_low_quality_preview` / `_extract_volume_cells` / `_configure_gmsh_threads` 等共享工具），通过 `_group_solids_and_voids` 将正体积外壳与内部嵌套负体积空腔自动配对；采用 Gmsh `Algorithm3D=10`（HXT 并行四面体）优先划分、失败自动回退 `Algorithm3D=1`（Delaunay）并接续 `Netgen` 质量优化，各尝试均通过 `_run_gmsh_isolated` 在独立 `gmsh.initialize()/finalize()` 生命周期中运行，避免 C++ 状态污染。
+  - **SDF 水密光滑重划分策略与性能优化**：提供 `auto`（面数 $>45,000$ 或直接 PLC 剖分失败时自动回退）、`remesh`、`direct` 三种策略；`_remesh_discrete_surface` 基于 `sdf_grid.build_sdf_volume` + `marching_cubes(level=-1e-4*h_surf, gradient_direction='ascent')` + Taubin 滤波重建高质量封闭三角表面，保证高复杂度隐式曲面顺利四面体化。提供 `write_files` 开关，使 UI 内“划分 FEA 体网格”质量预览跳过大网格 ASCII MSH/BDF 磁盘序列化，导出时再落盘 `.msh`（Physical ID `surface=101`、`solid=201`）、NASTRAN `.bdf`、`_quality.vtu` 与 `_fea.json`。
+  - **IPC 与工作台全面打通**：扩展 [electron_backend.py](electron_backend.py)（新增 `fea` / `fea_quality` 方法、校验项目 JSON `fea` 字段，并将 `low_quality` 统一指向 `self.quality_result or self.cfd or self.fea`）、[desktop/main.cjs](desktop/main.cjs)（放行 `fea_quality` 并支持 `tpms-fea.bdf` / `.msh` 保存对话框）及 [desktop/src/main.jsx](desktop/src/main.jsx)（`检查与测量 → 结构体网格 (FEA)` Ribbon 工具、`模型信息` FEA 参数面板、`导出 FEA 体网格` 下拉菜单、`FEA 结构体网格质量报告` 弹窗及项目持久化）；同时保持原 `TPMS 建模 → 仿真与网格` CFD 流程与标签隔离不变。
+- 涉及文件：`fea_mesh.py`、`test_fea_mesh.py`、`electron_backend.py`、`desktop/main.cjs`、`desktop/package.json`、`desktop/src/main.jsx`、`desktop/tests/fea-mesh-ui.cjs`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：Python 全量回归 `pytest -q` **`193 passed`**（`118.31s`，含新增 `test_fea_mesh.py` 6 项：空壳腔体体积保真与 MSH/BDF/VTU 回读、多分离域计数、非封闭拦截、`tpms_infill` 重划分与低质量预览、`Workbench` IPC 与项目校验）；`desktop` 下 `npx vite build` 通过（`5.92s`），`npm test` **`28/28 passed`**（`11.28s`）；Playwright 新增 `verify-fea`（覆盖 24×24×16 带孔布尔板 `6,067` 单元、低质量单元 3D 高亮定位、BDF/MSH/VTU/JSON 导出及项目保存，以及 2 节点 Gyroid 跑鞋中底 `2.4 mm` 参数生成 **`124,673` 节点 / `495,975` 四面体单元**、缩放雅可比均值 `0.6402`、仅 `243` 个低质量单元）与 `verify-ui`、`verify-ribbon`、`verify-imported-solid`、`verify-operations`、`verify-notebook-cards` 全部通过（零页面报错）。
+- 状态：已完成实现与全量验证，提交至 `完善建模功能和UI分支`。
+
 ## 5. 技术约定
 
 
@@ -722,7 +735,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | 材料符号 | `material_scalar <= 0` 为材料内部 |
 | 连续场与表面 | 提取零等值面；片层壁厚为距离近似，不是精确等距偏置 |
 | 流体域 | 外形包围盒内的材料补集，封闭并保留各真实连通网络 |
-| 边界编号 | 入口 101、出口 102、壁面 103、流体 201；流向负端为入口 |
+| 边界编号 | CFD：入口 101、出口 102、壁面 103、流体 201；流向负端为入口；FEA：`surface` 101、`solid` 201 |
 | 生成快照 | 导出使用成功生成的结果，修改参数后必须重新生成 |
 | 预览与导出 | GPU 处理显示，导出使用表面网格；中间预览不替换最终输出 |
 | 安全求值 | 使用受限 AST，拒绝任意代码执行、无效引用与循环 |
@@ -735,7 +748,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 棱柱层覆盖全部封闭流体边界，仅对 TPMS 壁面布层仍需共形入口/出口分割。
 - 节点工作流采用 Notebook 节点树和上游引用；自由布线画布、Voronoi、空间场/网格参数类型、跨文件子工作流与体网格节点尚未提供。
 - 混合隐式预览受生成网格轮廓影响。自定义公式、卷绕、实体组合与诊断回退网格，不能保证任意薄壁特征在粗精度下保留。
-- 组合实体暂不支持 CFD；管状卷绕不能进入 libfive 实体图；TPMS 不参与平滑融合。
+- 组合实体支持 FEA 四面体网格划分，暂不支持 CFD 流体域；管状卷绕不能进入 libfive 实体图。
 - 缓存减少重复计算，变化的输出仍需提取完整网格；预算不含属性缓存和生成时的峰值内存。
 - 后续优先考虑 COMSOL 导入验收、仅壁面边界层、参数扫描、场驱动设计和更多节点类型。
 

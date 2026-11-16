@@ -27,6 +27,8 @@ const CFD = { flow_axis: 'X', element_size: 1.5, surface_samples_per_cell: 32,
   boundary_layer_enabled: false, boundary_layer_layers: 3, boundary_layer_first_height: 0.05, boundary_layer_growth: 1.2,
   end_refinement_enabled: true, end_refinement_distance: 2, end_refinement_size_factor: 0.5,
   curvature_refinement_enabled: true, curvature_points: 18, low_quality_threshold: 0.2 };
+const FEA = { element_size: 2.0, curvature_refinement_enabled: true, curvature_points: 18,
+  remesh_surface: 'auto', low_quality_threshold: 0.2 };
 const emptyScene = () => ({ version: 1, nodes: [], root: '', cell_size: 0.3, parameters: {}, value_nodes: [] });
 const format = (n, digits = 0) => Number(n ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: digits });
 const NODE_ICONS = { GitMerge, GitCompare, Minus, Sparkles, MinusCircle, Box, Move3D, Expand, FlipHorizontal2, LayoutGrid, RefreshCw, Waves };
@@ -77,6 +79,7 @@ function App() {
   const [tab, setTab] = useState('geometry');
   const [p, setP] = useState(DEFAULT);
   const [cfd, setCfd] = useState(CFD);
+  const [fea, setFea] = useState(FEA);
   const [scene, setScene] = useState(emptyScene);
   const [cad, setCad] = useState(null);
   const sceneHistory = useRef({ undo: [], redo: [] });
@@ -114,6 +117,7 @@ function App() {
   const [displayGeometry, setDisplayGeometry] = useState(null);
   const [display, setDisplay] = useState('model');
   const [quality, setQuality] = useState(null); const [qualityDialog, setQualityDialog] = useState(false);
+  const lastQualityKey = useRef('');
   const [help, setHelp] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('tpms-palette') === 'alabaster-light-v1' ? (localStorage.getItem('tpms-theme') || 'light') : 'light');
   const [implicit, setImplicit] = useState(true); const [wireframe, setWireframe] = useState(false);
@@ -433,18 +437,18 @@ function App() {
   }
   function updateCAD(key, value) {setCad(old=>({...old,[key]:value}));invalidate();}
   async function saveProject() {
-    const r = await run('save_project', { project: { type: 'tpms-electron', version: 1, mode, parameters: p, scene:mode === 'cad' ? emptyScene() : scene, cfd, ...(mode === 'cad' ? {cad} : {}) } });
+    const r = await run('save_project', { project: { type: 'tpms-electron', version: 1, mode, parameters: p, scene:mode === 'cad' ? emptyScene() : scene, cfd, fea, ...(mode === 'cad' ? {cad} : {}) } });
     if (r && !r.canceled) setMessage(`项目已保存：${r.path}`);
   }
   function applyLoadedProject(loaded, { autoGenerate = false } = {}) {
     if (loaded.project.mode === 'cad') {
       acceptCAD(loaded.imported);
-      setP({ ...DEFAULT, ...loaded.project.parameters }); setCfd({ ...CFD, ...loaded.project.cfd });
+      setP({ ...DEFAULT, ...loaded.project.parameters }); setCfd({ ...CFD, ...loaded.project.cfd }); setFea({ ...FEA, ...loaded.project.fea });
       setMessage('STEP 项目已打开，源模型预览已恢复');
       return;
     }
     const nextMode = loaded.project.mode === 'solid' ? 'nodes' : loaded.project.mode;
-    setMode(nextMode); setP({ ...DEFAULT, ...loaded.project.parameters }); setCfd({ ...CFD, ...loaded.project.cfd });
+    setMode(nextMode); setP({ ...DEFAULT, ...loaded.project.parameters }); setCfd({ ...CFD, ...loaded.project.cfd }); setFea({ ...FEA, ...loaded.project.fea });
     sceneHistory.current = { undo: [], redo: [] };
     setNodeStates({}); setValueOutputs({}); setCacheSummary(''); autoAttempt.current = '';
     setAllEntities(!autoGenerate); infillHiddenRef.current = new Set();
@@ -466,10 +470,19 @@ function App() {
     const r = await run('region', { options: cfd });
     if (r) { setDisplay('region'); setDisplayGeometry(r.geometry); setMessage('仿真区域：入口 101 / 出口 102 / 壁面 103'); }
   }
-  async function inspectQuality(exportFiles = false) {
-    if (quality && !exportFiles) { setQualityDialog(true); return; }
-    const r = await run(exportFiles ? 'cfd' : 'quality', { options: cfd });
-    if (r && !r.canceled) { setQuality(r); setQualityDialog(true); setMessage(exportFiles ? `COMSOL 网格已导出：${r.paths[0]}` : '体网格质量分析完成'); }
+  async function inspectQuality(exportFiles = false, target = 'cfd') {
+    const options = target === 'fea' ? fea : cfd;
+    const key = JSON.stringify({ target, options, faces: result?.stats?.faces });
+    if (quality && !exportFiles && lastQualityKey.current === key) { setQualityDialog(true); return; }
+    const method = target === 'fea' ? (exportFiles ? 'fea' : 'fea_quality') : (exportFiles ? 'cfd' : 'quality');
+    const r = await run(method, { options });
+    if (r && !r.canceled) {
+      lastQualityKey.current = key;
+      setQuality(r); setQualityDialog(true);
+      setMessage(exportFiles
+        ? `${target === 'fea' ? 'FEA 结构体网格' : 'COMSOL 网格'}已导出：${r.paths[0]}`
+        : `${target === 'fea' ? 'FEA ' : ''}体网格质量分析完成 · ${format(r.elements)} 个四面体单元`);
+    }
   }
   async function lowQuality() {
     if (display === 'low') { setDisplay('model'); setDisplayGeometry(result.geometry); return; }
@@ -597,6 +610,11 @@ function App() {
         {label:'线框显示',icon:Grid3X3,pressed:wireframe,onClick:() => setWireframe(!wireframe)},
         {label:'恢复整体视角',icon:Scan,onClick:() => viewport.current?.fit()},
         ...['X','Y','Z'].map(axis => ({label:`${axis} 方向观察`,icon:Eye,onClick:() => viewport.current?.view(axis)}))
+      ] },
+      { label: '结构体网格 (FEA)', tools: [
+        {label:'划分 FEA 体网格',icon:Triangle,disabled:!canModel || layoutActive,onClick:() => inspectQuality(false, 'fea'),hint:'对当前封闭实体（含组合、外部导入与晶格）划分四面体并检验雅可比质量'},
+        {label:'高亮低质量单元',icon:Activity,disabled:!canModel || layoutActive || !quality,pressed:display === 'low',onClick:lowQuality},
+        {label:'导出 FEA 体网格',icon:Download,disabled:!canModel || layoutActive,onClick:() => inspectQuality(true, 'fea')}
       ] }
     ] },
     { id: 'cfd', label: '仿真与网格', workspaces: ['tpms'], groups: [
@@ -622,7 +640,7 @@ function App() {
           ['original', '原始精度'], ['high', '高质量 · 约 70% 面数'], ['medium', '标准 · 约 40% 面数'], ['low', '轻量 · 约 20% 面数'], ['custom', '自定义目标面数'], ...(info?.libfive && result?.mode === 'tpms' && !result?.parameters?.tubular_enabled ? [['libfive', 'libfive · 重算网格精度']] : [])]} />
           {exportQuality === 'custom' && <Num label="目标三角面数" value={targetFaces} onChange={setTargetFaces} min={1} max={result?.stats.faces} step={1000} />}
           {exportQuality === 'libfive' && <Num label="网格尺寸" value={exportCell} onChange={setExportCell} min={0.001} step={0.05} unit="mm" />}
-          <p className="hint">导出使用已生成模型。简化后的实际面数与封闭性会显示在状态栏。</p><button className="primary" disabled={!canModel} onClick={exportModel}><Download size={18} aria-hidden="true" />导出 STL / OBJ / PLY</button><button className="secondary" disabled={!canCFD} onClick={() => { exportMenu.current.open = false; inspectQuality(true); }}>导出 COMSOL 体网格</button></div></details>
+          <p className="hint">导出使用已生成模型。简化后的实际面数与封闭性会显示在状态栏。</p><button className="primary" disabled={!canModel} onClick={exportModel}><Download size={18} aria-hidden="true" />导出 STL / OBJ / PLY</button><button className="secondary" disabled={!canModel} onClick={() => { exportMenu.current.open = false; inspectQuality(true, 'fea'); }}>导出 FEA 体网格 (MSH / BDF)</button><button className="secondary" disabled={!canCFD} onClick={() => { exportMenu.current.open = false; inspectQuality(true, 'cfd'); }}>导出 COMSOL 体网格</button></div></details>
         <button className="icon-button" aria-label={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'} title="切换明暗主题" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button>
         <button className="icon-button" aria-label="操作说明" title="操作说明" onClick={() => setHelp(true)}><CircleHelp size={19} aria-hidden="true" /></button>
       </div>
@@ -710,13 +728,14 @@ function App() {
         {activeResult?.stats.bounds && <section className="metrics"><h3>世界坐标范围 / mm</h3>{['X', 'Y', 'Z'].map((axis, i) => <div className="metric" key={axis}><span>{axis}</span><strong>{format(activeResult.stats.bounds[0][i], 2)} ~ {format(activeResult.stats.bounds[1][i], 2)}</strong></div>)}</section>}
         {activeResult?.cad_metadata && <section className="metrics"><h3>STEP 源模型</h3>{[['CAD 实体',activeResult.cad_metadata.solids],['CAD 曲面',activeResult.cad_metadata.cad_faces],['坐标单位','mm'],['CAD 表面积',`${format(activeResult.cad_metadata.cad_area,2)} mm²`],['CAD 实体体积',activeResult.cad_metadata.cad_volume == null ? '—' : `${format(activeResult.cad_metadata.cad_volume,2)} mm³`]].map(([label,value])=><div className="metric" key={label}><span>{label}</span><strong>{value}</strong></div>)}<p className="hint">几何统计基于显示网格；CAD 数值来自原曲面。多实体体积为分量总和，重叠部分未求并。</p></section>}
         <section className="kernel-info"><h3>建模内核</h3><div><span className={`connection ${info ? 'connected' : ''}`} /><span>Python {info ? '已连接' : '连接中'}</span></div><div><span className={`connection ${info?.libfive ? 'connected' : ''}`} /><span>libfive {info?.libfive ? '可用' : '不可用'}</span></div>{info && !info.libfive && <p className="hint">{info.detail}</p>}<p className="hint">完整计算模型用于导出。视口显示方式不会改变导出几何。</p></section>
-        {quality && <section className="metrics"><h3>体网格摘要</h3><div className="metric"><span>体单元</span><strong>{format(quality.elements)}</strong></div><div className="metric"><span>最小雅可比</span><strong>{format(quality.quality.minimum, 4)}</strong></div><button className="secondary full" onClick={() => setQualityDialog(true)}>查看质量报告</button></section>}
+        {canModel && !layoutActive && !previewResult && <section className="metrics"><h3>结构体网格 (FEA)</h3><Num label="FEA 体单元尺寸" unit="mm" value={fea.element_size} min={0.05} step={0.2} onChange={v => setFea(old => ({ ...old, element_size: v }))} /><Select label="FEA 表面策略" value={fea.remesh_surface} onChange={v => setFea(old => ({ ...old, remesh_surface: v }))} options={[['auto', '智能自适应（推荐）'], ['remesh', '光滑重划分后剖分'], ['direct', '严格保留原三角面']]} /><button type="button" className="secondary full" disabled={busy} onClick={() => inspectQuality(false, 'fea')}>划分 FEA 体网格</button><button type="button" className="secondary full" disabled={busy} onClick={() => inspectQuality(true, 'fea')}>导出 FEA 体网格 (MSH / BDF)</button></section>}
+        {quality && <section className="metrics"><h3>体网格摘要</h3><div className="metric"><span>体单元</span><strong>{format(quality.elements)}</strong></div><div className="metric"><span>最小雅可比</span><strong>{format(quality.quality.minimum, 4)}</strong></div><button className="secondary full" onClick={() => setQualityDialog(true)}>查看质量报告</button><button type="button" className="secondary full" onClick={lowQuality}>{display === 'low' ? '恢复模型显示' : '定位低质量单元'}</button></section>}
       </div></aside>
     </div>
     {/* B3：状态栏升级——订阅外部进度 store + 已耗时（mm:ss）+ 常驻取消按钮 */}
     <Statusbar busy={busy} since={busySince} background={busySource === 'auto'} renderer={renderer} onCancel={cancel} />
-    <dialog ref={dialogRef} className="modal" onCancel={() => { setHelp(false); setQualityDialog(false); }}><div className="modal-header"><h2>{help ? '操作说明' : '体网格质量报告'}</h2><button className="icon-button" aria-label="关闭对话框" onClick={() => { setHelp(false); setQualityDialog(false); }}><X size={20} /></button></div>
-      {help ? <div className="help-copy"><h3>TPMS 建模</h3><p>在几何和结构页设置尺寸、周期、壁厚或孔隙率，然后生成模型。自定义公式支持安全数学表达式；公式变量 x/y/z 使用 mm 坐标。</p><h3>实体建模</h3><p>在统一节点树中添加球、盒、圆柱、圆环或 TPMS，展开节点编辑尺寸、位置与旋转；布尔节点通过输入 A/B 进行组合。指定最终输出并点击“生成工作流”，可进一步加入参数和公式驱动模型。</p><h3>预览与导出</h3><p>内置曲面可使用 GPU 隐式预览；公式、管状 TPMS 和实体组合使用网格预览。顶部导出菜单控制导出质量与目标面数。</p><h3>STEP 导入</h3><p>顶部导入 STEP / STP，进入参考模型工作区。可设置显示偏差、位置与旋转，更新预览后剖切测量或导出网格；暂不参与隐式节点运算。项目只保存源文件引用及导入设置，需同时保留源文件。</p><h3>CFD</h3><p>先生成 TPMS，再计算网格质量或显示仿真区域。COMSOL 导出包含 MSH/BDF、边界 JSON、质量 VTU。组合实体暂不支持 CFD。</p><h3>保存项目</h3><p>项目 JSON 保存 TPMS 参数、实体对象、组合关系和 CFD 设置。原 Qt 实体组合项目也可打开。</p></div> : quality && <><p className="hint">质量指标：{quality.quality.metric} · {format(quality.nodes)} 节点 · {format(quality.elements)} 体单元</p><div className="quality-summary">{[['最小值', quality.quality.minimum], ['5% 分位', quality.quality.percentile_05], ['中位数', quality.quality.median], ['平均值', quality.quality.mean], ['最大值', quality.quality.maximum], ['低质量单元', quality.quality.low_quality_elements]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{format(value, 4)}</strong></div>)}</div><h3>缩放雅可比分布</h3><div className="histogram" aria-label="质量直方图">{quality.quality.histogram_counts.map((count, i, counts) => <div key={i} title={`${quality.quality.histogram_edges[i].toFixed(2)} ~ ${quality.quality.histogram_edges[i + 1].toFixed(2)}：${count} 单元`}><i style={{ height: `${Math.max(1, count / Math.max(1, ...counts) * 130)}px` }} /><span>{quality.quality.histogram_edges[i].toFixed(1)}</span></div>)}</div><details><summary>查看分组统计</summary><table><thead><tr><th>质量区间</th><th>单元数</th></tr></thead><tbody>{quality.quality.histogram_counts.map((count, i) => <tr key={i}><td>{quality.quality.histogram_edges[i].toFixed(2)} ~ {quality.quality.histogram_edges[i + 1].toFixed(2)}</td><td>{format(count)}</td></tr>)}</tbody></table></details><p className="hint">质量报告仅描述体网格，不代表仿真设置已经完成。正式计算仍需进行网格无关性检查。</p></>}
+    <dialog ref={dialogRef} className="modal" onCancel={() => { setHelp(false); setQualityDialog(false); }}><div className="modal-header"><h2>{help ? '操作说明' : quality?.kind === 'fea' ? 'FEA 结构体网格质量报告' : '体网格质量报告'}</h2><button className="icon-button" aria-label="关闭对话框" onClick={() => { setHelp(false); setQualityDialog(false); }}><X size={20} /></button></div>
+      {help ? <div className="help-copy"><h3>TPMS 建模</h3><p>在几何和结构页设置尺寸、周期、壁厚或孔隙率，然后生成模型。自定义公式支持安全数学表达式；公式变量 x/y/z 使用 mm 坐标。</p><h3>实体建模</h3><p>在统一节点树中添加球、盒、圆柱、圆环或 TPMS，展开节点编辑尺寸、位置与旋转；布尔节点通过输入 A/B 进行组合。指定最终输出并点击“生成工作流”，可进一步加入参数和公式驱动模型。</p><h3>预览与导出</h3><p>内置曲面可使用 GPU 隐式预览；公式、管状 TPMS 和实体组合使用网格预览。顶部导出菜单控制导出质量与目标面数。</p><h3>STEP 导入</h3><p>顶部导入 STEP / STP，进入参考模型工作区。可设置显示偏差、位置与旋转，更新预览后剖切测量或导出网格；暂不参与隐式节点运算。项目只保存源文件引用及导入设置，需同时保留源文件。</p><h3>结构体网格 (FEA)</h3><p>在检查与测量工具栏或右侧模型信息栏，可对封闭实体（含组合、TPMS 填充及外部导入实体）划分四面体网格（HXT 并行 + Netgen 优化），检验缩放雅可比质量并高亮低质量单元，导出 Gmsh .msh、Nastran .bdf、质量 VTU 与元数据 JSON。</p><h3>CFD 流体域</h3><p>先生成 TPMS，再计算网格质量或显示仿真区域。COMSOL 导出包含 MSH/BDF、边界 JSON、质量 VTU。组合实体暂不支持 CFD。</p><h3>保存项目</h3><p>项目 JSON 保存 TPMS 参数、实体对象、组合关系、FEA 与 CFD 设置。原 Qt 实体组合项目也可打开。</p></div> : quality && <><p className="hint">质量指标：{quality.quality.metric} · {format(quality.nodes)} 节点 · {format(quality.elements)} 体单元{quality.kind === 'fea' && quality.solid_domains ? ` · ${quality.solid_domains} 个实体域` : ''}{quality.kind === 'fea' && quality.mesh_volume ? ` · 体积 ${format(quality.mesh_volume, 2)} mm³` : ''}{quality.kind === 'fea' && quality.remeshed ? ' · 表面已重划分' : ''}</p><div className="quality-summary">{[['最小值', quality.quality.minimum], ['5% 分位', quality.quality.percentile_05], ['中位数', quality.quality.median], ['平均值', quality.quality.mean], ['最大值', quality.quality.maximum], ['低质量单元', quality.quality.low_quality_elements]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{format(value, 4)}</strong></div>)}</div><h3>缩放雅可比分布</h3><div className="histogram" aria-label="质量直方图">{quality.quality.histogram_counts.map((count, i, counts) => <div key={i} title={`${quality.quality.histogram_edges[i].toFixed(2)} ~ ${quality.quality.histogram_edges[i + 1].toFixed(2)}：${count} 单元`}><i style={{ height: `${Math.max(1, count / Math.max(1, ...counts) * 130)}px` }} /><span>{quality.quality.histogram_edges[i].toFixed(1)}</span></div>)}</div><details><summary>查看分组统计</summary><table><thead><tr><th>质量区间</th><th>单元数</th></tr></thead><tbody>{quality.quality.histogram_counts.map((count, i) => <tr key={i}><td>{quality.quality.histogram_edges[i].toFixed(2)} ~ {quality.quality.histogram_edges[i + 1].toFixed(2)}</td><td>{format(count)}</td></tr>)}</tbody></table></details><p className="hint">质量报告仅描述体网格，不代表仿真设置已经完成。正式计算仍需进行网格无关性检查。</p></>}
       {help && <div className="help-copy"><h3>节点与参数编辑</h3><p>空实体项目从“＋新节点”开始，可搜索实体、操作或参数；实体与参数统一显示为纵向卡片。拖动标题或手柄排序，右侧图标可拖入相应输入。默认同时显示可计算实体，编辑后自动更新；“全部实体”和“半透明”控制布局查看。布局下眼睛逐个显隐，右键或“⋯ → 单独预览”查看一个实体。菜单提供复制、删除、设为输出及上移/下移。布尔输入可以展开上游，编辑共享原节点数据。“设置”集中输出节点、网格尺寸、参数求值、常量与示例。创建实体后出现底部生成与自动更新。下拉引用、fx、缓存、50 步撤销重做与 JSON 项目继续可用。</p></div>}
     </dialog>
   </div>;

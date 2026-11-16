@@ -51,6 +51,8 @@ class Workbench:
         self.transfer = transfer.resolve()
         self.current = None
         self.cfd = None
+        self.fea = None
+        self.quality_result = None
         self.region = None
         self.progress = progress or (lambda message: None)
         self.step_importer = StepImporter()
@@ -71,7 +73,7 @@ class Workbench:
 
     def generated(self, result, mode: str, commit=True) -> dict:
         if commit:
-            self.current, self.cfd, self.region = result, None, None
+            self.current, self.cfd, self.fea, self.quality_result, self.region = result, None, None, None, None
         mesh = result.mesh
         stats = {"faces": len(mesh.faces), "vertices": len(mesh.vertices),
                  "volume": abs(float(mesh.volume)) if mesh.is_watertight else None, "area": float(mesh.area),
@@ -141,6 +143,20 @@ class Workbench:
                 errors[node.get('id', '')] = str(exc)
         return {'objects': objects, 'errors': errors}
 
+    def _volume_mesh_payload(self, kind: str, r) -> dict:
+        return {
+            "kind": kind,
+            "quality": asdict(r.quality),
+            "nodes": r.nodes,
+            "elements": r.volume_elements,
+            "tetrahedra": r.tetrahedra,
+            "prisms": getattr(r, "prisms", 0),
+            "solid_domains": getattr(r, "solid_domains", None),
+            "mesh_volume": getattr(r, "mesh_volume", None),
+            "remeshed": getattr(r, "remeshed", False),
+            "paths": [str(p) for p in (r.msh_path, r.bdf_path, r.metadata_path, r.quality_path) if p.is_file()],
+        }
+
     def require_tpms(self):
         if not isinstance(self.current, MeshResult):
             raise ValueError("请先生成 TPMS 模型；实体组合暂不支持 CFD 网格")
@@ -208,6 +224,9 @@ class Workbench:
                 raise ValueError('项目建模模式无效')
             from comsol_mesh import CFDMeshOptions
             CFDMeshOptions(**project.get('cfd', {})).validate()
+            if project.get('fea'):
+                from fea_mesh import FEAMeshOptions
+                FEAMeshOptions(**project['fea']).validate()
             # Legacy workspace names migrate without changing geometry or references.
             return {"project": {**project, "mode": "nodes" if project["mode"] == "solid" else project["mode"]}}
         if method == 'export':
@@ -235,7 +254,28 @@ class Workbench:
                 Path(temporary).unlink(missing_ok=True)
             return {"path": str(path), "faces": count, "fallback": fallback,
                     "watertight": bool(mesh.is_watertight), "message": message}
+        if method in {'fea', 'fea_quality'}:
+            if self.current is None:
+                raise ValueError('计算进程中没有模型，请先生成模型')
+            from fea_mesh import FEAMeshOptions, export_fea_volume_mesh
+            fea_options = FEAMeshOptions(**payload.get('options', {}))
+            fea_options.validate()
+            destination = payload.get('destination') or str(self.transfer / 'fea_quality')
+            self.fea = export_fea_volume_mesh(
+                self.current.mesh,
+                destination,
+                fea_options,
+                progress=self.progress,
+                write_files=(method == 'fea'),
+            )
+            self.quality_result = self.fea
+            return self._volume_mesh_payload('fea', self.fea)
         if method in {'region', 'cfd', 'quality', 'low_quality'}:
+            if method == 'low_quality':
+                target = self.quality_result or self.cfd or self.fea
+                if target is None:
+                    raise ValueError('请先计算网格质量')
+                return {"geometry": self.geometry(target.low_quality_vertices, target.low_quality_faces)}
             from comsol_mesh import CFDMeshOptions, generate_simulation_region_preview, export_comsol_fluid_mesh
             p = self.require_tpms()
             options = CFDMeshOptions(**payload.get('options', {}))
@@ -244,16 +284,10 @@ class Workbench:
                 self.progress('正在识别入口、出口和壁面…')
                 preview = generate_simulation_region_preview(p, options)
                 return {"geometry": self.geometry(preview.vertices, preview.faces, preview.colors)}
-            if method in {'cfd', 'quality'}:
-                destination = payload.get('destination') or str(self.transfer / 'quality')
-                self.cfd = export_comsol_fluid_mesh(p, destination, options, progress=self.progress)
-                r = self.cfd
-                return {"quality": asdict(r.quality), "nodes": r.nodes,
-                        "elements": r.volume_elements, "tetrahedra": r.tetrahedra, "prisms": r.prisms,
-                        "paths": [str(r.msh_path), str(r.bdf_path), str(r.metadata_path), str(r.quality_path)]}
-            if self.cfd is None:
-                raise ValueError('请先计算网格质量')
-            return {"geometry": self.geometry(self.cfd.low_quality_vertices, self.cfd.low_quality_faces)}
+            destination = payload.get('destination') or str(self.transfer / 'quality')
+            self.cfd = export_comsol_fluid_mesh(p, destination, options, progress=self.progress)
+            self.quality_result = self.cfd
+            return self._volume_mesh_payload('cfd', self.cfd)
         raise ValueError(f'未知命令：{method}')
 
 

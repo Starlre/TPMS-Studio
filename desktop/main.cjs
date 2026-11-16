@@ -8,7 +8,7 @@ let window;
 const bridge = new PythonBridge(root, message => {
   if (window && !window.isDestroyed()) window.webContents.send('tpms:progress', message);
 });
-const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_node', 'evaluate_values', 'preset', 'region', 'quality', 'low_quality', 'inspect_import']);
+const allowed = new Set(['init', 'generate_tpms', 'generate_solid', 'preview_node', 'evaluate_values', 'preset', 'region', 'quality', 'low_quality', 'inspect_import', 'fea_quality']);
 // Layout rendering uses a separate worker so edits and final generation stay responsive.
 const layoutBridge = new PythonBridge(root);
 let layoutBusy = false;
@@ -98,12 +98,15 @@ ipcMain.handle('tpms:request', async (_event, method, payload = {}) => {
       if (!importedSource || payload.cad?.source !== importedSource) throw new Error('请先导入 STEP 模型或打开导入项目');
       return await bridge.call('import_step', {cad:payload.cad});
     }
-    if (method === 'export' || method === 'cfd') {
-      const filters = method === 'cfd' ? [{ name: 'COMSOL 流体网格', extensions: ['msh'] }] : [
-        { name: 'STL 三角面模型', extensions: ['stl'] },
-        { name: 'OBJ 模型', extensions: ['obj'] }, { name: 'PLY 模型', extensions: ['ply'] },
-      ];
-      const result = await dialog.showSaveDialog(window, { title: method === 'cfd' ? '导出 COMSOL 流体网格' : '导出模型', defaultPath: method === 'cfd' ? 'tpms-fluid.msh' : 'tpms-model.stl', filters });
+    if (method === 'export' || method === 'cfd' || method === 'fea') {
+      const filters = method === 'cfd'
+        ? [{ name: 'COMSOL 流体网格', extensions: ['msh'] }, { name: 'NASTRAN 网格', extensions: ['bdf'] }]
+        : method === 'fea'
+          ? [{ name: 'NASTRAN / COMSOL 实体网格', extensions: ['bdf'] }, { name: 'Gmsh 体网格', extensions: ['msh'] }]
+          : [{ name: 'STL 三角面模型', extensions: ['stl'] }, { name: 'OBJ 模型', extensions: ['obj'] }, { name: 'PLY 模型', extensions: ['ply'] }];
+      const title = method === 'cfd' ? '导出 COMSOL 流体网格' : method === 'fea' ? '导出 FEA 结构体网格' : '导出模型';
+      const defaultPath = method === 'cfd' ? 'tpms-fluid.msh' : method === 'fea' ? 'tpms-fea.bdf' : 'tpms-model.stl';
+      const result = await dialog.showSaveDialog(window, { title, defaultPath, filters });
       if (result.canceled) return { canceled: true };
       return await bridge.call(method, { ...payload, destination: result.filePath });
     }
