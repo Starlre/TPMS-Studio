@@ -30,10 +30,40 @@ const CFD = { flow_axis: 'X', element_size: 1.5, surface_samples_per_cell: 32,
 const emptyScene = () => ({ version: 1, nodes: [], root: '', cell_size: 0.3, parameters: {}, value_nodes: [] });
 const format = (n, digits = 0) => Number(n ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: digits });
 
+function startNumberScrub(event, { value, onChange, min = -Infinity, max = Infinity, step = 0.1, disabled = false }) {
+  if (disabled || event.button !== 0) return;
+  const startX = event.clientX;
+  const startValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+  const baseStep = Number.isFinite(Number(step)) && Number(step) > 0 ? Number(step) : 0.1;
+  let moved = false;
+  const move = moveEvent => {
+    const dx = moveEvent.clientX - startX;
+    if (!moved && Math.abs(dx) < 4) return;
+    moved = true;
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    const effectiveStep = moveEvent.shiftKey ? baseStep * 0.1 : baseStep;
+    const decimals = Math.min(6, Math.max(0, (String(effectiveStep).split('.')[1] || '').length));
+    const raw = startValue + Math.round(dx / 6) * effectiveStep;
+    const clamped = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, raw));
+    onChange(Number(clamped.toFixed(decimals)));
+  };
+  const up = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+    if (moved) {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+}
+
 function Num({ label, value, onChange, unit, min, max, step = 0.1, disabled = false }) {
   const id = useId();
   // B4①：aria-description 不是有效 ARIA 属性；改为 aria-describedby 关联可见的单位文本
-  return <label className="field" htmlFor={id}><span>{label}</span><div className="input-wrap"><input id={id} type="number" aria-label={label} aria-describedby={unit ? `${id}-unit` : undefined} value={value} min={min} max={max} step={step} disabled={disabled} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} />{unit && <span className="unit" id={`${id}-unit`}>{unit}</span>}</div></label>;
+  return <label className="field" htmlFor={id}><span className={disabled ? '' : 'scrub-label'} title={disabled ? undefined : '左右拖动微调数值（按住 Shift 精细微调）'} onMouseDown={e => startNumberScrub(e, { value, onChange, min, max, step, disabled })}>{label}</span><div className="input-wrap"><input id={id} type="number" aria-label={label} aria-describedby={unit ? `${id}-unit` : undefined} value={value} min={min} max={max} step={step} disabled={disabled} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} />{unit && <span className="unit" id={`${id}-unit`}>{unit}</span>}</div></label>;
 }
 function Select({ label, value, onChange, options, disabled }) {
   const id = useId();
@@ -121,8 +151,37 @@ function App() {
   const [targetFaces, setTargetFaces] = useState(100000);
   const [exportCell, setExportCell] = useState(0.3);
   const [dirty, setDirty] = useState(false);
-  const viewport = useRef(); const exportMenu = useRef(); const dialogRef = useRef();
+  const viewport = useRef(); const exportMenu = useRef(); const dialogRef = useRef(); const workspaceRef = useRef();
   const initialised = useRef(false);
+  function startPaneResize(side, event) {
+    if (event.button !== 0 || !workspaceRef.current) return;
+    event.preventDefault();
+    const host = workspaceRef.current;
+    const panel = host.querySelector(side === 'left' ? '.parameters' : '.inspector');
+    if (!panel) return;
+    const startX = event.clientX;
+    const startW = panel.getBoundingClientRect().width;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const move = moveEvent => {
+      const delta = side === 'left' ? (moveEvent.clientX - startX) : (startX - moveEvent.clientX);
+      const minW = side === 'left' ? 280 : 220;
+      const maxW = side === 'left' ? Math.min(520, window.innerWidth * 0.42) : Math.min(400, window.innerWidth * 0.34);
+      const nextW = Math.round(Math.min(maxW, Math.max(minW, startW + delta)));
+      host.style.setProperty(side === 'left' ? '--left-col' : '--right-col', `${nextW}px`);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+  function resetPaneWidth(side) {
+    workspaceRef.current?.style.removeProperty(side === 'left' ? '--left-col' : '--right-col');
+  }
 
   useEffect(() => {
     const unsubscribe = window.tpms.onProgress(event => {
@@ -208,6 +267,7 @@ function App() {
   }
   function clearPreview() {
     setLayoutScene({ objects: [], errors: {}, signature: '' }); layoutAttempt.current = '';
+    setLayoutBusy(false); layoutRunning.current = false;
     setHiddenEntities([]); setLayoutError('');
     setPreviewResult(null); setResult(null); setDisplayGeometry(null); setDisplay('model');
     setQuality(null); setInspectionBounds(null); setMeasurePoints([]); setMeasuring(false);
@@ -529,8 +589,9 @@ function App() {
       <span className="workspace-state"><span className={`connection ${info ? 'connected' : ''}`} />{busy ? (busySource === 'auto' ? '后台更新中' : '正在计算') : dirty ? '参数待更新' : info ? '本地内核已连接' : '正在连接内核'}</span>
     </div>
     <Ribbon key={mode} categories={ribbonCategories} />
-    <div className={`workspace ${mode === 'nodes' ? 'node-workspace' : ''} ${inspectorTab === 'inspection' ? 'inspection-workspace' : ''}`}>
+    <div ref={workspaceRef} className={`workspace ${mode === 'nodes' ? 'node-workspace' : ''} ${inspectorTab === 'inspection' ? 'inspection-workspace' : ''}`}>
       <aside className="parameters" aria-label="建模参数">
+        <div className="pane-resizer pane-resizer-left" aria-hidden="true" title="拖动调整左侧面板宽度（双击恢复默认）" onMouseDown={e => startPaneResize('left', e)} onDoubleClick={() => resetPaneWidth('left')} />
         <div className="panel-heading"><div><small>{mode === 'cad' ? 'CAD 参考模型' : mode === 'nodes' ? '参数化工作流' : '设计输入'}</small><h2>{mode === 'cad' ? 'STEP 导入' : mode === 'tpms' ? 'TPMS 参数' : '实体节点'}</h2></div><span className="badge">{mode === 'cad' ? 'OpenCascade' : mode !== 'tpms' ? 'libfive' : 'mm'}</span></div>
         {/* B4②：参数类别是互斥单选，改用 aria-current */}
         {mode === 'tpms' && <nav className="panel-tabs" aria-label="参数类别">{[['geometry', '几何'], ['structure', '结构'], ['cfd', 'CFD 网格']].map(([value, label]) => <button key={value} aria-current={tab === value ? 'true' : undefined} className={tab === value ? 'selected' : ''} onClick={() => setTab(value)}>{label}</button>)}</nav>}
@@ -581,7 +642,7 @@ function App() {
         <div className="viewport-toolbar"><div className="viewport-title"><span>三维视图</span><small>{display === 'region' ? '仿真边界' : display === 'low' ? '低质量单元' : renderer}</small></div>{mode !== 'tpms' ? <span className="viewport-context">{mode === 'cad' ? 'STEP 参考模型' : layoutActive ? `全部实体 · ${visibleObjects?.length || 0} 个可见` : previewResult ? `预览：${previewResult.name}` : result?.mode === 'solid' ? '最终输出' : '等待生成工作流'}</span> : /* B4③：两态工具补 aria-pressed */ <div className="viewport-actions"><Tool icon={Activity} disabled={!canCFD} title={!canCFD ? '生成 TPMS 模型后可使用' : '计算体单元质量'} onClick={() => inspectQuality()}>网格质量</Tool><Tool icon={Scan} disabled={!canCFD} active={display === 'region'} pressed={display === 'region'} onClick={showRegion}>仿真区域</Tool><Tool icon={Triangle} disabled={!canCFD || !quality} title={!quality ? '先计算网格质量' : '定位低质量单元'} active={display === 'low'} pressed={display === 'low'} onClick={lowQuality}>低质量</Tool></div>}</div>
         {error && <div className="error-banner" role="alert"><span>{error}</span><button aria-label="关闭错误提示" onClick={() => setError('')}><X size={18} /></button></div>}
         <div className="viewport"><Viewport ref={viewport} geometry={viewGeometry} objects={visibleObjects} selectedObject={selected} translucent={translucent} onObjectSelect={setSelected} parameters={!layoutActive && display === 'model' ? activeResult?.parameters : null} shader={info?.shader} theme={theme} implicit={implicit} wireframe={wireframe} onError={setError} onRenderer={setRenderer} section={section} points={measurePoints} measuring={measuring} onBounds={setInspectionBounds} onSectionStatus={setSectionStatus} onPick={pickedPoint} onPickStatus={setPickStatus} />
-          {!hasView && !busy && !layoutBusy && <div className="empty"><Box size={48} strokeWidth={1} aria-hidden="true" /><h2>{mode === 'cad' ? '更新 STEP 模型预览' : mode === 'nodes' ? scene.nodes.length ? '生成你的模型' : '创建你的第一个节点' : '从参数定义你的模型'}</h2><p>{mode === 'cad' ? '点击更新预览读取源模型，或从顶部导入其他 STEP。' : mode === 'nodes' ? scene.nodes.length ? '编辑节点与输入后，点击“生成工作流”。' : '点击左侧“＋新节点”，或从顶部创建实体。' : '设置左侧参数，点击“生成模型”开始。'}</p></div>}
+          {!hasView && !busy && !(layoutActive && layoutBusy && scene.nodes.length > 0) && <div className="empty"><Box size={48} strokeWidth={1} aria-hidden="true" /><h2>{mode === 'cad' ? '更新 STEP 模型预览' : mode === 'nodes' ? scene.nodes.length ? '生成你的模型' : '创建你的第一个节点' : '从参数定义你的模型'}</h2><p>{mode === 'cad' ? '点击更新预览读取源模型，或从顶部导入其他 STEP。' : mode === 'nodes' ? scene.nodes.length ? '编辑节点与输入后，点击“生成工作流”。' : '点击左侧“＋新节点”，或从顶部创建实体。' : '设置左侧参数，点击“生成模型”开始。'}</p></div>}
           <div className="view-tools"><button title="等轴测 / 重置视角" aria-label="重置视角" onClick={() => viewport.current?.fit()}><RotateCcw size={19} /></button>{['X', 'Y', 'Z'].map(axis => <button key={axis} aria-label={`${axis} 轴正交方向观察`} onClick={() => viewport.current?.view(axis)}>{axis}</button>)}<button aria-label="放大" onClick={() => viewport.current?.zoom(0.8)}><ZoomIn size={19} /></button><button aria-label="缩小" onClick={() => viewport.current?.zoom(1.25)}><ZoomOut size={19} /></button></div>
           {display === 'region' && <div className="legend"><span><i className="inlet" />入口 · 101</span><span><i className="outlet" />出口 · 102</span><span><i className="walls" />壁面 · 103</span></div>}
           {display === 'low' && <div className="legend">低质量单元：{format(quality?.quality.low_quality_elements)} · 阈值 {quality?.quality.low_quality_threshold}</div>}
@@ -593,7 +654,7 @@ function App() {
         </div>
         <div className="view-options">{mode === 'nodes' && <><Toggle label="全部实体" value={allEntities} onChange={value => value ? showAllEntities() : returnOutput()} /><Toggle label="半透明" value={translucent} disabled={!layoutActive} onChange={setTranslucent} /></>}<button type="button" className={`tool ${inspectorTab === 'inspection' ? 'active' : ''}`} aria-pressed={inspectorTab === 'inspection'} disabled={!hasView || layoutActive} onClick={() => setInspectorTab(inspectorTab === 'inspection' ? 'model' : 'inspection')}><Scan size={17} aria-hidden="true" />剖切与测量</button><Toggle label="GPU 隐式曲面" value={canImplicit && implicit} disabled={!canImplicit} title={canImplicit ? '使用数学函数渲染 TPMS 曲面' : '当前显示网格；GPU 隐式曲面仅用于支持的 TPMS，剖切、测量和线框使用网格'} onChange={setImplicit} /><Toggle label="线框" value={wireframe} onChange={setWireframe} /><span>单位：mm</span></div>
       </main>
-      <aside className="inspector" aria-label="模型信息与检查工具">{/* B4②：检查器页签为互斥单选，改用 aria-current */}<nav className="inspector-tabs" aria-label="检查器类别">{[['model', '模型信息'], ['inspection', '剖切测量']].map(([id, name]) => <button type="button" key={id} aria-current={inspectorTab === id ? 'true' : undefined} className={inspectorTab === id ? 'selected' : ''} onClick={() => setInspectorTab(id)}>{name}</button>)}</nav>
+      <aside className="inspector" aria-label="模型信息与检查工具"><div className="pane-resizer pane-resizer-right" aria-hidden="true" title="拖动调整右侧面板宽度（双击恢复默认）" onMouseDown={e => startPaneResize('right', e)} onDoubleClick={() => resetPaneWidth('right')} />{/* B4②：检查器页签为互斥单选，改用 aria-current */}<nav className="inspector-tabs" aria-label="检查器类别">{[['model', '模型信息'], ['inspection', '剖切测量']].map(([id, name]) => <button type="button" key={id} aria-current={inspectorTab === id ? 'true' : undefined} className={inspectorTab === id ? 'selected' : ''} onClick={() => setInspectorTab(id)}>{name}</button>)}</nav>
         {inspectorTab === 'inspection' && <div className="inspection-scroll"><InspectionPanel section={section} onSection={changeSection} bounds={inspectionBounds} points={measurePoints} onPoints={value => { setMeasurePoints(value); setPickStatus(''); }} measuring={measuring} onMeasuring={value => { setMeasuring(value); setPickStatus(''); }} status={sectionStatus} domain={display === 'region' ? '流体' : display === 'low' ? '单元' : '材料'} pickStatus={pickStatus} available={!!displayGeometry && !layoutActive} viewPlane={normal => viewport.current?.viewNormal(normal)} onReset={resetInspection} /></div>}
         <div className="inspector-scroll" hidden={inspectorTab !== 'model'}><div className="result-name"><Box size={28} aria-hidden="true" /><strong>{layoutActive ? layoutSelected?.name || '待生成' : previewResult ? previewResult.name : activeResult?.mode === 'cad' ? activeResult.cad_metadata.name : activeResult?.mode === 'solid' ? '实体模型' : activeResult?.parameters?.surface || '待生成'}</strong><span>{layoutActive ? layoutPending ? '布局预览待更新' : '选中实体 · 布局预览' : previewResult ? '中间节点预览' : dirty ? '参数待更新' : activeResult ? '已生成' : '准备就绪'}</span></div>
         <section className="metrics"><h3>几何统计</h3>{[['三角面', format(activeResult?.stats.faces)], ['顶点', format(activeResult?.stats.vertices)], ['体积', activeResult?.stats.volume == null ? '—' : `${format(activeResult.stats.volume, 2)} mm³`], ['表面积', `${format(activeResult?.stats.area, 2)} mm²`], ['孔隙率', activeResult?.stats.porosity != null ? `${format(activeResult.stats.porosity * 100, 2)} %` : '—'], ['封闭性', activeResult ? activeResult.stats.watertight ? '封闭 / 水密' : '未封闭' : '—']].map(([label, value]) => <div className="metric" key={label}><span>{label}</span><strong>{activeResult ? value : '—'}</strong></div>)}</section>

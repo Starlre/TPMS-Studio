@@ -34,8 +34,56 @@ function NodeStateBadge({ id }) {
 function Choice({ label, value, options, onChange }) {
   return <label className="field"><span>{label}</span><select aria-label={label} value={value} onChange={e => onChange(e.target.value)}>{options.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>;
 }
+function scrubNumeric(event, { value, onChange, step = 1, disabled = false }) {
+  if (disabled || event.button !== 0) return;
+  const startX = event.clientX;
+  const startValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+  let moved = false;
+  const move = moveEvent => {
+    const dx = moveEvent.clientX - startX;
+    if (!moved && Math.abs(dx) < 4) return;
+    moved = true;
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    const effectiveStep = moveEvent.shiftKey ? step * 0.1 : step;
+    const raw = startValue + Math.round(dx / 6) * effectiveStep;
+    onChange(Number(raw.toFixed(4)));
+  };
+  const up = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+    if (moved) {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+}
+
+function cardSummaryText(n, isValue, scene) {
+  if (!n) return '';
+  if (isValue) {
+    if (n.kind === 'number') return `${n.symbol || 'val'} = ${n.value ?? 0}`;
+    if (n.kind === 'formula') return `${n.symbol || 'fx'} = ${n.expression || ''}`;
+    if (n.kind === 'vector') return `${n.symbol || 'vec'} = [${(n.components || [0, 0, 0]).join(', ')}]`;
+    return '';
+  }
+  if (ARITY[n.kind]) {
+    const names = (n.inputs || []).filter(Boolean).map(id => scene.nodes.find(x => x.id === id)?.name || id);
+    return names.length ? names.join(n.kind === 'difference' ? ' − ' : ' · ') : '未连接输入';
+  }
+  if (n.kind === 'tpms') return `${n.tpms?.surface || 'Gyroid'} · ${n.tpms?.size_x ?? 40}×${n.tpms?.size_y ?? 40}×${n.tpms?.size_z ?? 40}`;
+  if (n.kind === 'sphere') return `Ø ${(Number(n.dimensions?.[0] ?? 0) * 2).toFixed(1).replace(/\.0$/, '')} mm`;
+  if (n.kind === 'cylinder') return `R${n.dimensions?.[0] ?? 0} · H${n.dimensions?.[1] ?? 0}`;
+  if (n.kind === 'box') return `${(n.dimensions || []).slice(0, 3).join('×')} mm`;
+  if (n.kind === 'transform') return `平移 ${(n.position || [0, 0, 0]).join(', ')}`;
+  if (n.dimensions?.length) return `${n.dimensions.slice(0, 2).join('×')}`;
+  return NODE_KINDS[n.kind] || '';
+}
+
 function Numeric({ label, value, onChange, unit }) {
-  return <label className="field"><span>{label}{unit && ` / ${unit}`}</span><input type="number" step="any" aria-label={label} value={value ?? ''} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} /></label>;
+  return <label className="field"><span className="scrub-label" title="左右拖动微调数值（按住 Shift 精细微调）" onMouseDown={e => scrubNumeric(e, { value, onChange, step: 0.1 })}>{label}{unit && ` / ${unit}`}</span><input type="number" step="any" aria-label={label} value={value ?? ''} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} /></label>;
 }
 
 function ParameterField({ node, target, label, value, unit = 'mm', patch, disabled = false }) {
@@ -54,7 +102,8 @@ function ParameterField({ node, target, label, value, unit = 'mm', patch, disabl
     if (bound) delete expressions[target]; else expressions[target] = String(value ?? 0);
     patch({ expressions });
   }
-  return <ReferenceInput target={{ kind: 'number', id: node.id, field: target }} label={label} disabled={disabled} className="parameter-binding"><div className="binding-heading"><span>{label}{unit && ` / ${unit}`}</span><button type="button" disabled={disabled} className={bound ? 'binding-active' : ''} aria-label={`${label}使用表达式`} aria-pressed={bound} onClick={toggle}>fx</button></div>
+  const canScrub = !bound && !disabled;
+  return <ReferenceInput target={{ kind: 'number', id: node.id, field: target }} label={label} disabled={disabled} className="parameter-binding"><div className="binding-heading"><span className={canScrub ? 'scrub-label' : ''} title={canScrub ? '左右拖动微调数值（按住 Shift 精细微调）' : undefined} onMouseDown={canScrub ? e => scrubNumeric(e, { value, onChange: setValue, step: unit === '°' ? 1 : 0.5 }) : undefined}>{label}{unit && ` / ${unit}`}</span><button type="button" disabled={disabled} className={bound ? 'binding-active' : ''} aria-label={`${label}使用表达式`} aria-pressed={bound} onClick={toggle}>fx</button></div>
     <input aria-label={label} disabled={disabled} type={bound ? 'text' : 'number'} step="any" spellCheck={false} value={bound ? node.expressions[target] : value ?? ''}
       onChange={e => bound ? patch({ expressions: { ...node.expressions, [target]: e.target.value } }) : setValue(e.target.value === '' ? '' : Number(e.target.value))} />
     {!!blocks.length && <select aria-label={`${label}参数引用`} disabled={disabled} value={reference ? node.expressions[target] : ''} onChange={e => { const expressions = { ...node.expressions }; if (e.target.value) expressions[target] = e.target.value; else delete expressions[target]; patch({ expressions }); }}><option value="">手动输入 / 自定义 fx</option>{blocks.map(b => <option key={b.id} value={b.symbol}>{b.name} · {b.symbol} · 数值</option>)}</select>}
@@ -237,11 +286,20 @@ export default function NodeWorkflow({ scene, onChange, currentParameters, selec
       const value = id.startsWith('value:'), n = value ? blocks.find(b => `value:${b.id}` === id) : scene.nodes.find(b => b.id === id);
       const open = expanded.has(id), issue = !value && issues[id];
       const type = value ? n.kind === 'vector' ? '向量' : n.kind === 'formula' ? '公式' : '数值' : NODE_KINDS[n.kind];
-      return <li key={id} ref={el => { if (el) entries.current.set(id, el); else entries.current.delete(id); }} data-node-id={value ? undefined : id} data-value-id={value ? n.id : undefined} className={`notebook-node card-node ${selected === id ? 'selected' : ''} ${issue ? 'has-error' : ''}`}>
+      const category = value ? `value-${n.kind}` : n.kind === 'tpms' ? 'tpms' : n.kind === 'shell' ? 'operation' : ARITY[n.kind] ? 'boolean' : 'primitive';
+      const summary = !open && !issue ? cardSummaryText(n, value, scene) : '';
+      const highlightLinks = enter => {
+        for (const el of entries.current.values()) el.classList.remove('is-upstream', 'is-downstream');
+        if (!enter || value) return;
+        for (const up of (n.inputs || [])) entries.current.get(up)?.classList.add('is-upstream');
+        for (const other of scene.nodes) if (other.inputs?.includes(id)) entries.current.get(other.id)?.classList.add('is-downstream');
+      };
+      return <li key={id} ref={el => { if (el) entries.current.set(id, el); else entries.current.delete(id); }} data-node-id={value ? undefined : id} data-value-id={value ? n.id : undefined} data-category={category} className={`notebook-node card-node ${selected === id ? 'selected' : ''} ${issue ? 'has-error' : ''} ${!value && scene.root === id ? 'is-output' : ''}`} onPointerEnter={() => highlightLinks(true)} onPointerLeave={() => highlightLinks(false)}>
         <SortHeading group="notebook" id={id} onContextMenu={e => showMenu(e, id)}>
           <SortHandle group="notebook" id={id} name={n.name} />
           <button type="button" className="notebook-disclosure" aria-label={`${open ? '收起' : '展开'}${value ? '参数' : '节点'} ${n.name}`} aria-expanded={open} aria-controls={`card-${id}`} onClick={() => toggle(id)}><ChevronRight size={16} className={open ? 'expanded' : ''} aria-hidden="true" /></button>
           <button type="button" className="notebook-node-select" aria-label={`选择${value ? '参数' : '步骤'} ${n.name}`} aria-pressed={selected === id} title={type} onClick={() => select(id)}><strong>{n.name}</strong>{!value && scene.root === id && <ArrowDownToLine size={14} aria-label="最终输出" />}</button>
+          {summary && <span className="card-inline-meta" aria-hidden="true">{summary}</span>}
           {/* B1：节点状态徽标（待更新 / 计算中 / 缓存复用 / 已完成 / 失败），进度状态经 store 订阅刷新 */}
           {!value && <NodeStateBadge id={id} />}
           {!value && <button type="button" className="card-preview" aria-label={allEntities ? `${hiddenEntities.includes(id) ? '显示' : '隐藏'}实体 ${n.name}` : `预览节点 ${n.name}`} aria-pressed={allEntities ? !hiddenEntities.includes(id) : activePreviewNode === id} disabled={!available || busy || !!issue} onClick={() => allEntities ? toggleEntity(id) : previewNode(id)}><Eye size={17} aria-hidden="true" /></button>}

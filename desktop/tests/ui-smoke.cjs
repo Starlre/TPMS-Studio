@@ -15,7 +15,7 @@ async function main() {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   try {
-    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'), { timeout: 90000 });
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'), undefined, { timeout: 90000 });
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('GPU 隐式曲面'));
     assert.equal(await page.locator('.error-banner').count(), 0);
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
@@ -61,7 +61,7 @@ async function main() {
     await page.getByRole('button', { name: '新节点', exact: true }).click(); await page.locator('.node-picker .workflow-presets>summary').click();
     await page.getByRole('button', { name: '圆柱 TPMS 减流道', exact: true }).click();
     await page.getByRole('button', { name: '生成工作流', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'));
+    await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('模型已生成'), undefined, { timeout: 90000 });
     await page.waitForFunction(() => document.querySelector('.statusbar')?.textContent.includes('网格预览'));
     assert.equal(await page.getByRole('tab', { name: '仿真与网格', exact: true }).count(), 0);
     assert.equal(await page.getByRole('button', { name: '显示仿真边界', exact: true }).count(), 0);
@@ -87,7 +87,7 @@ async function main() {
     assert.equal(await page.locator('.error-banner').count(), 0);
     await page.screenshot({ path: path.join(root, 'docs', 'electron-cfd.png') });
     await page.getByRole('button', { name: '网格质量', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('dialog')?.open, { timeout: 90000 });
+    await page.waitForFunction(() => document.querySelector('dialog')?.open, undefined, { timeout: 90000 });
     assert.ok((await page.locator('.quality-summary').innerText()).includes('最小值'));
     await page.screenshot({ path: path.join(root, 'docs', 'electron-quality.png') });
     await page.getByRole('button', { name: '关闭对话框', exact: true }).click();

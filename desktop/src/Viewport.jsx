@@ -33,8 +33,12 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
 
   useEffect(() => {
     let renderer;
-    try { renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' }); }
-    catch (e) { setFailed(true); errorCallback.current('无法启动 WebGL 三维预览，请检查显卡驱动。' + e.message); return; }
+    try { renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, alpha: true, powerPreference: 'high-performance' }); }
+    catch {
+      try { renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, alpha: true }); }
+      catch (e) { setFailed(true); errorCallback.current('无法启动 WebGL 三维预览，请检查显卡驱动。' + e.message); return; }
+    }
+    renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -276,8 +280,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
       setMeasurement(value, armed) { measurePoints = value; picking = armed; updateMarkers(); },
       zoom: factor => { camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target); controls.update(); schedule(); },
       setTheme(value) {
-        // 视口背景与 native.css 的 --viewport 同源（此前 JS 硬编码 #171e27，与 CSS token 不一致）
-        light = value === 'light'; scene.background = new THREE.Color(light ? OVERLAY_COLORS.viewport.light : OVERLAY_COLORS.viewport.dark);
+        // 视口画布保持透明，透出 CSS .viewport 的工作室径向渐变舞台背景
+        light = value === 'light'; scene.background = null;
         if (mesh && !mesh.material.vertexColors) mesh.material.color.set(light ? MODEL_COLOR.light : MODEL_COLOR.dark);
         if (grid) grid.material.opacity = light ? 0.24 : 0.16;
         if (rayMaterial) rayMaterial.uniforms.u_lightBg.value = light ? 1 : 0;
