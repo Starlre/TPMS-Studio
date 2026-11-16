@@ -330,11 +330,28 @@ function App() {
   const viewGeometry = layoutActive ? null : displayGeometry;
   const hasView = layoutActive ? !!visibleObjects?.length : !!displayGeometry;
   const layoutPending = layoutActive && layoutScene.signature !== sceneSignature && !!scene.nodes.length;
-  function showAllEntities() { setAllEntities(true); setHiddenEntities([]); setPreviewResult(null); setInspectorTab('model'); resetInspection(); }
+  const infillHiddenRef = useRef(new Set());
+  const infillConsumeKey = n => (n.kind === 'tpms_infill' && n.inputs?.[0]) ? `${n.id}:${n.inputs[0]}` : '';
+  function showAllEntities() {
+    const infillInputs = scene.nodes.filter(n => n.kind === 'tpms_infill' && n.inputs?.[0]).map(n => n.inputs[0]);
+    infillHiddenRef.current = new Set(scene.nodes.map(infillConsumeKey).filter(Boolean));
+    setAllEntities(true); setHiddenEntities([...new Set(infillInputs)]); setPreviewResult(null); setInspectorTab('model'); resetInspection();
+  }
   function toggleEntity(id) { setHiddenEntities(old => old.includes(id) ? old.filter(value => value !== id) : [...old, id]); }
   useEffect(() => { if (layoutActive) { setInspectorTab('model'); resetInspection(); } }, [layoutActive]);
   useEffect(() => {
-    setHiddenEntities(old => { const next = old.filter(id => scene.nodes.some(node => node.id === id)); return next.length === old.length ? old : next; });
+    const keys = scene.nodes.map(infillConsumeKey).filter(Boolean);
+    const newlyHidden = [];
+    for (const n of scene.nodes) {
+      const k = infillConsumeKey(n);
+      if (k && !infillHiddenRef.current.has(k)) newlyHidden.push(n.inputs[0]);
+    }
+    infillHiddenRef.current = new Set(keys);
+    setHiddenEntities(old => {
+      const valid = old.filter(id => scene.nodes.some(node => node.id === id));
+      const merged = newlyHidden.length ? [...new Set([...valid, ...newlyHidden])] : valid;
+      return merged.length === old.length && merged.every((v, i) => v === old[i]) ? old : merged;
+    });
   }, [scene.nodes]);
   useEffect(() => {
     if (!layoutActive || !info?.libfive || !scene.nodes.length || layoutRunning.current || busy || layoutAttempt.current === sceneSignature) return;
@@ -411,7 +428,7 @@ function App() {
     setMode(r.project.mode === 'solid' ? 'nodes' : r.project.mode); setP({ ...DEFAULT, ...r.project.parameters }); setCfd({ ...CFD, ...r.project.cfd });
     sceneHistory.current = { undo: [], redo: [] };
     setNodeStates({}); setValueOutputs({}); setCacheSummary(''); autoAttempt.current = '';
-    setAllEntities(true); setScene(r.project.scene || emptyScene()); setSelected(r.project.scene?.root || ''); setInspectorTab('model'); invalidate(); clearPreview();
+    setAllEntities(true); infillHiddenRef.current = new Set(); setScene(r.project.scene || emptyScene()); setSelected(r.project.scene?.root || ''); setInspectorTab('model'); invalidate(); clearPreview();
     setMessage('项目已打开，点击生成模型更新预览');
   }
   async function exportModel() {

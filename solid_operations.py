@@ -384,6 +384,13 @@ def operation_bounds(scene, node, cache, rotation_matrix):
     return bounds
 
 
+def _smooth_join(op, a, b, width, mode='min'):
+    h = op('max', width - op('abs', a - b), 0) / width
+    if mode == 'min':
+        return op('min', a, b) - h ** 2 * (width / 4)
+    return op('max', a, b) + h ** 2 * (width / 4)
+
+
 def operation_tree(arena, scene, node, source, coords, rotation_matrix):
     op, d, options = arena.op, node.dimensions, node.operation
     if node.kind == 'shell':
@@ -416,7 +423,9 @@ def operation_tree(arena, scene, node, source, coords, rotation_matrix):
             periods=(unit_size, unit_size, unit_size),
         )
         if skin_thickness <= 0:
-            return op('max', tpms_field, source)
+            # Micro-fillet intersection relieves grazing Dual Contouring pinch seams cleanly.
+            k_crop = max(1e-3, min(0.35, unit_size * 0.05))
+            return _smooth_join(op, tpms_field, source, k_crop, 'max')
         cap_planes = _opening_planes(coords, src_bounds, openings, skin_thickness) if openings else []
         capped_source = source
         for plane in cap_planes:
@@ -431,8 +440,7 @@ def operation_tree(arena, scene, node, source, coords, rotation_matrix):
         for plane in cap_planes:
             core_clip = op('max', core_clip, plane)
         core_tree = op('max', tpms_field, core_clip)
-        h = op('max', join_blend - op('abs', shell_tree - core_tree), 0) / join_blend
-        joined = op('min', shell_tree, core_tree) - h ** 2 * (join_blend / 4)
+        joined = _smooth_join(op, shell_tree, core_tree, join_blend, 'min')
         return op('max', joined, capped_source)
     if node.kind == 'offset':
         return source - float(d[0])

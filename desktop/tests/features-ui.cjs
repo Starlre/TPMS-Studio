@@ -141,6 +141,11 @@ async function main() {
     await page.getByRole('tab', { name: 'TPMS 节点', exact: true }).click();
     await ribbon.getByRole('button', { name: 'TPMS 填充', exact: true }).click(); // n2
     assert.equal(await editor('n2').getByLabel('单胞尺寸', { exact: true }).inputValue(), '8');
+    // Auto-hiding consumed source n1 avoids coplanar layout Z-fighting.
+    await page.waitForFunction(() => document.querySelector('.viewport-context')?.textContent.includes('1 个可见'), undefined, { timeout: 30000 });
+    await page.getByRole('button', { name: '生成工作流', exact: true }).click();
+    await done('模型已生成');
+    assert.match((await page.locator('.metrics').allTextContents()).join(' '), /封闭 \/ 水密/);
     await editor('n2').getByLabel('保留外蒙皮外壳（向内抽壳 + 内芯填充）', { exact: true }).check();
     assert.equal(await editor('n2').getByLabel('外蒙皮壁厚', { exact: true }).inputValue(), '1.2');
     assert.equal(await editor('n2').getByLabel('接壁平滑融合', { exact: true }).inputValue(), '0.5');

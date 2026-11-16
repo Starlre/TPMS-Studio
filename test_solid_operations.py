@@ -377,3 +377,14 @@ def test_tpms_infill_watertight_pure_and_sandwich_modes():
            tpms=TPMSParameters(surface='Primitive', mode='sheet', target_porosity=0.68, samples_per_cell=20))
     por = generate_solid(s3).mesh
     assert por.is_watertight and 0.15 * 16**3 < por.volume < 0.55 * 16**3
+
+    # Default pure infills on cylinder, box, and sphere stay watertight without floating corner debris.
+    for kind, dims in (('cylinder', (6.0, 24.0)), ('box', (16.0, 16.0, 16.0)), ('sphere', (8.0,))):
+        s_def = SolidScene(cell_size=.3)
+        prim = s_def.add(kind, dimensions=dims)
+        s_def.add('tpms_infill', inputs=(prim.id,), dimensions=(8.0, 0.0, 0.0),
+                  tpms=TPMSParameters(surface='Gyroid', mode='sheet', thickness=1.2, samples_per_cell=64))
+        m_def = generate_solid(s_def).mesh
+        assert m_def.is_watertight and m_def.is_winding_consistent and m_def.volume > 0
+        if kind == 'box':
+            assert m_def.body_count == 1

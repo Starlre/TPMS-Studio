@@ -178,3 +178,18 @@ def test_libfive_export_ui_state_and_worker_failure(tmp_path, monkeypatch):
     assert not (tmp_path / "out.stl").exists()
     window.close()
     application.processEvents()
+
+
+def test_split_pinch_manifolds_repairs_edge_pinches_without_hiding_open_holes():
+    import trimesh
+    a = trimesh.creation.box(extents=[2.0, 2.0, 2.0], transform=trimesh.transformations.translation_matrix([1.0, 1.0, 0.0]))
+    b = trimesh.creation.box(extents=[2.0, 2.0, 2.0], transform=trimesh.transformations.translation_matrix([-1.0, -1.0, 0.0]))
+    pinched = trimesh.util.concatenate([a, b])
+    pinched.merge_vertices()
+    assert not pinched.is_watertight
+    repaired = backend._split_pinch_manifolds(pinched)
+    assert repaired.is_watertight and repaired.volume == pytest.approx(16.0, rel=1e-6)
+
+    open_box = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+    open_box.update_faces(np.arange(len(open_box.faces) - 1))
+    assert not backend._split_pinch_manifolds(open_box).is_watertight

@@ -102,6 +102,8 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
         item.material.transparent = layoutTranslucent;
         item.material.opacity = layoutTranslucent ? chosen ? 0.72 : 0.42 : 1;
         item.material.depthWrite = !layoutTranslucent;
+        item.material.polygonOffsetFactor = chosen ? -1 : 0;
+        item.material.polygonOffsetUnits = chosen ? -1 : 0;
         for (const edge of item.children) { edge.material.color.set(layoutColor(item.userData.id)); edge.material.opacity = chosen ? 0.85 : 0.65; }
       }
       schedule();
@@ -310,7 +312,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
           sourceGeometry.setAttribute('position', new THREE.BufferAttribute(typed(item.geometry.positions, Float32Array), 3));
           sourceGeometry.setIndex(new THREE.BufferAttribute(typed(item.geometry.indices, Uint32Array), 1));
           const geometry = createDisplayGeometry(sourceGeometry); sourceGeometry.dispose();
-          const object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ ...LAYOUT_MATERIAL, side: THREE.DoubleSide, wireframe: wires }));
+          const object = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ ...LAYOUT_MATERIAL, side: THREE.DoubleSide, wireframe: wires, polygonOffset: true }));
           object.userData.id = item.id;
           const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 30), new THREE.LineBasicMaterial({ transparent: true }));
           object.add(edge); scene.add(object); layoutMeshes.push(object);

@@ -152,6 +152,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-107 | 通用特征工具与放开抽壳/偏置/平滑布尔限制 | 26-11-16 11:32:00：P0（偏置/平滑差集/镜像/线性与圆周阵列/多方向增强抽壳）、P1（一阶/归一化SDF放开抽壳与偏置）、P2（放开平滑融合/差集限制） | 已完成 |
 | R-108 | 默认启动切换为白天/亮色背景 | 26-11-16 11:43:00：Electron 窗口与首屏 `data-theme="light"`、`alabaster-light-v1` 配置迁移及端到端测试更新 | 已完成 |
 | R-109 | 一键 TPMS 填充节点 | 26-11-16 13:52:00：`tpms_infill` 复合节点，包围盒/单胞自动对齐、可选外蒙皮抽壳/平滑接壁与多方向开口 | 已完成 |
+| R-110 | 修复填充破面、碎角碎片与 Z-fighting 预览重影 | 26-11-16 14:34:00：边界微倒圆裁剪、`libfive` 捏合棱拓扑拆分、小碎块清理与自动隐藏被填充上游实体 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -642,6 +643,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - 在前端 [node_graph.mjs](desktop/src/node_graph.mjs)、[NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx)（自动隐藏手动尺寸/周期输入框，提供“保留外蒙皮外壳”开关与 `OpeningsGrid` 外壳开口面选择器）与 [main.jsx](desktop/src/main.jsx)（`操作 → 特征与阵列` 及 `TPMS 节点 → 加入实体工作流` Ribbon 入口）打通全流程与参数引用同步。
 - 涉及文件：`libfive_backend.py`、`solid_operations.py`、`solid_model.py`、`desktop/src/node_graph.mjs`、`desktop/src/NodeWorkflow.jsx`、`desktop/src/main.jsx`、`test_solid_operations.py`、`desktop/tests/solid-operations.test.cjs`、`desktop/tests/features-ui.cjs`、`docs/electron-tpms-infill-light.png`（及测试刷新的 `docs/*.png`）。
 - 验证：Python 全套 6 个测试文件 `151 passed`（覆盖偏移椭球纯填充、偏移圆台开孔夹芯填充、柱体无鼓包平滑接壁与孔隙率反求校准）；`npm test` `26/26` 通过；Electron UI 测试 `operations-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`notebook-ntop-ui.cjs` 通过，随后调整 [NodeWorkflow.jsx](desktop/src/NodeWorkflow.jsx) 中 `外壳开口面` 网格排版后重新执行 `npx vite build` 与 `features-ui.cjs` 通过，并检查截图 [electron-tpms-infill-light.png](docs/electron-tpms-infill-light.png) 确认 UI 排版与柱体夹芯填充模型水密无误。
+- 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
+
+### R-110：26-11-16 14:34:00（Asia/Shanghai），修复 TPMS 填充破面、角部碎片与多实体预览 Z-fighting
+
+- 需求与原因：用户反馈填充存在破面。排查定位到三处根因：① `全部实体` 布局预览同时显示上游实体与共面 `TPMS 填充`，引发严重的共面 Z-fighting 撕裂条纹；② 默认 `16x16x16` 长方体纯填充在角部存在 2 处 36 面（`0.143 mm³`，占总量万分之 `0.8`）微小悬浮角块未被原 `1e-4` 面数下限清掉；③ `libfive` Dual Contouring 在默认圆柱（`R=6, H=24`）及部分曲面边界相切处产生 `180°` 零厚度捏合折边（4 面共边），导致法向互消暗斑或封闭性检查失败。
+- 实现：
+  - 在 [solid_operations.py](solid_operations.py) 提取共享 `_smooth_join`，将 `tpms_infill` 无外蒙皮纯填充的裁剪从锐角 `max` 升级为边界微平滑交集（`k_crop = max(1e-3, min(0.35, unit_size * 0.05))`），直接舒缓曲面切线交界畸变且保持外轮廓不外凸。
+  - 在 [libfive_backend.py](libfive_backend.py) 新增 `_split_pinch_manifolds`（仅针对偶重数非流形捏合边按法向匹配重连顶伞并复制共用顶点，遇到真实奇重/开孔边缘绝不掩盖），并将 `render_tree_mesh` 的悬浮碎块清理阈值提升为 `(1e-3, 5e-4)`（保留全部负体积内腔与多实体阵列）。
+  - 在 [desktop/src/main.jsx](desktop/src/main.jsx) 新增 `tpms_infill` 上游被消费实体的自动隐藏逻辑（用户仍可在卡片或视口随时手动重新点亮对比），并在 [desktop/src/Viewport.jsx](desktop/src/Viewport.jsx) 为布局网格启用 `polygonOffset` 深度防闪。
+- 涉及文件：`libfive_backend.py`、`solid_operations.py`、`desktop/src/Viewport.jsx`、`desktop/src/main.jsx`、`test_libfive_backend.py`、`test_solid_operations.py`、`desktop/tests/features-ui.cjs`（及实机测试更新的 `docs/*.png`）。
+- 验证：Python 全套 6 个测试文件 `152 passed`（新增默认圆柱/球体/长方体纯填充水密与 `body_count == 1` 无悬浮角块回归，及捏合棱拆解/真开孔不掩盖单测）；前端 `npx vite build` 通过；`npm test` `26/26` 通过；Electron UI 全部 7 项端到端测试（`features-ui.cjs`、`operations-ui.cjs`、`ribbon-ui.cjs`、`ui-smoke.cjs`、`notebook-cards.cjs`、`workflow-drag-ui.cjs`、`notebook-ntop-ui.cjs`）全通过，零页面错误；视觉检查确认长方体布局与生成成品无 Z-fighting 与悬浮碎角。
 - 状态：已完成实现与验证，提交至 `完善建模功能和UI分支`。
 
 ## 5. 技术约定

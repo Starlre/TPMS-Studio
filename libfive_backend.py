@@ -6,6 +6,7 @@ are owned explicitly and released even if evaluation / validation fails.
 from __future__ import annotations
 
 import ast
+from collections import defaultdict
 import ctypes as ct
 import math
 import os
@@ -357,6 +358,76 @@ def generate_libfive_mesh(parameters: TPMSParameters, cell_size: float,
         return MeshResult(render_tree_mesh(kernel, tree, region, cell_size), p)
 
 
+def _split_pinch_manifolds(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Split even-multiplicity non-manifold pinch edges into 2-manifold fans."""
+    _, cnt = np.unique(mesh.edges_sorted, axis=0, return_counts=True)
+    if not np.any(cnt > 2) or np.any(cnt % 2 != 0):
+        return mesh
+    faces = mesh.faces.copy()
+    fnorms = mesh.face_normals
+    edge_faces = defaultdict(list)
+    for fi, tri in enumerate(faces):
+        for k in range(3):
+            a, b = int(tri[k]), int(tri[(k + 1) % 3])
+            edge_faces[(min(a, b), max(a, b))].append((fi, a < b))
+    vert_adj = defaultdict(lambda: defaultdict(list))
+    for (a, b), inc in edge_faces.items():
+        if len(inc) == 2:
+            (f1, s1), (f2, s2) = inc
+            if s1 == s2:
+                return mesh
+            pairs = [(f1, f2)]
+        else:
+            fwd = [fi for fi, s in inc if s]
+            bwd = [fi for fi, s in inc if not s]
+            if len(fwd) != len(bwd):
+                return mesh
+            pairs, used_f = [], set()
+            candidates = sorted(
+                ((float(np.dot(fnorms[f1], fnorms[f2])), f1, f2) for f1 in fwd for f2 in bwd),
+                reverse=True,
+            )
+            for _, f1, f2 in candidates:
+                if f1 not in used_f and f2 not in used_f:
+                    used_f.add(f1)
+                    used_f.add(f2)
+                    pairs.append((f1, f2))
+            if len(pairs) != len(fwd):
+                return mesh
+        for f1, f2 in pairs:
+            vert_adj[a][f1].append(f2)
+            vert_adj[a][f2].append(f1)
+            vert_adj[b][f1].append(f2)
+            vert_adj[b][f2].append(f1)
+    vert_faces = defaultdict(list)
+    for fi, tri in enumerate(faces):
+        for v in tri:
+            vert_faces[int(v)].append(fi)
+    verts = list(mesh.vertices)
+    for v, flist in vert_faces.items():
+        seen, fans, adj = set(), [], vert_adj[v]
+        for start in flist:
+            if start in seen:
+                continue
+            comp, stack = [], [start]
+            seen.add(start)
+            while stack:
+                cur = stack.pop()
+                comp.append(cur)
+                for nxt in adj[cur]:
+                    if nxt not in seen:
+                        seen.add(nxt)
+                        stack.append(nxt)
+            fans.append(comp)
+        if len(fans) > 1:
+            for comp in fans[1:]:
+                new_v = len(verts)
+                verts.append(verts[v].copy())
+                for fi in comp:
+                    faces[fi][faces[fi] == v] = new_v
+    return trimesh.Trimesh(vertices=np.asarray(verts), faces=faces, process=False)
+
+
 def render_tree_mesh(kernel: NativeKernel, tree: _Tree, region: _Region,
                      cell_size: float) -> trimesh.Trimesh:
     """Extract a closed native expression; the caller owns the tree arena."""
@@ -377,10 +448,13 @@ def render_tree_mesh(kernel: NativeKernel, tree: _Tree, region: _Region,
         raise ValueError("libfive 返回了无效网格，未导出文件。")
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
     mesh.remove_unreferenced_vertices()
+    mesh = _split_pinch_manifolds(mesh)
     # Inner cavity boundaries have negative signed volume; do not flip each
     # disconnected surface outward, which would turn voids into solid bodies.
     mesh.fix_normals(multibody=False)
-    mesh, _components, _removed = remove_tiny_components(mesh)
+    mesh, _components, _removed = remove_tiny_components(
+        mesh, relative_face_limit=1e-3, relative_volume_limit=5e-4,
+    )
     if not mesh.is_watertight or not mesh.is_winding_consistent or mesh.volume <= 0:
         raise ValueError("libfive 网格未通过封闭性检查；请减小网格尺寸，或使用现有网格内核导出。")
     return mesh
