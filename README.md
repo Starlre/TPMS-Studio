@@ -4,6 +4,8 @@
 
 TPMS Studio 是一款本地工程桌面软件（Electron + React + Three.js + Python / `libfive`），专注于 **TPMS 三周期极小曲面**、**隐式实体与特征建模**、**外部 CAD/网格共形填充**、**三维剖切测量**以及 **3D 打印 / FEA / CFD 网格导出**。
 
+> 典型应用：轻量化点阵结构 · 散热/换热器流道 · 鞋中底与生物多孔支架 · 科研 FEA/CFD 前处理
+
 ![TPMS Studio：浅灰白工作台与 Gyroid GPU 隐式曲面预览](docs/electron-tpms-light.png)
 
 [快速开始](#快速开始) · [在线 3D 预览](https://starlre.github.io/TPMS-Studio/) · [模型画廊](docs/model-gallery.md) · [节点建模](docs/node-modeling.md) · [剖切与测量](docs/inspection.md) · [更新日志](CHANGELOG.md)
@@ -18,9 +20,12 @@ TPMS Studio 是一款本地工程桌面软件（Electron + React + Three.js + Py
 
 使用`圆柱`中心轮毂与`圆角方盒`斜置翼片做**六叶圆周阵列**并**平滑融合**，再通过**一键 `TPMS 填充`**生成带平滑接壁外蒙皮的内部 Gyroid 晶格；在`剖切与测量`中围绕模型中心旋转 **`32°`** 斜切，直观查看内部多孔流道、材料截面面积与包围盒尺寸。
 
-![六叶圆周阵列平滑涡轮与 Gyroid 内部填充](docs/showcase-turbine-infill-light.png)
-
-![围绕模型中心 32° 斜切揭示内部 Gyroid 晶格](docs/showcase-turbine-section-light.png)
+<table>
+  <tr>
+    <td align="center"><img src="docs/showcase-turbine-infill-light.png" alt="六叶圆周阵列平滑涡轮与 Gyroid 内部填充" /><br/><sub>完整外观（圆周阵列 + 平滑融合 + Gyroid 填充）</sub></td>
+    <td align="center"><img src="docs/showcase-turbine-section-light.png" alt="围绕模型中心 32° 斜切揭示内部 Gyroid 晶格" /><br/><sub>围绕模型中心 32° 斜切揭示内部晶格与包围盒</sub></td>
+  </tr>
+</table>
 
 [打开示例项目](examples/showcase/radial-turbine-infill.json)
 
@@ -74,9 +79,9 @@ Windows 也可直接双击 `run_tpms.bat` 或 `启动Electron.cmd` 启动桌面�
 
 ## 在线 3D 预览（GitHub Pages）
 
-[![TPMS Studio 在线工作台：浅灰白主题 Gyroid 双法兰结构三维预览](docs/model-preview-light.png)](https://starlre.github.io/TPMS-Studio/)
+[![TPMS Studio 在线工作台：纯白背景 Gyroid 双法兰结构三维预览](docs/model-preview-light.png)](https://starlre.github.io/TPMS-Studio/)
 
-打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 可在浏览器中直接交互查看 Gyroid 双法兰结构（支持旋转缩放、亮/暗主题切换、线框、任意法向剖切、两点测量与原始 STL / 项目 JSON 下载；建模编辑与计算请在桌面软件中完成）。
+打开 [在线工作台](https://starlre.github.io/TPMS-Studio/) 可在浏览器中直接交互查看 Gyroid 双法兰结构（支持纯白/暗色主题切换、旋转缩放、线框、任意法向与围绕模型中心旋转剖切、两点测量及原始 STL / 项目 JSON 下载；建模编辑与计算请在桌面软件中完成）。
 
 ---
 
