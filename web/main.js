@@ -197,9 +197,9 @@ class ModelViewer {
   }
   setTheme(light) {
     this.light = light; document.documentElement.dataset.theme = light ? 'light' : 'dark';
-    this.scene.background = new THREE.Color(light ? '#e8eef4' : '#171e27');
+    this.scene.background = new THREE.Color(light ? '#ffffff' : '#0b0d12');
     if (this.mesh) this.mesh.material.color.set(light ? MODEL_COLOR.light : MODEL_COLOR.dark);
-    document.querySelector('meta[name="theme-color"]').content = light ? '#eef2f6' : '#1b222c';
+    document.querySelector('meta[name="theme-color"]').content = light ? '#ffffff' : '#121419';
     if (this.grid) this.grid.material.opacity = light ? 0.24 : 0.16;
     if (this.cutCap) this.cutCap.material.color.set(light ? '#b96b2c' : '#ffb65f');
     if (this.cutLines) this.cutLines.material.color.set(light ? '#9b460d' : '#ffbe7e');
@@ -234,7 +234,13 @@ class ModelViewer {
     this.section = next; this.sectionId++; this.pickId++; clearTimeout(this.sectionTimer); this.clearCut(); this.clearMeasurement();
     delete this.host.dataset.sectionReady; $('section-statistics').replaceChildren();
     $('cut-enabled').checked = next.enabled; $('section-toggle').checked = next.enabled; $('cut-offset').value = next.offset; this.syncRange();
-    $('normal-fields').hidden = next.axis !== 'custom'; $('renderer-label').textContent = next.enabled ? '剖切网格预览' : '网格预览';
+    $('normal-fields').hidden = next.axis !== 'custom';
+    $('cut-rotate').hidden = next.axis === 'custom';
+    const angles = next.angles || [0, 0, 0];
+    for (const [idx, axis] of ['x', 'y', 'z'].entries()) {
+      $(`cut-r${axis}`).value = angles[idx]; $(`cut-r${axis}-slider`).value = angles[idx];
+    }
+    $('renderer-label').textContent = next.enabled ? '剖切网格预览' : '网格预览';
     if (!this.mesh) return;
     const normal = new THREE.Vector3(...planeNormal(next)).multiplyScalar(next.positive ? 1 : -1);
     this.mesh.material.clippingPlanes = next.enabled ? [new THREE.Plane(normal,next.positive ? -next.offset : next.offset)] : [];
@@ -348,7 +354,24 @@ async function start() {
   $('wireframe').onchange = event => viewer.setWire(event.target.checked);
   $('grid-toggle').onchange = event => { viewer.grid.visible = event.target.checked; viewer.schedule(); };
   for (const id of ['section-toggle','cut-enabled']) $(id).onchange = event => { if (event.target.checked) showInspector(true); viewer.setSection({...viewer.section,enabled:event.target.checked}); };
-  $('cut-axis').onchange = event => viewer.setSection({...viewer.section,axis:event.target.value,offset:0});
+  $('cut-axis').onchange = event => viewer.setSection({...viewer.section,axis:event.target.value,angles:[0,0,0],offset:0});
+  for (const [idx, axis] of ['x','y','z'].entries()) {
+    const updateAngle = raw => {
+      const value = raw === '' ? 0 : Math.min(180, Math.max(-180, Number(raw)));
+      if (!Number.isFinite(value)) return;
+      const angles = [...(viewer.section.angles || [0,0,0])]; angles[idx] = value;
+      const next = {...viewer.section, angles};
+      const offset = viewer.bounds ? (() => { const r = planeRange([viewer.bounds.min.toArray(),viewer.bounds.max.toArray()],planeNormal(next)); return Number(((r[0]+r[1])/2).toFixed(6)); })() : viewer.section.offset;
+      viewer.setSection({...next, offset});
+    };
+    $(`cut-r${axis}`).oninput = event => updateAngle(event.target.value);
+    $(`cut-r${axis}-slider`).oninput = event => updateAngle(event.target.value);
+  }
+  $('cut-rotate-reset').onclick = () => {
+    const next = {...viewer.section, angles:[0,0,0]};
+    const offset = viewer.bounds ? (() => { const r = planeRange([viewer.bounds.min.toArray(),viewer.bounds.max.toArray()],planeNormal(next)); return Number(((r[0]+r[1])/2).toFixed(6)); })() : viewer.section.offset;
+    viewer.setSection({...next, offset});
+  };
   for (const id of ['normal-x','normal-y','normal-z']) $(id).oninput = () => viewer.setSection({...viewer.section,normal:['normal-x','normal-y','normal-z'].map(axis => $(axis).value === '' ? NaN : Number($(axis).value))});
   $('cut-offset').oninput = event => viewer.setSection({...viewer.section,offset:event.target.value === '' ? NaN : Number(event.target.value)});
   $('cut-slider').oninput = event => viewer.setSection({...viewer.section,offset:Number(event.target.value)});

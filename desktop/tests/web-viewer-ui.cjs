@@ -58,7 +58,7 @@ async function main() {
     await page.locator('.node-card').first().locator('summary').click();
     assert.match(await page.locator('.node-card').first().innerText(),/1\.4 mm/);
     assert.deepEqual(await page.getByRole('tab').allTextContents(),['建模','操作','TPMS 节点','参数与公式','检查与测量']);
-    for (const label of ['创建球体','创建长方体','创建圆柱','创建圆环','添加并集','添加交集','添加差集','添加平滑融合','独立变换','复制实体','撤销编辑','重做编辑']) {
+    for (const label of ['创建球体','创建长方体','创建圆柱','创建圆环','添加并集','添加交集','添加差集','添加平滑融合','添加平滑差集','导入外部实体','独立变换','复制实体','撤销编辑']) {
       assert.ok(await page.getByRole('button',{name:label,exact:true}).isVisible());
       assert.ok(await page.getByRole('button',{name:label,exact:true}).isDisabled());
     }
@@ -68,9 +68,9 @@ async function main() {
     assert.equal(await page.getByRole('button',{name:'切除',exact:true}).count(),0);
     const operations = page.getByRole('region',{name:'操作选项',exact:true});
     await page.getByRole('button',{name:'展开操作选项',exact:true}).click();
-    assert.equal(await operations.locator('.palette-item').count(),1);
+    assert.equal(await operations.locator('.palette-item').count(),5);
     assert.equal(await operations.getByRole('button',{name:'抽壳',exact:true}).getAttribute('aria-disabled'),'true');
-    await page.keyboard.press('End');assert.equal(await page.locator(':focus').getAttribute('aria-label'),'抽壳');
+    await page.keyboard.press('End');assert.equal(await operations.getByRole('button',{name:'圆周阵列',exact:true}).getAttribute('aria-label'),'圆周阵列');
     await capture('web-operations-palette-dark.png');
     await page.keyboard.press('Escape');assert.ok(await operations.isHidden());
     assert.equal(await page.locator(':focus').getAttribute('aria-label'),'展开操作选项');
@@ -118,7 +118,7 @@ async function main() {
     await openPalette(); assert.equal(await palette.locator('.palette-item').count(),11); await page.keyboard.press('Escape');
     await page.getByRole('tab',{name:'操作',exact:true}).click();
     await page.getByRole('button',{name:'展开操作选项',exact:true}).click();
-    assert.equal(await operations.locator('.palette-item').count(),1);await page.keyboard.press('Escape');
+    assert.equal(await operations.locator('.palette-item').count(),5);await page.keyboard.press('Escape');
     await page.getByRole('tab',{name:'建模',exact:true}).click();
     await page.getByRole('button',{name:'切换暗色主题',exact:true}).click();
     await page.getByLabel('线框',{exact:true}).check(); await page.getByLabel('线框',{exact:true}).uncheck();

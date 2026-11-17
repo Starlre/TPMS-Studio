@@ -9,14 +9,14 @@ const group = (label, tools) => ({ label, tools });
 const categories = [
   { id:'model', label:'建模', modes:['nodes'], groups:[
     {...group('基本体',PRIMITIVES.map(item => tool(`创建${item.name}`,null,{primitive:item.kind}))),palette:true},
-    group('布尔与融合', [['并集','merge'],['交集','intersection'],['差集','minus'],['平滑融合','sparkles']].map(([label,icon]) => tool(`添加${label}`,icon))),
-    group('节点操作', [tool('独立变换','move'),tool('复制实体','copy'),tool('撤销编辑','undo'),tool('重做编辑','redo')]),
+    group('布尔与融合', [['并集','merge'],['交集','intersection'],['差集','minus'],['平滑融合','sparkles'],['平滑差集','minus']].map(([label,icon]) => tool(`添加${label}`,icon))),
+    group('节点操作', [tool('导入外部实体','box'),tool('独立变换','move'),tool('复制实体','copy'),tool('撤销编辑','undo')]),
   ]},
   { id:'operations', label:'操作', modes:['nodes'], groups:[
-    {...group('操作',[tool('抽壳','box')]),palette:true,paletteId:'solid-operation-palette'},
+    {...group('操作',[tool('抽壳','box'),tool('偏置','sparkles'),tool('镜像','copy'),tool('线性阵列','sliders'),tool('圆周阵列','rotate')]),palette:true,paletteId:'solid-operation-palette'},
   ]},
   { id:'tpms', label:'TPMS', groups:[], modeGroups:{
-    nodes:[group('加入实体工作流',[tool('添加 TPMS','wave'),tool('添加隐式公式','formula')])],
+    nodes:[group('加入实体工作流',[tool('添加 TPMS','wave'),tool('一键 TPMS 填充','wave'),tool('添加隐式公式','formula')])],
     tpms:[group('TPMS 参数编辑',[tool('曲面与尺寸','layers',{navigate:'geometry'}),tool('壁厚与孔隙率','sliders',{navigate:'structure'}),tool('自定义曲面','formula')])],
   }},
   { id:'values', label:'参数与公式', modes:['nodes'], groups:[
@@ -25,6 +25,7 @@ const categories = [
   ]},
   { id:'inspect', label:'检查与测量', groups:[
     group('分析工具',[tool('打开剖切工具','scan',{action:'section'}),tool('开始两点测量','ruler',{action:'measure'}),tool('查看模型信息','activity',{action:'info'})]),
+    group('结构体网格 (FEA)',[tool('划分 FEA 体网格','activity'),tool('高亮低质量单元','activity'),tool('导出 FEA 体网格','download')]),
     group('显示与视角',[tool('线框显示','grid',{action:'wire',pressed:false}),tool('恢复整体视角','scan',{action:'fit'}),...['X','Y','Z'].map(axis => tool(`${axis} 方向观察`,'eye',{view:axis}))]),
   ]},
   { id:'cfd', label:'仿真与网格', modes:['tpms'], groups:[
@@ -37,8 +38,14 @@ export function createWorkbench(showInspector) {
   const palette = createPrimitivePalette();
   const operationPalette = createPrimitivePalette({
     id:'solid-operation-palette', label:'操作',
-    items:[{name:'抽壳',label:'抽壳',icon:'box',hint:'向内壁厚与开口方向；先抽壳，再布尔或填充'}],
-    footer:'界面展示模式 · 抽壳创建与计算请使用桌面 App',
+    items:[
+      {name:'抽壳',label:'抽壳',icon:'box',hint:'向内、向外或对称等壁厚抽壳，支持多向开口与任意上游实体'},
+      {name:'偏置',label:'偏置',icon:'sparkles',hint:'对基本体或组合做等距膨胀或收缩'},
+      {name:'镜像',label:'镜像',icon:'copy',hint:'沿坐标平面对称镜像复制或翻转'},
+      {name:'线性阵列',label:'线性阵列',icon:'sliders',hint:'按 XYZ 数量与步距生成多份阵列'},
+      {name:'圆周阵列',label:'圆周阵列',icon:'rotate',hint:'绕 X/Y/Z 轴按数量与总角度圆周阵列'},
+    ],
+    footer:'界面展示模式 · 特征操作创建与计算请使用桌面 App',
   });
   const closePalettes = () => {palette.close();operationPalette.close();};
   let mode = 'nodes', active = 'model';
