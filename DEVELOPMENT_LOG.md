@@ -162,6 +162,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-119 | 解锁 `libfive` 原生多线程并行表面提取 | 26-11-17 13:18:00：默认接入 `libfive_tree_render_mesh` 多线程 FFI（支持 `TPMS_LIBFIVE_SINGLE_THREAD=1` 与单线程自动回退），`0.15 mm` 球体填充 C++ 提取 `11.61s → 1.72–2.10s` | 已完成 |
 | R-120 | 内置 TPMS 解析偏导数与 1D 拓扑检查提速 | 26-11-17 13:51:00：`_builtin_field_and_grad` 消除 6 次 `remap`、`uint64` 1D 边编码合并 `trimesh` 重复扫描，`0.15 mm` 端到端降至 `1.187s`（累计提速约 11×） | 已完成 |
 | R-121 | 提升高分屏视口锐度并新增“超精 0.08 mm”预设 | 26-11-17 14:00:00：视口 DPR 上限 `1.5 → 2.0` 且跨屏同步，`MESH_PRESETS` 新增 `超精 0.08 mm` 及四列紧凑布局 | 已完成 |
+| R-122 | 剖切新增围绕模型中心任意角度旋转 | 26-11-17 14:17:00：`planeNormal` 支持 XYZ 欧拉角旋转，`InspectionPanel` 新增 `绕 X/Y/Z` (`-180°~180°`) 与`归零`，自动保持剖切面穿过包围盒 3D 中心 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -782,6 +783,17 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - **新增 `超精 0.08 mm` 预设与四列排版**：[`desktop/src/primitive_catalog.mjs`](desktop/src/primitive_catalog.mjs) `MESH_PRESETS` 增加 `[0.08, '超精']`；[`desktop/src/style.css`](desktop/src/style.css) 优化 `.mesh-presets` 四键紧凑排版与微调字体间距；[`desktop/tests/edge-quality-ui.cjs`](desktop/tests/edge-quality-ui.cjs) 补充 `超精 0.08` 点击与输入校验。
 - 涉及文件：`desktop/src/Viewport.jsx`、`desktop/src/primitive_catalog.mjs`、`desktop/src/style.css`、`desktop/tests/edge-quality-ui.cjs`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
 - 验证：`cd desktop && npx vite build` 通过（`6.57 s`）；`npm test` **`28 passed in 10.22s`**；Playwright `verify-edge-quality`、`verify-ui`、`verify-ribbon` 全部通过（零页面报错），实机截图确认四档预设按钮排版清晰无折行。
+- 状态：已完成实现、验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
+
+### R-122：26-11-17 14:17:00（Asia/Shanghai），剖切工具新增围绕模型中心任意角度旋转
+
+- 需求与原因：原剖切工具仅支持 `X / Y / Z` 轴向正交剖切或手动输入法向量（`自定义方向`），用户在观察斜切截面或复杂内部晶格通道时，希望直接通过角度调节在模型几何中心位置以任意角度旋转剖切面。
+- 实现：
+  - **欧拉角法向计算（[`desktop/src/inspection_math.mjs`](desktop/src/inspection_math.mjs)）**：`DEFAULT_SECTION` 新增 `angles: [0, 0, 0]`；`planeNormal(section)` 对基准轴（`X`/`Y`/`Z`）法向量施加有限性校验后的 XYZ 欧拉角旋转矩阵（`R_z * R_y * R_x`）并单位化。
+  - **中心锚定与旋转控件（[`desktop/src/InspectionPanel.jsx`](desktop/src/InspectionPanel.jsx)、[`desktop/src/style.css`](desktop/src/style.css)）**：`section.axis !== 'custom'` 时展示`围绕中心旋转 / °`区块（`绕 X` / `绕 Y` / `绕 Z` `-180° ~ 180°` 滑块 + 数值输入 + `归零`按钮）；通过 `orientation({ angles })` 自动将 `offset` 设为 `planeRange(bounds, normal)` 区间中点 `(r[0] + r[1]) / 2`（恒等于 `dot(normal, boxCenter)`），确保旋转过程中剖切面始终穿过模型 3D 包围盒中心；切换预设轴向时自动重置 `angles: [0, 0, 0]`。
+  - **Worker 缓存键同步（[`desktop/src/Viewport.jsx`](desktop/src/Viewport.jsx)）**：`sectionKey()` 新增 `angles: activeSection.angles`，确保角度变化时即时重算截面与封口网格。
+- 涉及文件：`desktop/src/inspection_math.mjs`、`desktop/src/InspectionPanel.jsx`、`desktop/src/Viewport.jsx`、`desktop/src/style.css`、`desktop/tests/inspection.test.cjs`、`desktop/tests/inspection-ui.cjs`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：`cd desktop && npx vite build` 通过（`5.46 s`）；`npm test` **`28 passed in 10.15s`**（含旋转法向精度、中心锚定与偏移盒斜切面积验证）；Playwright `verify-inspection` 与 `verify-ui` 全部通过（含 `绕 X 旋转角度` 45° 斜切面积 `181.02 mm²` 与 `归零` 恢复 `192 mm²` 实机校验，零页面报错）。
 - 状态：已完成实现、验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
 
 ## 5. 技术约定

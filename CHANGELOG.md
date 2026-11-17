@@ -42,6 +42,7 @@
 
 ### 界面
 
+- `[26-11-17 14:17]` **剖切工具新增围绕模型中心任意角度旋转（R-122）**：在 [`InspectionPanel.jsx`](file:///f:/TPMS建模设计/desktop/src/InspectionPanel.jsx) 的`剖切与测量`面板中新增`围绕中心旋转 / °`（`绕 X` / `绕 Y` / `绕 Z` 三个 `-180° ~ 180°` 滑块与数值输入及`归零`按钮），切换预设轴向时自动清零角度；[`inspection_math.mjs`](file:///f:/TPMS建模设计/desktop/src/inspection_math.mjs) 的 `planeNormal()` 按 XYZ 欧拉角旋转当前基准法向量，并通过 `orientation({ angles })` 自动将偏置重算为包围盒投影区间中点 `(r[0] + r[1]) / 2`（即始终穿过模型 3D 几何中心）；[`Viewport.jsx`](file:///f:/TPMS建模设计/desktop/src/Viewport.jsx) 同步将 `angles` 纳入 `sectionKey()` 缓存失效键。
 - `[26-11-17 14:00]` **提升高分屏三维视口清晰度并新增“超精 `0.08 mm`”网格预设（R-121）**：将 [`Viewport.jsx`](file:///f:/TPMS建模设计/desktop/src/Viewport.jsx) 渲染像素比上限由 `1.5` 提升至 `2.0` 并在 `resize` 时同步刷新设备 DPR；在 [`primitive_catalog.mjs`](file:///f:/TPMS建模设计/desktop/src/primitive_catalog.mjs) 的 `MESH_PRESETS` 新增第 4 档 **`超精 0.08 mm`** 并优化 [`style.css`](file:///f:/TPMS建模设计/desktop/src/style.css) 四列胶囊排版。
 - `[26-11-16 20:52]` 桌面工作台接入 FEA 结构体网格工具链（R-116）：顶部 `检查与测量` 新增 `结构体网格 (FEA)` 工具组（`划分 FEA 体网格` / `高亮低质量单元` / `导出 FEA 体网格`），右侧 `模型信息` 与导出菜单新增 `FEA 体单元尺寸`、`FEA 表面策略` 与 `.bdf`/`.msh` 导出；质量报告弹窗区分呈现 `FEA 结构体网格质量报告`（实体域数、体网格体积、重划分状态）并持久化保存项目 `fea` 配置。
 - `[26-11-16 17:15]` 新增桌面应用启动直载建模项目支持（`TPMS_STARTUP_PROJECT` 环境变量或 CLI `--project` / `--open` / `.json` 参数）：启动后共享同一项目校验与载入流程并自动触发首次模型生成；同步补充参数化跑鞋点阵中底示例 [examples/showcase/gyroid-shoe-midsole.json](examples/showcase/gyroid-shoe-midsole.json)。记录 R-114。

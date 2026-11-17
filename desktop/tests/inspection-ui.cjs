@@ -38,6 +38,10 @@ async function main() {
     await panel.getByRole('checkbox', { name: '启用剖切', exact: true }).check(); await panel.getByRole('button', { name: '居中', exact: true }).click(); await settled();
     const area = Number((await panel.locator('.section-statistics .metric strong').first().innerText()).replace(/[^\d.]/g, '')); assert.ok(Math.abs(area - 192) < 2);
     assert.ok(Math.abs(Number(await panel.getByLabel('剖切位置 / mm', { exact: true }).inputValue()) - 6) < 0.1);
+    await panel.getByLabel('绕 X 旋转角度', { exact: true }).fill('45'); await settled();
+    const rotArea = Number((await panel.locator('.section-statistics .metric strong').first().innerText()).replace(/[^\d.]/g, '')); assert.ok(Math.abs(rotArea - 16 * 8 * Math.SQRT2) < 2);
+    await panel.getByRole('button', { name: '归零', exact: true }).click(); await settled();
+    const resetArea = Number((await panel.locator('.section-statistics .metric strong').first().innerText()).replace(/[^\d.]/g, '')); assert.ok(Math.abs(resetArea - 192) < 2);
     await panel.getByRole('checkbox', { name: '显示包围盒', exact: true }).check(); await settled(); await layout();
     await page.locator('.inspection-scroll').evaluate(element => { element.scrollTop = 0; });
     await page.screenshot({ path: path.join(root, 'docs', 'electron-section-dark.png'), scale: 'css', style: '.statusbar [role="status"] { visibility:hidden; }' });

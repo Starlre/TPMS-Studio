@@ -1,13 +1,29 @@
 import { ShapeUtils, Vector2 } from 'three';
 
-export const DEFAULT_SECTION = { enabled: false, axis: 'Z', normal: [1, 1, 1], offset: 0,
+export const DEFAULT_SECTION = { enabled: false, axis: 'Z', normal: [1, 1, 1], angles: [0, 0, 0], offset: 0,
   positive: false, only: false, fill: true, box: false };
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const subtract = (a, b) => a.map((v, i) => v - b[i]);
 export function distanceBetween(a, b) { return Math.hypot(...subtract(a, b)); }
 export function planeNormal(section) {
-  const n = section.axis === 'custom' ? section.normal : ['X', 'Y', 'Z'].map(axis => +(section.axis === axis));
+  let n;
+  if (section.axis === 'custom') {
+    n = section.normal;
+  } else {
+    const base = ['X', 'Y', 'Z'].map(axis => +(section.axis === axis));
+    const angles = section.angles || [0, 0, 0];
+    if (angles.length !== 3 || !angles.every(Number.isFinite)) throw new Error('旋转角度需要三个有限数字');
+    const [rx, ry, rz] = angles.map(deg => (deg * Math.PI) / 180);
+    let [x, y, z] = base;
+    const cx = Math.cos(rx), sx = Math.sin(rx);
+    [y, z] = [y * cx - z * sx, y * sx + z * cx];
+    const cy = Math.cos(ry), sy = Math.sin(ry);
+    [x, z] = [x * cy + z * sy, -x * sy + z * cy];
+    const cz = Math.cos(rz), sz = Math.sin(rz);
+    [x, y] = [x * cz - y * sz, x * sz + y * cz];
+    n = [x, y, z];
+  }
   if (!n || n.length !== 3 || !n.every(Number.isFinite)) throw new Error('法向量需要三个有限数字');
   const length = Math.hypot(...n);
   if (length < 1e-12) throw new Error('法向量不能为零，请修改 X/Y/Z 分量');

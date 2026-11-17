@@ -25,8 +25,16 @@ export default function InspectionPanel({ section, onSection, bounds, points, on
       <section className="editor-section"><h3><ScanLine size={17} aria-hidden="true" />剖切平面</h3>
         <label className="toggle"><input type="checkbox" checked={section.enabled} onChange={e => set({ enabled: e.target.checked })} /><span>启用剖切</span></label>
         {section.enabled && <>
-          <label className="field"><span>平面方向</span><select aria-label="平面方向" value={section.axis} onChange={e => orientation({ axis: e.target.value })}>{[['X', 'X · YZ 截面'], ['Y', 'Y · XZ 截面'], ['Z', 'Z · XY 截面'], ['custom', '自定义法向']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          {section.axis === 'custom' && <><div className="triple">{['X', 'Y', 'Z'].map((axis, i) => <label className="field" key={axis}><span>法向 {axis}</span><input type="number" step="0.1" aria-invalid={!!error} value={section.normal[i]} onChange={e => orientation({ normal: section.normal.map((v, j) => i === j ? Number(e.target.value) : v) })} /></label>)}</div><p className="hint">法向会归一化；位置是平面到世界原点的有符号距离。</p></>}
+          <label className="field"><span>平面方向</span><select aria-label="平面方向" value={section.axis} onChange={e => orientation({ axis: e.target.value, angles: [0, 0, 0] })}>{[['X', 'X · YZ 截面'], ['Y', 'Y · XZ 截面'], ['Z', 'Z · XY 截面'], ['custom', '自定义法向']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          {section.axis === 'custom' ? <><div className="triple">{['X', 'Y', 'Z'].map((axis, i) => <label className="field" key={axis}><span>法向 {axis}</span><input type="number" step="0.1" aria-invalid={!!error} value={section.normal[i]} onChange={e => orientation({ normal: section.normal.map((v, j) => i === j ? Number(e.target.value) : v) })} /></label>)}</div><p className="hint">法向会归一化；位置是平面到世界原点的有符号距离。</p></> : <div className="section-rotate">
+            <div className="section-rotate-head"><span>围绕中心旋转 / °</span><button type="button" className="secondary" disabled={(section.angles || [0, 0, 0]).every(v => v === 0)} onClick={() => orientation({ angles: [0, 0, 0] })}>归零</button></div>
+            {['X', 'Y', 'Z'].map((axis, i) => {
+              const angles = section.angles || [0, 0, 0];
+              const setAngle = raw => { const val = Number(raw); if (Number.isFinite(val)) orientation({ angles: angles.map((v, j) => i === j ? Math.max(-180, Math.min(180, val)) : v) }); };
+              return <div className="section-rotate-row" key={axis}><span>绕 {axis}</span><input className="section-slider" type="range" min={-180} max={180} step={1} aria-label={`绕 ${axis} 旋转滑块`} value={angles[i]} onChange={e => setAngle(e.target.value)} /><input type="number" min={-180} max={180} step={1} aria-label={`绕 ${axis} 旋转角度`} value={angles[i]} onChange={e => setAngle(e.target.value)} /></div>;
+            })}
+            <p className="hint">旋转角度变化时自动保持截面穿过模型中心。</p>
+          </div>}
           {error && <p className="inspection-warning" role="alert">{error}</p>}
           <label className="field"><span>剖切位置 / mm</span><input type="number" value={section.offset} step="0.1" min={range[0]} max={range[1]} disabled={!!error} onChange={e => { const value = Number(e.target.value); if (Number.isFinite(value)) set({ offset: Math.min(range[1], Math.max(range[0], value)) }); }} /></label>
           <input className="section-slider" type="range" aria-label="剖切位置滑块" disabled={!!error || range[0] === range[1]} min={range[0]} max={range[1]} step={Math.max(0.00001, (range[1] - range[0]) / 1000)} value={section.offset} onChange={e => set({ offset: Number(e.target.value) })} />

@@ -38,7 +38,7 @@ test('nested section loops leave holes empty, and open cuts never invent a fille
   assert.equal(open.area, null); assert.equal(open.cap.length, 0); assert.equal(open.open, 1);
 });
 test('boundary, missed and reversed cuts; invalid normals are rejected', async () => {
-  const { THREE, sectionMesh, pickMeshPoint, planeNormal, DEFAULT_SECTION } = await helpers();
+  const { THREE, sectionMesh, pickMeshPoint, planeNormal, planeRange, DEFAULT_SECTION } = await helpers();
   const mesh = arrays(THREE, [10, 10, 10]);
   const section = { ...DEFAULT_SECTION, enabled: true, axis: 'Z', offset: 0, fill: false, positive: true };
   assert.deepEqual(pickMeshPoint(mesh.positions, mesh.indices, [0, 0, -20], [0, 0, 1], section), [0, 0, 5]);
@@ -48,4 +48,17 @@ test('boundary, missed and reversed cuts; invalid normals are rejected', async (
   assert.equal(outside.segments, 0); assert.equal(outside.area, 0);
   assert.throws(() => planeNormal({ axis: 'custom', normal: [0, 0, 0] }), /不能为零/);
   assert.throws(() => planeNormal({ axis: 'custom', normal: [NaN, 0, 1] }), /有限数字/);
+  assert.throws(() => planeNormal({ axis: 'Z', angles: [NaN, 0, 0] }), /旋转角度/);
+
+  const tilted = planeNormal({ axis: 'Z', angles: [45, 0, 0] });
+  assert.ok(Math.abs(tilted[0]) < 1e-12);
+  assert.ok(Math.abs(tilted[1] + Math.SQRT1_2) < 1e-12);
+  assert.ok(Math.abs(tilted[2] - Math.SQRT1_2) < 1e-12);
+  const rotatedBox = arrays(THREE, [16, 12, 8], [20, -4, 6]);
+  const r = planeRange([[12, -10, 2], [28, 2, 10]], tilted);
+  const centerOffset = (r[0] + r[1]) / 2;
+  const centerCut = sectionMesh(rotatedBox.positions, rotatedBox.indices, { ...DEFAULT_SECTION, enabled: true, axis: 'Z', angles: [45, 0, 0], offset: centerOffset });
+  assert.equal(centerCut.open, 0);
+  assert.equal(centerCut.loops, 1);
+  assert.ok(Math.abs(centerCut.area - 16 * 8 * Math.SQRT2) < 1e-4);
 });

@@ -110,7 +110,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     }
     function clearSection() { clearObject(sectionLines); clearObject(sectionCap); sectionLines = null; sectionCap = null; }
     function updateRendererLabel() { rendererCallback.current(layoutMeshes.length ? '多实体布局预览' : rayMaterial && !activeSection.enabled && !picking && !measurePoints.some(Boolean) ? 'GPU 隐式曲面' : activeSection.enabled ? '剖切网格预览' : '网格预览'); }
-    function sectionKey() { return JSON.stringify({ axis: activeSection.axis, normal: activeSection.normal, offset: activeSection.offset }); }
+    function sectionKey() { return JSON.stringify({ axis: activeSection.axis, normal: activeSection.normal, angles: activeSection.angles, offset: activeSection.offset }); }
     function createWorker(geometry) {
       worker?.terminate(); clearTimeout(sectionTimer); sectionId++; pickId++;
       worker = new Worker(new URL('./inspection.worker.js', import.meta.url), { type: 'module' });

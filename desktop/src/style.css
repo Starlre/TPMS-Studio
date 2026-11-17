@@ -456,6 +456,11 @@ small { color:var(--muted); font-size:13px; }
 .inspection-panel .triple input { min-width:0; padding:8px 6px; font-size:14px; font-variant-numeric:tabular-nums; }
 .inspection-panel .editor-section>p { margin:12px 0; }
 .inspection-range { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; }
+.section-rotate { display:flex; flex-direction:column; gap:4px; margin:6px 0 8px; }
+.section-rotate-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--muted); }
+.section-rotate-head button { min-height:24px; padding:2px 8px; font-size:12px; }
+.section-rotate-row { display:grid; grid-template-columns:32px 1fr 62px; gap:6px; align-items:center; font-size:12.5px; color:var(--muted); }
+.section-rotate-row input[type=number] { padding:3px 6px; font-size:12.5px; min-height:28px; }
 .inspection-buttons { display:flex; gap:6px; margin:12px 0; }
 .inspection-buttons button { flex:1; min-height:34px; white-space:normal; font-size:14px; padding:6px; }
 .inspection-warning { color:var(--danger); font-size:13px; overflow-wrap:anywhere; }
