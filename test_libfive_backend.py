@@ -157,3 +157,24 @@ def test_split_pinch_manifolds_repairs_edge_pinches_without_hiding_open_holes():
     open_box = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
     open_box.update_faces(np.arange(len(open_box.faces) - 1))
     assert not backend._split_pinch_manifolds(open_box).is_watertight
+
+
+def test_multithreaded_libfive_matches_single_threaded_and_falls_back(kernel, monkeypatch):
+    assert kernel.render_mt is not None
+    p = parameters(surface="Gyroid", mode="sheet")
+    mt_res = backend.generate_libfive_mesh(p, 0.3, kernel=kernel)
+    monkeypatch.setenv("TPMS_LIBFIVE_SINGLE_THREAD", "1")
+    st_res = backend.generate_libfive_mesh(p, 0.3, kernel=kernel)
+    monkeypatch.delenv("TPMS_LIBFIVE_SINGLE_THREAD", raising=False)
+    assert mt_res.mesh.is_watertight and st_res.mesh.is_watertight
+    assert mt_res.mesh.euler_number == st_res.mesh.euler_number
+    assert mt_res.mesh.volume == pytest.approx(st_res.mesh.volume, rel=1e-4)
+
+    called = {"mt": 0}
+    def broken_mt(*_args):
+        called["mt"] += 1
+        return None
+    monkeypatch.setattr(kernel, "render_mt", broken_mt)
+    fb_res = backend.generate_libfive_mesh(p, 0.3, kernel=kernel)
+    assert called["mt"] == 1
+    assert fb_res.mesh.is_watertight and fb_res.mesh.volume == pytest.approx(st_res.mesh.volume, rel=1e-5)

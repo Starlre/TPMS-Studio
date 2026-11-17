@@ -42,7 +42,7 @@ libfive 提供数学表达式树与自适应 Dual Contouring 表面网格生成�
 
 直接从参数调用 `generate_libfive_mesh()` 时可运行已有孔隙率求解器；导出重算复用生成快照中的已求解参数（Electron 经独立后端调度）。两种提取算法的三角面、边界插值与体积会存在差异，界面统计对应当前生成网格。
 
-libfive C API 实现中的 `res` 实际设定 `min_feature=1/res`，适配器传入 `1/cell_size`。原生网格数组复制后立即释放，表达式树通过显式资源上下文释放。DLL 延迟加载，未安装时仍能使用连续场内核。原生提取使用单线程 FFI 入口；Electron 在独立 Python 进程执行，避免阻塞窗口。
+libfive C API 实现中的 `res` 实际设定 `min_feature=1/res`，适配器传入 `1/cell_size`。原生网格数组复制后立即释放，表达式树通过显式资源上下文释放。DLL 延迟加载，未安装时仍能使用连续场内核。原生提取默认优先使用多线程并行 FFI 入口 `libfive_tree_render_mesh`（若设置 `TPMS_LIBFIVE_SINGLE_THREAD=1`、缺少符号或多线程提取异常，则自动回退单线程 `libfive_tree_render_mesh_st`）；Electron 在独立 Python 进程执行，避免阻塞窗口。
 
 ## Windows 安装与构建
 

@@ -92,6 +92,10 @@ class NativeKernel:
             for name, (arguments, result) in signatures.items():
                 function = getattr(self.lib, name)
                 function.argtypes, function.restype = arguments, result
+            mt = getattr(self.lib, "libfive_tree_render_mesh", None)
+            if mt is not None:
+                mt.argtypes, mt.restype = signatures["libfive_tree_render_mesh_st"]
+            self.render_mt = mt
         except (OSError, AttributeError) as exc:
             if self._dll_dir is not None:
                 self._dll_dir.close()
@@ -428,10 +432,8 @@ def _split_pinch_manifolds(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     return trimesh.Trimesh(vertices=np.asarray(verts), faces=faces, process=False)
 
 
-def render_tree_mesh(kernel: NativeKernel, tree: _Tree, region: _Region,
-                     cell_size: float) -> trimesh.Trimesh:
-    """Extract a closed native expression; the caller owns the tree arena."""
-    pointer = kernel.lib.libfive_tree_render_mesh_st(tree.pointer, region, 1 / cell_size)
+def _extract_native_mesh(kernel: NativeKernel, fn, tree: _Tree, region: _Region, cell_size: float) -> trimesh.Trimesh:
+    pointer = fn(tree.pointer, region, 1 / cell_size)
     if not pointer:
         raise ValueError("libfive 未生成曲面；请检查公式、等值面与精度。")
     try:
@@ -458,6 +460,19 @@ def render_tree_mesh(kernel: NativeKernel, tree: _Tree, region: _Region,
     if not mesh.is_watertight or not mesh.is_winding_consistent or mesh.volume <= 0:
         raise ValueError("libfive 网格未通过封闭性检查；请减小网格尺寸，或使用现有网格内核导出。")
     return mesh
+
+
+def render_tree_mesh(kernel: NativeKernel, tree: _Tree, region: _Region,
+                     cell_size: float) -> trimesh.Trimesh:
+    """Extract a closed native expression; prefers multi-threaded FFI with single-threaded fallback."""
+    force_st = os.environ.get("TPMS_LIBFIVE_SINGLE_THREAD") == "1"
+    render_mt = None if force_st else getattr(kernel, "render_mt", None)
+    if render_mt is not None:
+        try:
+            return _extract_native_mesh(kernel, render_mt, tree, region, cell_size)
+        except ValueError:
+            pass
+    return _extract_native_mesh(kernel, kernel.lib.libfive_tree_render_mesh_st, tree, region, cell_size)
 
 
 def export_libfive_mesh(result: MeshResult, destination: str | Path, cell_size: float) -> tuple[Path, int]:

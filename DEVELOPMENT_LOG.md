@@ -159,6 +159,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-113 | 合并精简桌面端三项核心冗余 | 26-11-16 16:37:00：精度预设提至生成区上方并去重顶部检查入口、节点目录收拢至单一清单、合并 `style.css`+`native.css` 并复用数字微调函数 | 已完成 |
 | R-117 | 修复精细球形 TPMS 填充 STL 局部折叠 | 2026-11-16 22:38:13：固定跨精度边界几何规则、长折边拦截、STL 回读与 COMSOL 6.3 实机导入核验 | 已完成 |
 | R-118 | 加固 FEA 重划分表面质量、路径保真与填充校验细节 | 26-11-16 23:36:00：几何等效尺度步长、防翻折 Taubin + 2-流形短边折叠修复、带点文件名修复及 `validate_infill_surface` 边界保护 | 已完成 |
+| R-119 | 解锁 `libfive` 原生多线程并行表面提取 | 26-11-17 13:18:00：默认接入 `libfive_tree_render_mesh` 多线程 FFI（支持 `TPMS_LIBFIVE_SINGLE_THREAD=1` 与单线程自动回退），`0.15 mm` 球体填充 C++ 提取 `11.61s → 1.72–2.10s` | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -750,6 +751,16 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 涉及文件：`fea_mesh.py`、`comsol_mesh.py`、`solid_operations.py`、`test_fea_mesh.py`、`test_comsol_mesh.py`、`test_solid_operations.py`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
 - 验证：Python 全量回归 `pytest -q` **`198 passed in 274.01s`**（`0 failed / 0 skipped`，含新增 `test_fea_dotted_filename_and_surface_defect_guards`、`test_fea_sphere_infill_preserves_volume_at_default_element_size`、CFD 带小数点文件名测试及 `validate_infill_surface` 边界断言）；桌面端 `npm test` **`28 passed in 13.06s`**、Playwright `verify-fea`（含多孔板及 2 节点跑鞋晶格中底）与 `verify-ui` 均通过，零页面错误。
 - 状态：已完成实现、全量验证与文档更新，提交至 `完善建模功能和UI分支`。
+
+### R-119：26-11-17 13:18:00（Asia/Shanghai），解锁 `libfive` 原生多线程并行表面提取并保留单线程安全回退
+
+- 需求与原因：针对用户反馈“`精细 0.15 mm` 网格预览过慢”，分段性能剖析显示在 `R=8 mm` 球体 + Gyroid 片层 `0.15 mm`（`295,716` 面）模型下，[`libfive_backend.py`](libfive_backend.py) 强制调用单线程接口 `libfive_tree_render_mesh_st` 耗时 **`11.61 s`（占总时长 `13.13 s` 的 `88.4%`）**；而同一份 `libfive.dll` 已导出多线程入口 `libfive_tree_render_mesh`。
+- 实现：
+  - 在 [`libfive_backend.py`](libfive_backend.py) 的 `NativeKernel.__init__` 兼容探测并绑定可选符号 `libfive_tree_render_mesh`；抽取共享后处理 `_extract_native_mesh`，让 `render_tree_mesh` 默认优先调用多线程入口，并在遇到 `TPMS_LIBFIVE_SINGLE_THREAD=1`、缺少多线程符号或并发提取未通过封闭性/朝向/空网格校验时，自动无缝回退至单线程 `libfive_tree_render_mesh_st`。
+  - 在 [`test_libfive_backend.py`](test_libfive_backend.py) 新增 `test_multithreaded_libfive_matches_single_threaded_and_falls_back` 验证多线程与单线程的欧拉数/水密性/体积一致及异常回退；同步更新 [`docs/libfive.md`](docs/libfive.md)。
+- 涉及文件：`libfive_backend.py`、`test_libfive_backend.py`、`docs/libfive.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：`R=8 mm` `0.15 mm` 球体填充 6 轮连压结果与单线程完全一致（`295,716` 面、`vol=806.441 mm³`、`euler=-50`、最大夹角 `51.00°`），C++ 提取从 `11.61 s` 降至 `1.72–2.10 s`；Python 全量回归 `pytest -q` **`199 passed in 192.72s`**（`0 failed / 0 skipped`，较此前 `274.01 s` 整体缩短 `81 s`）；桌面端 `npm test` **`28 passed in 10.36s`**，Playwright `verify-ui`、`verify-ribbon`、`verify-fea` 全部通过（零页面报错）。
+- 状态：已完成实现、全量验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
 
 ## 5. 技术约定
 
