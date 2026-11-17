@@ -1,0 +1,110 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Gyroid",
+    "mode": "sheet",
+    "size_x": 40,
+    "size_y": 40,
+    "size_z": 40,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.2,
+    "iso_level": 0,
+    "samples_per_cell": 24,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1,
+    "gradient_thickness_end": 5,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n5",
+    "cell_size": 0.35,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "晶胞周期 / mm",
+        "kind": "number",
+        "symbol": "infill_cell",
+        "value": 6.5
+      },
+      {
+        "id": "p2",
+        "name": "外蒙皮壁厚 / mm",
+        "kind": "number",
+        "symbol": "skin_t",
+        "value": 1.2
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "中心轮毂",
+        "kind": "cylinder",
+        "dimensions": [11, 22],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n2",
+        "name": "斜置翼片",
+        "kind": "rounded_box",
+        "dimensions": [14, 5, 16, 1.5],
+        "position": [13, 0, 0],
+        "rotation": [18, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n3",
+        "name": "六叶圆周阵列",
+        "kind": "circular_pattern",
+        "dimensions": [6, 360],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n2"],
+        "blend": 0,
+        "operation": { "axis": "Z" }
+      },
+      {
+        "id": "n4",
+        "name": "涡轮平滑融合",
+        "kind": "smooth_union",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n1", "n3"],
+        "blend": 2.4
+      },
+      {
+        "id": "n5",
+        "name": "涡轮 Gyroid 填充",
+        "kind": "tpms_infill",
+        "dimensions": [6.5, 1.2, 1.0],
+        "expressions": { "dimensions.0": "infill_cell", "dimensions.1": "skin_t" },
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n4"],
+        "blend": 0,
+        "operation": { "openings": ["+Z", "-Z"] },
+        "tpms": {
+          "surface": "Gyroid",
+          "mode": "sheet",
+          "thickness": 1.0,
+          "iso_level": 0
+        }
+      }
+    ]
+  }
+}

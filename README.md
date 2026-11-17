@@ -26,6 +26,24 @@ TPMS Studio 是用于 TPMS 多孔结构、隐式实体和参数化组合建模�
 
 [打开示例项目](examples/showcase/perforated-ring-sphere.json) · [建模说明](docs/model-gallery.md#三向开孔球壳与加强环)
 
+### 六叶圆周阵列平滑涡轮 + Gyroid 填充（白天主题）
+
+使用`圆柱`中心轮毂与`圆角方盒`斜置翼片做**六叶圆周阵列**并**平滑融合**，再通过**一键 `TPMS 填充`**生成带平滑接壁外蒙皮的内部 Gyroid 晶格（左图完整外观，右图绕 Y 轴围绕模型中心旋转 `32°` 斜切揭示内部晶格与三列紧凑包围盒尺寸）。
+
+![白天工作台：六叶圆周阵列平滑涡轮与 Gyroid 内部填充](docs/showcase-turbine-infill-light.png)
+
+![白天工作台：绕模型中心 32° 斜切截面揭示内部 Gyroid 晶格](docs/showcase-turbine-section-light.png)
+
+[打开示例项目](examples/showcase/radial-turbine-infill.json)
+
+### 外部 STL 跑鞋晶格中底（2 节点一键填充）
+
+直接导入外部跑鞋中底 STL 坯料（`外部实体`），仅需 **2 个几何节点 + 2 个参数** 即可一键完成共形 Gyroid 点阵填充与贴地对齐。
+
+![白天工作台：外部 STL 跑鞋中底一键 Gyroid 填充](docs/showcase-shoe-midsole-light.png)
+
+[打开示例项目](examples/showcase/stl-shoe-midsole.json)
+
 示例用于介绍建模方法，未进行承载、流动、制造或打印验收。网格尺寸是提取尺度，实际几何细节需要结合模型检查与精度收敛判断。
 
 ## 核心能力
