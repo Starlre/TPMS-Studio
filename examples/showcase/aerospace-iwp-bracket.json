@@ -1,0 +1,155 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "I-WP",
+    "mode": "solid",
+    "size_x": 38,
+    "size_y": 38,
+    "size_z": 30,
+    "cells_x": 3,
+    "cells_y": 3,
+    "cells_z": 3,
+    "thickness": 1.4,
+    "iso_level": -0.15,
+    "samples_per_cell": 24,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1,
+    "gradient_thickness_end": 5,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n9",
+    "cell_size": 0.35,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "中央流道半径 / mm",
+        "kind": "number",
+        "symbol": "bore_r",
+        "value": 5.5
+      },
+      {
+        "id": "p2",
+        "name": "I-WP 支柱偏移",
+        "kind": "number",
+        "symbol": "iwp_iso",
+        "value": -0.15
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "锥形包络体 (圆台)",
+        "kind": "frustum",
+        "dimensions": [16, 10, 24],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n2",
+        "name": "顶部法兰圆环",
+        "kind": "torus",
+        "dimensions": [10, 2.2],
+        "position": [0, 0, 11.5],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n3",
+        "name": "底部法兰圆环",
+        "kind": "torus",
+        "dimensions": [16, 2.2],
+        "position": [0, 0, -11.5],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n4",
+        "name": "双端圆环法兰",
+        "kind": "union",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n2", "n3"],
+        "blend": 0
+      },
+      {
+        "id": "n5",
+        "name": "I-WP 立体晶格",
+        "kind": "tpms",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0,
+        "expressions": { "tpms.iso_level": "iwp_iso" },
+        "tpms": {
+          "surface": "I-WP",
+          "mode": "solid",
+          "size_x": 38,
+          "size_y": 38,
+          "size_z": 30,
+          "cells_x": 3,
+          "cells_y": 3,
+          "cells_z": 3,
+          "thickness": 1.4,
+          "iso_level": -0.15
+        }
+      },
+      {
+        "id": "n6",
+        "name": "锥形 I-WP 点阵芯",
+        "kind": "intersection",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n1", "n5"],
+        "blend": 0
+      },
+      {
+        "id": "n7",
+        "name": "法兰平滑接壁融合",
+        "kind": "smooth_union",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n6", "n4"],
+        "blend": 1.4
+      },
+      {
+        "id": "n8",
+        "name": "中心贯穿流道",
+        "kind": "cylinder",
+        "dimensions": [5.5, 32],
+        "expressions": { "dimensions.0": "bore_r" },
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n9",
+        "name": "I-WP 锥形法兰支架",
+        "kind": "difference",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n7", "n8"],
+        "blend": 0
+      }
+    ]
+  }
+}

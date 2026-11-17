@@ -37,13 +37,13 @@ TPMS Studio 是一款本地工程桌面软件（Electron + React + Three.js + Py
 
 [打开示例项目](examples/showcase/stl-shoe-midsole.json)
 
-### 3. 线性阵列平滑冷板 + Diamond TPMS 换热芯
+### 3. 锥形圆台 I-WP 立体晶格法兰支架
 
-以`圆角方盒`冷板基板与`圆柱`凸台做 **3×2 线性阵列**并**平滑融合**，再通过**一键 `TPMS 填充`**生成内部 `Diamond` 换热晶格（经水平剖切直观展示周期孔道、外蒙皮壁厚与参数驱动）。
+以`圆台`为锥形包络裁剪 `I-WP` 立体晶格，并与上下`圆环`法兰进行**平滑融合**，再通过`圆柱`差集打出中央贯穿流道（参数控制流道半径与支柱饱满度）。
 
-![3×2 线性阵列平滑冷板与 Diamond TPMS 内部换热晶格](docs/showcase-heatsink-light.png)
+![锥形圆台 I-WP 立体晶格与双端圆环法兰平滑融合支架](docs/showcase-iwp-bracket-light.png)
 
-[打开示例项目](examples/showcase/diamond-heatsink-array.json) · [更多画廊示例](docs/model-gallery.md)
+[打开示例项目](examples/showcase/aerospace-iwp-bracket.json) · [更多画廊示例](docs/model-gallery.md)
 
 ---
 
