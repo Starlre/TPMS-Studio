@@ -61,6 +61,8 @@ async function main() {
     assert.ok(!await implicit.isChecked()); assert.ok(await implicit.isDisabled());
     await page.getByRole('button', { name: '输出设置', exact: true }).click();
     assert.equal(await page.getByLabel('输出网格尺寸', { exact: true }).inputValue(), '0.3');
+    await page.getByRole('group', { name: '网格精度预设' }).getByRole('button', { name: '超精', exact: false }).click();
+    assert.equal(await page.getByLabel('输出网格尺寸', { exact: true }).inputValue(), '0.08');
     await page.getByRole('group', { name: '网格精度预设' }).getByRole('button', { name: '精细', exact: false }).click();
     assert.equal(await page.getByLabel('输出网格尺寸', { exact: true }).inputValue(), '0.15');
     assert.ok(await page.locator('.export-menu .primary').isDisabled());

@@ -309,9 +309,9 @@ small { color:var(--muted); font-size:13px; }
 .footer-output span { color:var(--muted); flex-shrink:0; }
 .footer-output strong { font-weight:500; overflow-wrap:anywhere; text-align:right; }
 .generate-footer .hint,.node-workspace .generate-footer .hint { margin:0 0 8px; font-size:12px; }
-.mesh-presets { display:flex; gap:6px; margin:6px 0; }
-.mesh-presets button { flex:1; min-width:0; min-height:32px; padding:3px 6px; font-size:13px; border-color:var(--border); background:var(--input); }
-.mesh-presets small { display:inline-block; margin-left:4px; color:var(--muted); font-size:11.5px; }
+.mesh-presets { display:flex; gap:5px; margin:6px 0; }
+.mesh-presets button { flex:1; min-width:0; min-height:36px; padding:4px 4px; font-size:12.5px; line-height:1.15; border-color:var(--border); background:var(--input); }
+.mesh-presets small { display:block; margin-left:0; margin-top:2px; color:var(--muted); font-size:10.5px; }
 .mesh-presets button[aria-current=true],.mesh-presets button[aria-pressed=true] {
   border-color:var(--accent); background:var(--selected); color:var(--accent); font-weight:600;
 }

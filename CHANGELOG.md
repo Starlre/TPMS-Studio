@@ -42,6 +42,7 @@
 
 ### 界面
 
+- `[26-11-17 14:00]` **提升高分屏三维视口清晰度并新增“超精 `0.08 mm`”网格预设（R-121）**：将 [`Viewport.jsx`](file:///f:/TPMS建模设计/desktop/src/Viewport.jsx) 渲染像素比上限由 `1.5` 提升至 `2.0` 并在 `resize` 时同步刷新设备 DPR；在 [`primitive_catalog.mjs`](file:///f:/TPMS建模设计/desktop/src/primitive_catalog.mjs) 的 `MESH_PRESETS` 新增第 4 档 **`超精 0.08 mm`** 并优化 [`style.css`](file:///f:/TPMS建模设计/desktop/src/style.css) 四列胶囊排版。
 - `[26-11-16 20:52]` 桌面工作台接入 FEA 结构体网格工具链（R-116）：顶部 `检查与测量` 新增 `结构体网格 (FEA)` 工具组（`划分 FEA 体网格` / `高亮低质量单元` / `导出 FEA 体网格`），右侧 `模型信息` 与导出菜单新增 `FEA 体单元尺寸`、`FEA 表面策略` 与 `.bdf`/`.msh` 导出；质量报告弹窗区分呈现 `FEA 结构体网格质量报告`（实体域数、体网格体积、重划分状态）并持久化保存项目 `fea` 配置。
 - `[26-11-16 17:15]` 新增桌面应用启动直载建模项目支持（`TPMS_STARTUP_PROJECT` 环境变量或 CLI `--project` / `--open` / `.json` 参数）：启动后共享同一项目校验与载入流程并自动触发首次模型生成；同步补充参数化跑鞋点阵中底示例 [examples/showcase/gyroid-shoe-midsole.json](examples/showcase/gyroid-shoe-midsole.json)。记录 R-114。
 - `[26-11-16 16:37]` 合并精简桌面界面与前端代码结构的三项冗余：① 将 `实体建模` 的**网格精度预设（快速 `0.6 mm` / 标准 `0.3 mm` / 精细 `0.15 mm`）**直接提升常驻至左下角 `生成工作流` 上方，并移除顶部导航中与右侧检查器/功能栏重复的 `.analysis-links`（`模型统计` / `剖切测量工具` / `CFD 设置`）；② 将实体、布尔、特征操作与默认配置收拢至 [primitive_catalog.mjs](desktop/src/primitive_catalog.mjs) 单一目录，驱动 `node_graph.mjs`、`NodeWorkflow.jsx` 与 `main.jsx`；③ 将 `desktop/src/native.css` 合并入 [style.css](desktop/src/style.css)（产物体积降约 29%）并提取共享数字微调工具 [number_scrub.mjs](desktop/src/number_scrub.mjs)，顺带修复预设高亮匹配 `[aria-current=true]`。记录 R-113。

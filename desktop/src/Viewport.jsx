@@ -39,7 +39,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
       catch (e) { setFailed(true); errorCallback.current('无法启动 WebGL 三维预览，请检查显卡驱动。' + e.message); return; }
     }
     renderer.setClearColor(0x000000, 0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
@@ -250,6 +250,7 @@ const Viewport = forwardRef(function Viewport({ geometry, parameters, shader, th
     });
     function resize() {
       const { width, height } = host.current.getBoundingClientRect();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(width, height); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); schedule();
     }
     const observer = new ResizeObserver(resize); observer.observe(host.current);

@@ -66,4 +66,4 @@ export const INLINE_NODE_KINDS = [
   ...FEATURE_OPS.filter(item => item.kind !== 'tpms_infill').map(item => ({ id: item.kind, name: item.name, group: '操作' })),
 ];
 
-export const MESH_PRESETS = [[0.6, '快速'], [0.3, '标准'], [0.15, '精细']];
+export const MESH_PRESETS = [[0.6, '快速'], [0.3, '标准'], [0.15, '精细'], [0.08, '超精']];

@@ -161,6 +161,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-118 | 加固 FEA 重划分表面质量、路径保真与填充校验细节 | 26-11-16 23:36:00：几何等效尺度步长、防翻折 Taubin + 2-流形短边折叠修复、带点文件名修复及 `validate_infill_surface` 边界保护 | 已完成 |
 | R-119 | 解锁 `libfive` 原生多线程并行表面提取 | 26-11-17 13:18:00：默认接入 `libfive_tree_render_mesh` 多线程 FFI（支持 `TPMS_LIBFIVE_SINGLE_THREAD=1` 与单线程自动回退），`0.15 mm` 球体填充 C++ 提取 `11.61s → 1.72–2.10s` | 已完成 |
 | R-120 | 内置 TPMS 解析偏导数与 1D 拓扑检查提速 | 26-11-17 13:51:00：`_builtin_field_and_grad` 消除 6 次 `remap`、`uint64` 1D 边编码合并 `trimesh` 重复扫描，`0.15 mm` 端到端降至 `1.187s`（累计提速约 11×） | 已完成 |
+| R-121 | 提升高分屏视口锐度并新增“超精 0.08 mm”预设 | 26-11-17 14:00:00：视口 DPR 上限 `1.5 → 2.0` 且跨屏同步，`MESH_PRESETS` 新增 `超精 0.08 mm` 及四列紧凑布局 | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -772,6 +773,16 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 - 涉及文件：`libfive_backend.py`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
 - 验证：`R=8 mm` 球体 + Gyroid `1.2 mm` 片层端到端 `generate_solid` 实测：`0.6 mm` **`0.061 s`**、`0.3 mm` **`0.298 s`**、`0.15 mm` **`1.187 s`**（`295,764` 面、`euler=-50`、`vol=807.502 mm³`）；Python 全量回归 `pytest -q` **`199 passed in 176.85s`**（0 failed / 0 skipped）；桌面端 `npm test` **`28 passed in 11.98s`**，Playwright `verify-ui`、`verify-ribbon`、`verify-fea` 全部通过（零页面报错）。
 - 状态：已完成实现、全量验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
+
+### R-121：26-11-17 14:00:00（Asia/Shanghai），提升高分屏视口渲染清晰度并新增“超精 `0.08 mm`”网格预设
+
+- 需求与原因：用户希望模型三维显示更加清晰精细。桌面端 [`Viewport.jsx`](desktop/src/Viewport.jsx) 原将 WebGL 像素比上限锁在 `1.5`（在 2K/4K 高分屏下略发虚），且 `实体建模` 预设最高只有 `精细 0.15 mm`（在 `R-119/R-120` 加速后，中小零件已有余量一键切到更细精度）。
+- 实现：
+  - **视口高分屏锐度提升**：[`desktop/src/Viewport.jsx`](desktop/src/Viewport.jsx) 将初始化及 `resize()` 中的 `renderer.setPixelRatio` 上限由 `1.5` 提高至 `Math.min(window.devicePixelRatio || 1, 2)`，窗口在多显示器间缩放/迁移时动态刷新 DPR。
+  - **新增 `超精 0.08 mm` 预设与四列排版**：[`desktop/src/primitive_catalog.mjs`](desktop/src/primitive_catalog.mjs) `MESH_PRESETS` 增加 `[0.08, '超精']`；[`desktop/src/style.css`](desktop/src/style.css) 优化 `.mesh-presets` 四键紧凑排版与微调字体间距；[`desktop/tests/edge-quality-ui.cjs`](desktop/tests/edge-quality-ui.cjs) 补充 `超精 0.08` 点击与输入校验。
+- 涉及文件：`desktop/src/Viewport.jsx`、`desktop/src/primitive_catalog.mjs`、`desktop/src/style.css`、`desktop/tests/edge-quality-ui.cjs`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：`cd desktop && npx vite build` 通过（`6.57 s`）；`npm test` **`28 passed in 10.22s`**；Playwright `verify-edge-quality`、`verify-ui`、`verify-ribbon` 全部通过（零页面报错），实机截图确认四档预设按钮排版清晰无折行。
+- 状态：已完成实现、验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
 
 ## 5. 技术约定
 
