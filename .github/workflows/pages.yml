@@ -3,7 +3,7 @@ name: Deploy TPMS 3D Viewer
 on:
   push:
     branches:
-      - "新增建模功能"
+      - "完善建模功能和UI分支"
     paths:
       - "docs/**"
       - ".github/workflows/pages.yml"

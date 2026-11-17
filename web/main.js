@@ -151,7 +151,7 @@ class ModelViewer {
     this.worker = new Worker(new URL('./model.worker.js',import.meta.url),{type:'module'});
     this.worker.onmessage = ({data}) => this.message(data);
     this.worker.onerror = () => this.failure('模型处理失败，请重新加载页面。');
-    this.setTheme(false); this.resize();
+    this.setTheme(true); this.resize();
   }
   clearObject(object) { if (object) { object.removeFromParent(); object.geometry.dispose(); object.material.dispose(); } }
   failure(message) {
