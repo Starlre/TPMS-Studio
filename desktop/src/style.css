@@ -465,6 +465,16 @@ small { color:var(--muted); font-size:13px; }
 .inspection-buttons button { flex:1; min-height:34px; white-space:normal; font-size:14px; padding:6px; }
 .inspection-warning { color:var(--danger); font-size:13px; overflow-wrap:anywhere; }
 .section-statistics { border-top:1px solid var(--divider); padding-top:12px; font-size:13px; }
+.inspection-panel .metric { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:3px 0; }
+.inspection-panel .metric span { font-size:12.5px; color:var(--muted); }
+.inspection-panel .metric strong { font-size:13px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; }
+.bounds-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:8px; }
+.bounds-metrics>.metric {
+  background:var(--raised); border:1px solid var(--divider); border-radius:var(--r-md);
+  padding:7px 8px; flex-direction:column; align-items:flex-start; gap:2px;
+}
+.bounds-metrics>.metric span { font-size:11px; }
+.bounds-metrics>.metric strong { font-size:12.5px; white-space:nowrap; }
 .measurement-hint { color:var(--accent); font-size:13px; min-height:20px; }
 .measurement-point h4 { margin:14px 0 0; }
 .measurement-result { display:grid; gap:6px; padding:14px; margin-top:14px; background:var(--input); border-left:2px solid var(--accent); }

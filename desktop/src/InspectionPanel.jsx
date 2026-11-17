@@ -50,7 +50,7 @@ export default function InspectionPanel({ section, onSection, bounds, points, on
         </>}
       </section>
       <section className="editor-section"><h3>外形尺寸</h3><label className="toggle"><input type="checkbox" checked={section.box} onChange={e => set({ box: e.target.checked })} /><span>显示包围盒</span></label>
-        {bounds && ['X', 'Y', 'Z'].map((axis, i) => <div className="metric" key={axis}><span>{axis} 尺寸</span><strong>{number(bounds[1][i] - bounds[0][i])} mm</strong></div>)}
+        {bounds && <div className="bounds-metrics">{['X', 'Y', 'Z'].map((axis, i) => <div className="metric" key={axis}><span>{axis} 尺寸</span><strong>{number(bounds[1][i] - bounds[0][i])} mm</strong></div>)}</div>}
       </section>
       <section className="editor-section"><h3><Ruler size={17} aria-hidden="true" />两点测量</h3><p className="hint">点击开始后，在模型或已填充切面单击 A、B 两点。拖动仍旋转；Esc 结束选点。</p>
         <div className="inspection-buttons"><button type="button" className="secondary" aria-pressed={measuring} onClick={() => { if (measuring) onMeasuring(false); else { onPoints([]); onMeasuring(true); } }}>{measuring ? '结束选点' : '开始两点测量'}</button><button type="button" className="secondary" onClick={() => { onPoints([]); onMeasuring(false); }}>清除</button></div>
