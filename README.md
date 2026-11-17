@@ -37,13 +37,13 @@ TPMS Studio 是一款本地工程桌面软件（Electron + React + Three.js + Py
 
 [打开示例项目](examples/showcase/stl-shoe-midsole.json)
 
-### 3. 多节点参数化布尔组合（三向开孔球壳与加强环）
+### 3. 线性阵列平滑冷板 + Diamond TPMS 换热芯
 
-外球与内球差集得到空心壳，融合赤道加强环并减去三向正交流道；通过**数值 / 公式 / 向量**节点共享参数，支持实时拖动排序、上游引用与多实体布局查看。
+以`圆角方盒`冷板基板与`圆柱`凸台做 **3×2 线性阵列**并**平滑融合**，再通过**一键 `TPMS 填充`**生成内部 `Diamond` 换热晶格（经水平剖切直观展示周期孔道、外蒙皮壁厚与参数驱动）。
 
-![三向开孔球壳与赤道加强环](docs/showcase-sphere-light.png)
+![3×2 线性阵列平滑冷板与 Diamond TPMS 内部换热晶格](docs/showcase-heatsink-light.png)
 
-[打开示例项目](examples/showcase/perforated-ring-sphere.json) · [更多画廊示例](docs/model-gallery.md)
+[打开示例项目](examples/showcase/diamond-heatsink-array.json) · [更多画廊示例](docs/model-gallery.md)
 
 ---
 

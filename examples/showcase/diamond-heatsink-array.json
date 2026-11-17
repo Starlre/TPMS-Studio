@@ -1,0 +1,110 @@
+{
+  "type": "tpms-electron",
+  "version": 1,
+  "mode": "nodes",
+  "parameters": {
+    "surface": "Diamond",
+    "mode": "sheet",
+    "size_x": 40,
+    "size_y": 40,
+    "size_z": 40,
+    "cells_x": 2,
+    "cells_y": 2,
+    "cells_z": 2,
+    "thickness": 1.0,
+    "iso_level": 0,
+    "samples_per_cell": 24,
+    "target_porosity": null,
+    "formula": "",
+    "gradient_enabled": false,
+    "gradient_axis": "Z",
+    "gradient_thickness_start": 1,
+    "gradient_thickness_end": 5,
+    "tubular_enabled": false,
+    "tubular_inner_radius": 10
+  },
+  "cfd": {},
+  "scene": {
+    "version": 1,
+    "root": "n5",
+    "cell_size": 0.35,
+    "parameters": {},
+    "value_nodes": [
+      {
+        "id": "p1",
+        "name": "Diamond 单胞周期 / mm",
+        "kind": "number",
+        "symbol": "cell_d",
+        "value": 6.5
+      },
+      {
+        "id": "p2",
+        "name": "外壳壁厚 / mm",
+        "kind": "number",
+        "symbol": "wall_t",
+        "value": 1.2
+      }
+    ],
+    "nodes": [
+      {
+        "id": "n1",
+        "name": "圆角冷板基板",
+        "kind": "rounded_box",
+        "dimensions": [36, 28, 12, 2.5],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n2",
+        "name": "安装凸台单元",
+        "kind": "cylinder",
+        "dimensions": [2.6, 14],
+        "position": [-10, -8, 3],
+        "rotation": [0, 0, 0],
+        "inputs": [],
+        "blend": 0
+      },
+      {
+        "id": "n3",
+        "name": "3×2 线性阵列凸台",
+        "kind": "linear_pattern",
+        "dimensions": [3, 2, 1, 10, 16, 10],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n2"],
+        "blend": 0,
+        "operation": { "centered": false }
+      },
+      {
+        "id": "n4",
+        "name": "冷板平滑融合",
+        "kind": "smooth_union",
+        "dimensions": [],
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n1", "n3"],
+        "blend": 1.8
+      },
+      {
+        "id": "n5",
+        "name": "±X 开口 Diamond 填充",
+        "kind": "tpms_infill",
+        "dimensions": [6.5, 1.2, 1.0],
+        "expressions": { "dimensions.0": "cell_d", "dimensions.1": "wall_t" },
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "inputs": ["n4"],
+        "blend": 0,
+        "operation": { "openings": ["+X", "-X"] },
+        "tpms": {
+          "surface": "Diamond",
+          "mode": "sheet",
+          "thickness": 1.0,
+          "iso_level": 0
+        }
+      }
+    ]
+  }
+}
