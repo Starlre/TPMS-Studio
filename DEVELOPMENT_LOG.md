@@ -160,6 +160,7 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
 | R-117 | 修复精细球形 TPMS 填充 STL 局部折叠 | 2026-11-16 22:38:13：固定跨精度边界几何规则、长折边拦截、STL 回读与 COMSOL 6.3 实机导入核验 | 已完成 |
 | R-118 | 加固 FEA 重划分表面质量、路径保真与填充校验细节 | 26-11-16 23:36:00：几何等效尺度步长、防翻折 Taubin + 2-流形短边折叠修复、带点文件名修复及 `validate_infill_surface` 边界保护 | 已完成 |
 | R-119 | 解锁 `libfive` 原生多线程并行表面提取 | 26-11-17 13:18:00：默认接入 `libfive_tree_render_mesh` 多线程 FFI（支持 `TPMS_LIBFIVE_SINGLE_THREAD=1` 与单线程自动回退），`0.15 mm` 球体填充 C++ 提取 `11.61s → 1.72–2.10s` | 已完成 |
+| R-120 | 内置 TPMS 解析偏导数与 1D 拓扑检查提速 | 26-11-17 13:51:00：`_builtin_field_and_grad` 消除 6 次 `remap`、`uint64` 1D 边编码合并 `trimesh` 重复扫描，`0.15 mm` 端到端降至 `1.187s`（累计提速约 11×） | 已完成 |
 
 ## 4. 主要实现与验收记录
 
@@ -760,6 +761,16 @@ TPMS Studio 是本地运行的 TPMS 参数化建模工具。用户在 GUI 中输
   - 在 [`test_libfive_backend.py`](test_libfive_backend.py) 新增 `test_multithreaded_libfive_matches_single_threaded_and_falls_back` 验证多线程与单线程的欧拉数/水密性/体积一致及异常回退；同步更新 [`docs/libfive.md`](docs/libfive.md)。
 - 涉及文件：`libfive_backend.py`、`test_libfive_backend.py`、`docs/libfive.md`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
 - 验证：`R=8 mm` `0.15 mm` 球体填充 6 轮连压结果与单线程完全一致（`295,716` 面、`vol=806.441 mm³`、`euler=-50`、最大夹角 `51.00°`），C++ 提取从 `11.61 s` 降至 `1.72–2.10 s`；Python 全量回归 `pytest -q` **`199 passed in 192.72s`**（`0 failed / 0 skipped`，较此前 `274.01 s` 整体缩短 `81 s`）；桌面端 `npm test` **`28 passed in 10.36s`**，Playwright `verify-ui`、`verify-ribbon`、`verify-fea` 全部通过（零页面报错）。
+- 状态：已完成实现、全量验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
+
+### R-120：26-11-17 13:51:00（Asia/Shanghai），内置 TPMS 解析偏导数梯度归一化与 1D 单次拓扑检查提速
+
+- 需求与原因：在 `R-119` 解锁多线程后，对 `R=8 mm` 球体 + Gyroid 填充 `0.15 mm`（约 30 万面）剩余 `3.3 s` 进行拆解发现两处主要可优化开销：① `tpms_material_tree` 对 5 种内置 TPMS 仍执行 6 次 `field.remap()` 中央差分，导致 C++ 多线程耗时 `1.78 s`；② `_split_pinch_manifolds` 的二维 `np.unique(edges_sorted, axis=0)` 占 `0.73 s`，且 `render_tree_mesh` 无条件 `fix_normals` 清除缓存导致后续 `remove_tiny_components` 与封闭性校验重复扫描邻接表（约 `0.78 s`）。
+- 实现：
+  - **内置 TPMS 解析偏导数（[`libfive_backend.py`](libfive_backend.py)）**：新增 `_builtin_field_and_grad`，对 5 种内置曲面在复用 `sin/cos` 节点的同时直接计算解析偏导（`max_err <= 1.53e-09`），仅对 `CUSTOM_SURFACE` 保留 6 次中央差分回退。
+  - **1D `uint64` 单次拓扑核验与捏合检查**：将 `_split_pinch_manifolds` 边缘计数改为 1D `uint64` 位打包排序（实测 `0.729s → 0.042s`）；新增 `_analyze_topology_1d` 一次性返回 `(wt_and_wind, has_pinch, n_comp, signed_vol)`，单连通正体积闭合网格直接跳过冗余的 `fix_normals` 与 `remove_tiny_components` 多轮重建，仅在存在捏合或多连通/非封闭时走完整清理。
+- 涉及文件：`libfive_backend.py`、`CHANGELOG.md`、`DEVELOPMENT_LOG.md`。
+- 验证：`R=8 mm` 球体 + Gyroid `1.2 mm` 片层端到端 `generate_solid` 实测：`0.6 mm` **`0.061 s`**、`0.3 mm` **`0.298 s`**、`0.15 mm` **`1.187 s`**（`295,764` 面、`euler=-50`、`vol=807.502 mm³`）；Python 全量回归 `pytest -q` **`199 passed in 176.85s`**（0 failed / 0 skipped）；桌面端 `npm test` **`28 passed in 11.98s`**，Playwright `verify-ui`、`verify-ribbon`、`verify-fea` 全部通过（零页面报错）。
 - 状态：已完成实现、全量验证与文档提交至 `完善建模功能和UI分支`；未推送远程。
 
 ## 5. 技术约定

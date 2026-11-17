@@ -14,6 +14,7 @@
 
 ### 建模操作
 
+- `[26-11-17 13:51]` **内置 TPMS 解析偏导数梯度归一化与 1D 单次拓扑后处理提速（R-120）**：在 [`libfive_backend.py`](file:///f:/TPMS建模设计/libfive_backend.py) 中，5 种内置 TPMS 场（`Gyroid` / `Diamond` / `Primitive` / `I-WP` / `Neovius`）改用解析偏导数直接复用三角函数节点替代 6 次中央差分 `field.remap`（仅自定义公式保留有限差分）；同时新增基于 1D `uint64` 边键打包与 `scipy.sparse.csgraph` 的单次拓扑核验 `_analyze_topology_1d` 合并原重复多轮的 `trimesh` 扫描并提速 `_split_pinch_manifolds` 约 17×。`R=8 mm` 球体 + `8 mm` Gyroid `1.2 mm` 片层填充在 `0.6 / 0.3 / 0.15 mm` 下的端到端耗时分别降至 **`0.061 s` / `0.298 s` / `1.187 s`**（较 `R-119` 之前的 `13.13 s` 累计提速约 **11×**）。
 - `[26-11-17 13:18]` **解锁 `libfive` 原生多线程并行表面提取（R-119）**：将 [`libfive_backend.py`](file:///f:/TPMS建模设计/libfive_backend.py) 的 `render_tree_mesh` 默认入口从单线程 `libfive_tree_render_mesh_st` 升级为 `libfive.dll` 自带的多线程并行入口 `libfive_tree_render_mesh`，并内置三层保险（若设置 `TPMS_LIBFIVE_SINGLE_THREAD=1`、自定义 DLL 缺少多线程导出符号或多线程提取未通过水密/朝向检查，均自动回退到单线程 `_st` 入口）。实测 `R=8 mm` 球体 + `8 mm` Gyroid `1.2 mm` 片层在 `0.15 mm` 精细精度下的 C++ 提取时间由 `11.61 s` 降至 `1.72–2.10 s`（整体提速约 3.5–4×），全套 Python `pytest -q` 耗时从 `274.01 s` 降至 `192.72 s`。
 - `[26-11-16 23:36]` **加固 FEA 体网格重划分表面质量、路径保真与填充折叠提示细节（R-118）**：
   - 优化 [fea_mesh.py](fea_mesh.py) 的表面重划分管线：`_default_surface_spacing` 按几何等效尺度自适应加密（消除小型球体/薄壁件在默认 `2.0 mm` 下的粗步长体积收缩与阶梯锯齿）；以无偏向防零交叉偏置 + 带法向防翻折校验的 Taubin 光滑 + 严格 2-流形 Link-Condition 短边折叠 + 质量/二面角联合局部修复替代裸 `marching_cubes + filter_taubin`，消除 `Sphere ∩ Gyroid` 等锐棱/鞍点交界处的微碎针刺与对折边界，并在 `auto` 模式下自动拦截带 `>138°` 翻折或极小锐角的 `direct` 输入及低雅可比直剖回退。

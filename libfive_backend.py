@@ -208,6 +208,35 @@ def _builtins(arena: _TreeArena, x: _Tree, y: _Tree, z: _Tree) -> dict[str, _Tre
     }
 
 
+def _builtin_field_and_grad(
+    arena: _TreeArena, key: str, x: _Tree, y: _Tree, z: _Tree
+) -> tuple[_Tree, tuple[_Tree, _Tree, _Tree]]:
+    """Evaluate a built-in TPMS phase field and its analytical phase derivatives."""
+    sx, sy, sz = [arena.op("sin", t) for t in (x, y, z)]
+    cx, cy, cz = [arena.op("cos", t) for t in (x, y, z)]
+    if key == "gyroid":
+        return sx * cy + sy * cz + sz * cx, (cx * cy - sz * sx, cy * cz - sx * sy, cz * cx - sy * sz)
+    if key == "diamond":
+        return (
+            sx * sy * sz + sx * cy * cz + cx * sy * cz + cx * cy * sz,
+            (
+                cx * (sy * sz + cy * cz) - sx * (sy * cz + cy * sz),
+                cy * (sx * sz + cx * cz) - sy * (sx * cz + cx * sz),
+                cz * (sx * sy + cx * cy) - sz * (sx * cy + cx * sy),
+            ),
+        )
+    if key == "primitive":
+        return cx + cy + cz, (-sx, -sy, -sz)
+    if key == "i_wp":
+        # 2*cos(2u) = 2*(2*cos^2(u) - 1), and d/du[-cos(2u)] = 2*sin(2u) = 4*sin(u)*cos(u).
+        field = 2 * (cx * cy + cy * cz + cz * cx) - (
+            arena.op("cos", 2 * x) + arena.op("cos", 2 * y) + arena.op("cos", 2 * z)
+        )
+        return field, (2 * sx * (2 * cx - cy - cz), 2 * sy * (2 * cy - cz - cx), 2 * sz * (2 * cz - cx - cy))
+    field = 3 * (cx + cy + cz) + 4 * cx * cy * cz
+    return field, (-sx * (3 + 4 * cy * cz), -sy * (3 + 4 * cz * cx), -sz * (3 + 4 * cx * cy))
+
+
 def _formula_tree(node: ast.AST, arena: _TreeArena, values) -> _Tree:
     if isinstance(node, ast.Constant):
         return arena.wrap(node.value)
@@ -254,23 +283,22 @@ def tpms_material_tree(
         eff_periods = tuple(float(v) for v in periods)
         phases = [2 * math.pi * ((coord - c) / period)
                   for coord, c, period in zip(coords, center, eff_periods)]
-    aliases = _builtins(arena, *phases)
     if p.surface == CUSTOM_SURFACE:
+        aliases = _builtins(arena, *phases)
         local_coords = [coord - c for coord, c in zip(coords, center)]
         field = _formula_tree(_parse_formula(p.formula), arena, {
             **dict(zip(("x", "y", "z"), local_coords)), "pi": math.pi, **aliases})
+        if p.mode == "solid":
+            return p.iso_level - field
+        gradients = []
+        for axis, period in enumerate(eff_periods):
+            step = period / p.samples_per_cell
+            plus, minus = list(coords), list(coords)
+            plus[axis], minus[axis] = coords[axis] + step, coords[axis] - step
+            gradients.append((field.remap(plus) - field.remap(minus)) / (2 * step))
     else:
-        field = aliases[p.surface.lower().replace("-", "_")]
-    if p.mode == "solid" and p.surface == CUSTOM_SURFACE:
-        return p.iso_level - field
-    # Central-difference gradient normalization preserves the zero set and
-    # converts built-in periodic fields (sheet & solid) to approximate mm units.
-    gradients = []
-    for axis, period in enumerate(eff_periods):
-        step = period / p.samples_per_cell
-        plus, minus = list(coords), list(coords)
-        plus[axis], minus[axis] = coords[axis] + step, coords[axis] - step
-        gradients.append((field.remap(plus) - field.remap(minus)) / (2 * step))
+        field, phase_grads = _builtin_field_and_grad(arena, p.surface.lower().replace("-", "_"), *phases)
+        gradients = [dg * (2 * math.pi / period) for dg, period in zip(phase_grads, eff_periods)]
     norm = arena.op("max", arena.op("sqrt", sum(g ** 2 for g in gradients)), 0.05)
     if p.mode == "solid":
         return (p.iso_level - field) / norm
@@ -362,9 +390,57 @@ def generate_libfive_mesh(parameters: TPMSParameters, cell_size: float,
         return MeshResult(render_tree_mesh(kernel, tree, region, cell_size), p)
 
 
+def _analyze_topology_1d(verts: np.ndarray, faces: np.ndarray) -> tuple[bool, bool, int, float]:
+    """Check 2-manifold watertightness, consistent winding, component count, and signed volume in one pass."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    if len(verts) >= (1 << 32) or not len(faces):
+        return False, False, 0, 0.0
+    u = np.concatenate([faces[:, 0], faces[:, 1], faces[:, 2]]).astype(np.uint64)
+    w = np.concatenate([faces[:, 1], faces[:, 2], faces[:, 0]]).astype(np.uint64)
+    lo = np.minimum(u, w)
+    hi = np.maximum(u, w)
+    undir = (lo << np.uint64(32)) | hi
+    order = np.argsort(undir)
+    u_sorted = undir[order]
+    if len(u_sorted) % 2 != 0:
+        has_pinch = True
+        wt_and_wind = False
+    else:
+        pairs_equal = bool(np.all(u_sorted[0::2] == u_sorted[1::2]))
+        no_quad = bool(np.all(u_sorted[1:-1:2] != u_sorted[2::2]))
+        dir_flag = (u == lo)[order]
+        opp_dir = bool(np.all(dir_flag[0::2] != dir_flag[1::2]))
+        wt_and_wind = pairs_equal and no_quad and opp_dir
+        has_pinch = not no_quad
+    graph = coo_matrix(
+        (np.ones(len(u), dtype=np.int8), (u.astype(np.int32), w.astype(np.int32))),
+        shape=(len(verts), len(verts)),
+    )
+    n_comp, _ = connected_components(graph, directed=False)
+    v0, v1, v2 = verts[faces[:, 0]], verts[faces[:, 1]], verts[faces[:, 2]]
+    signed_vol = float(np.sum(np.einsum("ij,ij->i", np.cross(v0, v1), v2)) / 6.0)
+    return wt_and_wind, has_pinch, int(n_comp), signed_vol
+
+
 def _split_pinch_manifolds(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     """Split even-multiplicity non-manifold pinch edges into 2-manifold fans."""
-    _, cnt = np.unique(mesh.edges_sorted, axis=0, return_counts=True)
+    if len(mesh.vertices) < (1 << 32) and len(mesh.faces):
+        f = mesh.faces
+        u = np.concatenate([f[:, 0], f[:, 1], f[:, 2]]).astype(np.uint64)
+        w = np.concatenate([f[:, 1], f[:, 2], f[:, 0]]).astype(np.uint64)
+        keys = (np.minimum(u, w) << np.uint64(32)) | np.maximum(u, w)
+        keys.sort()
+        diff = np.empty(len(keys), dtype=bool)
+        diff[0] = True
+        diff[1:] = keys[1:] != keys[:-1]
+        idx = np.flatnonzero(diff)
+        cnt = np.empty(len(idx), dtype=np.int64)
+        cnt[:-1] = idx[1:] - idx[:-1]
+        cnt[-1] = len(keys) - idx[-1]
+    else:
+        _, cnt = np.unique(mesh.edges_sorted, axis=0, return_counts=True)
     if not np.any(cnt > 2) or np.any(cnt % 2 != 0):
         return mesh
     faces = mesh.faces.copy()
@@ -450,13 +526,20 @@ def _extract_native_mesh(kernel: NativeKernel, fn, tree: _Tree, region: _Region,
         raise ValueError("libfive 返回了无效网格，未导出文件。")
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
     mesh.remove_unreferenced_vertices()
-    mesh = _split_pinch_manifolds(mesh)
-    # Inner cavity boundaries have negative signed volume; do not flip each
-    # disconnected surface outward, which would turn voids into solid bodies.
-    mesh.fix_normals(multibody=False)
-    mesh, _components, _removed = remove_tiny_components(
-        mesh, relative_face_limit=1e-3, relative_volume_limit=5e-4,
-    )
+    wt_and_wind, has_pinch, n_comp, signed_vol = _analyze_topology_1d(mesh.vertices, mesh.faces)
+    if has_pinch:
+        mesh = _split_pinch_manifolds(mesh)
+        wt_and_wind, _has_pinch, n_comp, signed_vol = _analyze_topology_1d(mesh.vertices, mesh.faces)
+    if wt_and_wind and n_comp == 1 and signed_vol > 0:
+        return mesh
+    if not wt_and_wind:
+        # Inner cavity boundaries have negative signed volume; do not flip each
+        # disconnected surface outward, which would turn voids into solid bodies.
+        mesh.fix_normals(multibody=False)
+    if n_comp > 1:
+        mesh, _components, _removed = remove_tiny_components(
+            mesh, relative_face_limit=1e-3, relative_volume_limit=5e-4,
+        )
     if not mesh.is_watertight or not mesh.is_winding_consistent or mesh.volume <= 0:
         raise ValueError("libfive 网格未通过封闭性检查；请减小网格尺寸，或使用现有网格内核导出。")
     return mesh
